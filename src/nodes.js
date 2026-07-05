@@ -152,3 +152,10 @@ export function buildHubBall(node) {
     radius,
     hoverTarget: 1,
     hoverCurrent: 1,
+    dim: 1,
+    phase: node.breathePhase ?? 0,
+  };
+  registry.hubs.set(node.id, node);
+
+  return group;
+}
