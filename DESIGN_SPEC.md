@@ -35,3 +35,8 @@ ORBITAL RINGS (thin crimson tori around the nucleus)
 - Group them; the group rotates around Y at 0.06 rad/s.
 
 GRAPH DATA (12 clusters)
+- Cluster names: Projects, People, Ideas, Research, Content, Code, Reading, Health,
+  Finance, Travel, Journal, Learning.
+- One core node: id "core", type "core", fixed at fx = fy = fz = 0.
+- 12 hub nodes: type "hub", each with a weight in [0.9, 1.3]. Positions: fibonacci-sphere
+  directions with jitter 0.22, at radius 0.55 R to 0.90 R from origin. Fixed via fx/fy/fz.
