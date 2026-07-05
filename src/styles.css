@@ -102,3 +102,13 @@ body {
   border-radius: 6px;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+/* Focus panel, right side, vertically centered */
+#focus-panel {
+  position: fixed;
+  right: 38px;
+  top: 50%;
+  width: 236px;
+  padding: 24px 26px;
