@@ -434,10 +434,7 @@ function updateReveal(dt) {
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-2, -2);
 const tooltip = document.getElementById('tooltip');
-const panel = document.getElementById('panel');
-const pName = document.getElementById('p-name');
-const pMeta = document.getElementById('p-meta');
-const pPages = document.getElementById('p-pages');
+const treeEl = document.getElementById('tree');
 
 // Open a node's page. Real http(s) URLs open in a new tab; the default
 // placeholder routes (#/cluster/page) just update the URL in place.
@@ -445,6 +442,50 @@ function openNode(node) {
   if (/^https?:/i.test(node.url)) window.open(node.url, '_blank', 'noopener');
   else window.location.hash = node.url;
 }
+
+// Obsidian-style file tree: each cluster is a collapsible folder of pages.
+function buildTree() {
+  clusters.forEach((c) => {
+    const folder = document.createElement('div');
+    folder.className = 'folder';
+    const twisty = document.createElement('span');
+    twisty.className = 'twisty';
+    twisty.textContent = '›'; // ›
+    const label = document.createElement('span');
+    label.className = 'folder-name';
+    label.textContent = c.name;
+    folder.append(twisty, label);
+    folder.addEventListener('click', () => select(c));
+
+    const children = document.createElement('div');
+    children.className = 'children';
+    children.style.display = 'none';
+    c.pnodes.forEach((node) => {
+      const file = document.createElement('div');
+      file.className = 'file';
+      file.textContent = node.title;
+      file.title = node.title;
+      file.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
+      children.appendChild(file);
+    });
+
+    treeEl.append(folder, children);
+    c.folderEl = folder;
+    c.childrenEl = children;
+  });
+}
+
+// Expand + highlight one folder (the focused cluster); collapse the rest.
+function setTreeOpen(c) {
+  clusters.forEach((cl) => {
+    const open = cl === c;
+    cl.folderEl.classList.toggle('open', open);
+    cl.childrenEl.style.display = open ? 'block' : 'none';
+  });
+  if (c) c.folderEl.scrollIntoView({ block: 'nearest' });
+}
+
+buildTree();
 
 let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
 let tooltipXY = [0, 0], hoverCluster = null, selected = null;
@@ -547,24 +588,10 @@ function select(c) {
   if (selected) {
     if (!wasFocused) preFocusDist = camDist; // remember the free-look zoom
     camDist = FOCUS_DIST; // fly the camera in to the hub
-    pName.textContent = selected.name;
-    const pct = Math.round((selected.group.position.length() / R) * 100);
-    pMeta.innerHTML = selected.pnodes.length + ' pages<br>linked to core<br>orbit at ' + pct + '% radius';
-    // List every page attached to this hub; each one is a link to its node.
-    pPages.innerHTML = '';
-    selected.pnodes.forEach((node) => {
-      const link = document.createElement('button');
-      link.type = 'button';
-      link.className = 'page-link';
-      link.textContent = node.title;
-      link.addEventListener('click', () => openNode(node));
-      pPages.appendChild(link);
-    });
-    pPages.scrollTop = 0;
-    panel.classList.add('show');
+    setTreeOpen(selected); // expand + highlight this folder in the tree
   } else {
     if (wasFocused) camDist = preFocusDist; // restore the previous zoom
-    panel.classList.remove('show');
+    setTreeOpen(null);
   }
 }
 el.addEventListener('click', () => {
