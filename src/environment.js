@@ -144,3 +144,13 @@ function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand })
   const mat = new THREE.PointsMaterial({
     size,
     map: makeGlowTexture(),
+    vertexColors: true,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  return new THREE.Points(geo, mat);
+}
+
