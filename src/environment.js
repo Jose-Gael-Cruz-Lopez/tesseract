@@ -209,3 +209,12 @@ function buildYearLabel() {
   ctx.textBaseline = 'middle';
 
   // Manual letterspacing so the digits breathe like the reference art.
+  const text = '2026';
+  const tracking = 34;
+  let width = 0;
+  for (const ch of text) width += ctx.measureText(ch).width + tracking;
+  width -= tracking;
+  let x = (canvas.width - width) / 2;
+  for (const ch of text) {
+    ctx.fillText(ch, x, canvas.height / 2 + 4);
+    x += ctx.measureText(ch).width + tracking;
