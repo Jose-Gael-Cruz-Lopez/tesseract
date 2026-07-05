@@ -67,3 +67,8 @@ ENVIRONMENT (added to graph.scene(), grouped under one "environment" THREE.Group
 - 12 meridian circles. One bright equator LineLoop at 160 segments.
 - Radial fan: 144 line spokes at y = 0 from r = 65 out to r = 300 (the dense disc look).
 - Inner dust: 500 additive points, radius 80 to 295, size 4, palette colors dimmed to 80%.
+- Background stars: 300 points, radius 400 to 950, size 5, dimmed to 55%, opacity 0.5.
+- Two "streams": 46 warm dots each (mix #ffb454 / #ffd166, size 8) scattered with jitter 9
+  along a bezier arc hugging the shell at ~0.82 R.
+- Year label "2026": canvas text sprite, letterspaced, rgba(232,236,255,0.92),
+  positioned at (0, 340, 0), sprite scale roughly 140 x 35.
