@@ -174,3 +174,13 @@ body {
   align-items: center;
   justify-content: center;
   background: rgba(6, 3, 16, 0.92);
+  z-index: 100;
+}
+
+#gl-lost.visible {
+  display: flex;
+}
+
+.gl-lost-card {
+  text-align: center;
+  color: var(--ink);
