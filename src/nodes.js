@@ -35,3 +35,10 @@ export function buildTesseract() {
   registry.tesseractParts = [];
 
   const solidMat = new THREE.MeshBasicMaterial({
+    color: 0xff3355,
+    transparent: true, // so focus mode can dim it
+    opacity: 1,
+  });
+  const solid = new THREE.Mesh(new THREE.BoxGeometry(26, 26, 26), solidMat);
+
+  const wireAMat = new THREE.LineBasicMaterial({
