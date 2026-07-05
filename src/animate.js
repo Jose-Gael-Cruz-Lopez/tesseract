@@ -27,3 +27,10 @@ export const focusState = { cluster: null, hub: null };
 let started = false;
 
 export function startAnimation() {
+  if (started) return;
+  started = true;
+
+  // Delta comes from the rAF timestamp rather than THREE.Clock, which is
+  // deprecated in the pinned three r185 and warns on every load. Same behavior
+  // (dt clamped to 0.05, per DESIGN_SPEC · MOTION RULES), no console noise.
+  let last = null;
