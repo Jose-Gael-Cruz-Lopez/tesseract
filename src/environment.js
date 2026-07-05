@@ -172,3 +172,12 @@ function buildStream(fromDir, toDir, rand) {
 
   samples.forEach((p, i) => {
     positions.set(
+      [
+        p.x + (rand() - 0.5) * 9,
+        p.y + (rand() - 0.5) * 9,
+        p.z + (rand() - 0.5) * 9,
+      ],
+      i * 3
+    );
+    const c = warm[Math.floor(rand() * warm.length)];
+    colors.set([c.r, c.g, c.b], i * 3);
