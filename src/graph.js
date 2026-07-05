@@ -102,3 +102,10 @@ export function createGraph(container, data) {
   const controls = graph.controls();
   controls.autoRotate = !REDUCED_MOTION;
   controls.autoRotateSpeed = 0.35;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 260;
+  controls.maxDistance = 1500;
+
+  return graph;
+}
