@@ -180,47 +180,58 @@ for (let i = 0; i < clusterNames.length; i++) {
   hub.scale.set(hubBase, hubBase, 1);
   g.add(hub);
 
-  const majPos = [], majCol = [], minPos = [], minCol = [], linePts = [];
+  // Leaves + branches are spring particles in universe space, so dragging the
+  // hub pulls them with real physics instead of moving the cluster rigidly.
+  // Each particle springs toward an anchor: leaves -> hub, branches -> parent
+  // leaf. pos/vel are integrated each frame; rest is the offset from the anchor.
+  const hubPos = g.position; // universe-local hub position (updated by drag)
+  const pnodes = [];
+  const majIdx = [], minIdx = [], majCol = [], minCol = [];
   const count = 16 + Math.floor(rand() * 14);
-  let maxOff = 0; // farthest leaf/branch offset from the hub (for drag bounds)
+  let maxOff = 0; // farthest node offset from the hub (for drag bounds)
   for (let k = 0; k < count; k++) {
-    const d = randDir();
-    const len = (0.7 + rand() * 1.8) * scale;
-    const p = d.clone().multiplyScalar(len);
+    const p = randDir().multiplyScalar((0.7 + rand() * 1.8) * scale);
     if (p.length() > budget) p.setLength(budget); // keep the leaf inside the shell
     maxOff = Math.max(maxOff, p.length());
-    linePts.push(0, 0, 0, p.x, p.y, p.z);
-    const c = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
-    if (rand() < 0.3) { majPos.push(p.x, p.y, p.z); majCol.push(c.r, c.g, c.b); }
-    else { minPos.push(p.x, p.y, p.z); minCol.push(c.r, c.g, c.b); }
+    const col = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
+    const leafIdx = pnodes.length;
+    pnodes.push({ pos: hubPos.clone().add(p), vel: new THREE.Vector3(), rest: p.clone(), parent: -1 });
+    if (rand() < 0.3) { majIdx.push(leafIdx); majCol.push(col.r, col.g, col.b); }
+    else { minIdx.push(leafIdx); minCol.push(col.r, col.g, col.b); }
     /* occasional two-hop branch, like the reference */
     if (rand() < 0.28) {
-      const p2 = p.clone().add(randDir().multiplyScalar(0.55 * scale));
-      if (p2.length() > budget) p2.setLength(budget); // keep the branch inside too
-      maxOff = Math.max(maxOff, p2.length());
-      linePts.push(p.x, p.y, p.z, p2.x, p2.y, p2.z);
-      const c2 = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
-      minPos.push(p2.x, p2.y, p2.z); minCol.push(c2.r, c2.g, c2.b);
+      const bAbs = p.clone().add(randDir().multiplyScalar(0.55 * scale));
+      if (bAbs.length() > budget) bAbs.setLength(budget); // keep the branch inside too
+      maxOff = Math.max(maxOff, bAbs.length());
+      const col2 = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
+      pnodes.push({ pos: hubPos.clone().add(bAbs), vel: new THREE.Vector3(), rest: bAbs.clone().sub(p), parent: leafIdx });
+      minIdx.push(pnodes.length - 1); minCol.push(col2.r, col2.g, col2.b);
     }
   }
-  const lineGeo = new THREE.BufferGeometry();
-  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePts, 3));
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xd6dbf5, transparent: true, opacity: 0.34 });
-  g.add(new THREE.LineSegments(lineGeo, lineMat));
+  const flat = (idxs) => { const a = []; idxs.forEach((ix) => { const q = pnodes[ix].pos; a.push(q.x, q.y, q.z); }); return a; };
+  const major = makePoints(flat(majIdx), majCol, 0.5, 0.95);
+  const minor = makePoints(flat(minIdx), minCol, 0.26, 0.9);
+  universe.add(major, minor);
 
-  const major = makePoints(majPos, majCol, 0.5, 0.95);
-  const minor = makePoints(minPos, minCol, 0.26, 0.9);
-  g.add(major, minor);
+  const linePts = new Float32Array(pnodes.length * 6);
+  pnodes.forEach((n, k) => {
+    const from = n.parent < 0 ? hubPos : pnodes[n.parent].pos;
+    linePts.set([from.x, from.y, from.z, n.pos.x, n.pos.y, n.pos.z], k * 6);
+  });
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePts, 3));
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xd6dbf5, transparent: true, opacity: 0.34 });
+  const lineSeg = new THREE.LineSegments(lineGeo, lineMat);
+  universe.add(lineSeg);
   universe.add(g);
 
   const cluster = {
     name: clusterNames[i], group: g, hub, hubMat, hubBase,
     lineMat, majorMat: major.material, minorMat: minor.material,
+    major, minor, lineSeg, pnodes, majIdx, minIdx,
     baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
     nodeCount: count,
     maxOffset: maxOff,
-    spinAxis: randDir(),
-    spinSpeed: (rand() * 0.5 + 0.2) * 0.15,
     phase: rand() * Math.PI * 2,
   };
   hub.userData.cluster = cluster;
@@ -540,6 +551,45 @@ function updateHover() {
 }
 
 /* ---------- animation loop ---------- */
+// Leaf/branch spring physics.
+const SPRING_K = 42;      // stiffness (how hard nodes are pulled to their anchor)
+const SPRING_DAMP = 7.5;  // velocity damping (higher = less bounce)
+const NODE_BOUND = R * 0.985;
+const NODE_BOUND_SQ = NODE_BOUND * NODE_BOUND;
+const _anchor = new THREE.Vector3();
+const _force = new THREE.Vector3();
+
+// Integrate one physics step for every cluster and push the results into the
+// point/line geometry buffers. Called each frame; also used to step + verify.
+function simulateClusters(dt) {
+  clusters.forEach((c) => {
+    const hubPos = c.group.position;
+    for (const n of c.pnodes) {
+      const base = n.parent < 0 ? hubPos : c.pnodes[n.parent].pos;
+      _anchor.copy(base).add(n.rest);
+      _force.copy(_anchor).sub(n.pos).multiplyScalar(SPRING_K * dt);
+      n.vel.add(_force).multiplyScalar(Math.max(0, 1 - SPRING_DAMP * dt));
+      n.pos.addScaledVector(n.vel, dt);
+      const r2 = n.pos.lengthSq(); // never let a node leave the globe
+      if (r2 > NODE_BOUND_SQ) { n.pos.multiplyScalar(NODE_BOUND / Math.sqrt(r2)); n.vel.multiplyScalar(0.4); }
+    }
+    const ma = c.major.geometry.attributes.position.array;
+    for (let j = 0; j < c.majIdx.length; j++) { const p = c.pnodes[c.majIdx[j]].pos; ma[j * 3] = p.x; ma[j * 3 + 1] = p.y; ma[j * 3 + 2] = p.z; }
+    c.major.geometry.attributes.position.needsUpdate = true;
+    const mi = c.minor.geometry.attributes.position.array;
+    for (let j = 0; j < c.minIdx.length; j++) { const p = c.pnodes[c.minIdx[j]].pos; mi[j * 3] = p.x; mi[j * 3 + 1] = p.y; mi[j * 3 + 2] = p.z; }
+    c.minor.geometry.attributes.position.needsUpdate = true;
+    const la = c.lineSeg.geometry.attributes.position.array;
+    for (let k = 0; k < c.pnodes.length; k++) {
+      const n = c.pnodes[k];
+      const from = n.parent < 0 ? hubPos : c.pnodes[n.parent].pos;
+      la[k * 6] = from.x; la[k * 6 + 1] = from.y; la[k * 6 + 2] = from.z;
+      la[k * 6 + 3] = n.pos.x; la[k * 6 + 4] = n.pos.y; la[k * 6 + 5] = n.pos.z;
+    }
+    c.lineSeg.geometry.attributes.position.needsUpdate = true;
+  });
+}
+
 const clock = new THREE.Clock();
 let t = 0;
 
@@ -572,10 +622,12 @@ function animate() {
   tesseract.tick(dt);
   ringGroup.rotation.y += 0.06 * dt;
 
+  simulateClusters(dt);
+
   clusters.forEach((c) => {
+    // --- opacity / reveal / hub scale ---
     const f = selected ? (c === selected ? 1 : 0.1) : 1;
     const rv = c.revealFactor;
-    // Lerp the base opacities (focus dimming), then apply the reveal factor.
     c._lineOp += (c.baseLineOp * f - c._lineOp) * 0.08;
     c._majOp += (c.baseMajOp * f - c._majOp) * 0.08;
     c._minOp += (c.baseMinOp * f - c._minOp) * 0.08;
@@ -584,7 +636,6 @@ function animate() {
     c.majorMat.opacity = c._majOp * rv;
     c.minorMat.opacity = c._minOp * rv;
     c.hubMat.opacity = c._hubOp * rv;
-    c.group.rotateOnAxis(c.spinAxis, c.spinSpeed * dt);
     const active = c === hoverCluster || c === selected;
     const target = c.hubBase * (1 + 0.09 * Math.sin(t * 2 + c.phase)) * (active ? 1.5 : 1) * rv;
     c.hub.scale.x += (target - c.hub.scale.x) * 0.15;
@@ -621,6 +672,8 @@ window.__SBG__ = {
   // Scrub the intro reveal to an absolute time (seconds), freeze it there,
   // and render one frame (so the running loop won't advance past it).
   scrub: (tt) => { introElapsed = tt; applyReveal(tt); introDone = true; renderer.render(scene, camera); },
+  // Dev: step the leaf physics n times at a fixed dt and render (for testing).
+  stepPhysics: (n = 1, dt = 0.016) => { for (let s = 0; s < n; s++) simulateClusters(dt); renderer.render(scene, camera); },
   // Snap the focus camera to its converged position and render (skips the ease).
   snapFocus: () => {
     if (selected) selected.hub.getWorldPosition(lookGoal); else lookGoal.set(0, 0, 0);
