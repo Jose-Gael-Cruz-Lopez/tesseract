@@ -88,3 +88,10 @@ export function createGraph(container, data) {
   // No centering force: core + hubs are pinned; a center force would drag
   // every leaf toward the origin and crush the dandelion clusters.
   graph.d3Force('center', null);
+  graph.d3Force('link').distance((link) => link.distance);
+  graph
+    .d3Force('charge')
+    .strength((node) =>
+      node.type === 'leaf' || node.type === 'branch' ? -35 : -160
+    );
+
