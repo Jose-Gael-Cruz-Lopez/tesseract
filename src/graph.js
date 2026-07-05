@@ -26,3 +26,10 @@ export function nodeColorOf(node) {
   if (!focusState.cluster || node.cluster === focusState.cluster) return node.color;
   return hexToRgba(node.color, 0.1);
 }
+
+export function linkColorOf(link) {
+  if (!focusState.cluster) return LINK_COLORS[link.kind];
+  if (link.cluster !== focusState.cluster) {
+    return link.kind === 'tether' ? DIMMED_TETHER : DIMMED_LINK;
+  }
+  return link.kind === 'tether' ? FOCUSED_TETHER : LINK_COLORS[link.kind];
