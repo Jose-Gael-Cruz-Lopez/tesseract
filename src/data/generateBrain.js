@@ -147,3 +147,12 @@ export function generateBrain(seed = 42) {
           val: 1,
           color: pick(NODE_PALETTE),
           x: hx + range(-45, 45),
+          y: hy + range(-45, 45),
+          z: hz + range(-45, 45),
+        });
+
+        links.push({
+          source: leafId,
+          target: branchId,
+          kind: 'branch',
+          cluster: name,
