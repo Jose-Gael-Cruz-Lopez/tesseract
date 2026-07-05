@@ -37,3 +37,11 @@ export function setupInteractions(graph, data, container) {
       .linkDirectionalParticleSpeed((l) => particleSpeedOf(l));
   }
 
+  function showPanel(hub) {
+    const entry = clusters.get(hub.cluster);
+    const orbitPct = Math.round(
+      (Math.hypot(hub.fx, hub.fy, hub.fz) / GLOBE_RADIUS) * 100
+    );
+    panel.querySelector('.panel-title').textContent = hub.cluster;
+    panel.querySelector('.panel-count').textContent = `${entry.count} nodes`;
+    panel.querySelector('.panel-orbit').textContent = `orbit at ${orbitPct}% radius`;
