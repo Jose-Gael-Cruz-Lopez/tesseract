@@ -153,3 +153,14 @@ body {
 
 .panel-bar {
   margin-top: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, #ff2d55, #ffd166);
+}
+
+.panel-release {
+  margin-top: 16px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
