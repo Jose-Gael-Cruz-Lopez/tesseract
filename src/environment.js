@@ -199,3 +199,13 @@ function buildStream(fromDir, toDir, rand) {
   return new THREE.Points(geo, mat);
 }
 
+function buildYearLabel() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(232,236,255,0.92)';
+  ctx.font = '600 76px "Helvetica Neue", Arial, sans-serif';
+  ctx.textBaseline = 'middle';
+
+  // Manual letterspacing so the digits breathe like the reference art.
