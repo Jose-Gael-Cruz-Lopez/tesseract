@@ -184,3 +184,14 @@ body {
 .gl-lost-card {
   text-align: center;
   color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.gl-lost-card button {
+  margin-top: 18px;
+  padding: 10px 22px;
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
