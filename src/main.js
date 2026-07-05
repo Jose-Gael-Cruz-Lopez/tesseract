@@ -148,8 +148,14 @@ for (let i = 0; i < clusterNames.length; i++) {
   const dir = new THREE.Vector3(Math.cos(th) * rr, yy, Math.sin(th) * rr);
   dir.add(randDir().multiplyScalar(0.22)).normalize();
 
-  const dist = R * (0.55 + rand() * 0.34);
+  // Hubs sit inward enough that every leaf fits between the hub and the shell.
+  const dist = R * (0.4 + rand() * 0.3);
   const scale = 0.8 + rand() * 0.9;
+  // Radial room from this hub out to (just inside) the globe surface. Every
+  // leaf/branch offset is capped to this, so no node can leave the globe --
+  // even as the cluster slowly spins (rotation preserves offset length, and
+  // |hubPos + offset| <= dist + |offset| <= dist + budget = 0.94 R < R).
+  const budget = R * 0.94 - dist;
 
   const g = new THREE.Group();
   g.position.copy(dir).multiplyScalar(dist);
@@ -169,6 +175,7 @@ for (let i = 0; i < clusterNames.length; i++) {
     const d = randDir();
     const len = (0.7 + rand() * 1.8) * scale;
     const p = d.clone().multiplyScalar(len);
+    if (p.length() > budget) p.setLength(budget); // keep the leaf inside the shell
     linePts.push(0, 0, 0, p.x, p.y, p.z);
     const c = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
     if (rand() < 0.3) { majPos.push(p.x, p.y, p.z); majCol.push(c.r, c.g, c.b); }
@@ -176,6 +183,7 @@ for (let i = 0; i < clusterNames.length; i++) {
     /* occasional two-hop branch, like the reference */
     if (rand() < 0.28) {
       const p2 = p.clone().add(randDir().multiplyScalar(0.55 * scale));
+      if (p2.length() > budget) p2.setLength(budget); // keep the branch inside too
       linePts.push(p.x, p.y, p.z, p2.x, p2.y, p2.z);
       const c2 = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
       minPos.push(p2.x, p2.y, p2.z); minCol.push(c2.r, c2.g, c2.b);
