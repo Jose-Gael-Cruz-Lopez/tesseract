@@ -48,3 +48,10 @@ export function startAnimation() {
 
     for (const s of registry.spinners) {
       s.obj.rotation.x += s.speed.x * mdt;
+      s.obj.rotation.y += s.speed.y * mdt;
+      s.obj.rotation.z += s.speed.z * mdt;
+    }
+
+    if (registry.rings) registry.rings.rotation.y += 0.06 * mdt;
+
+    // Focus dimming for the nucleus: never below ~40% so the center survives.
