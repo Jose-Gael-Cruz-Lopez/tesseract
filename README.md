@@ -102,3 +102,10 @@ Enable Pages for the `gh-pages` branch in the repo settings.
 
 - [3d-force-graph](https://github.com/vasturiano/3d-force-graph) by [vasturiano](https://github.com/vasturiano)
 - [three.js](https://threejs.org/) (pinned to the exact version 3d-force-graph expects, single copy enforced via Vite dedupe)
+- [Vite](https://vite.dev/)
+
+Design contract lives in [DESIGN_SPEC.md](DESIGN_SPEC.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
