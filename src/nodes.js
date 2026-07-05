@@ -86,5 +86,6 @@ export function buildTesseract() {
     shells[2].rotation.z += 0.03 * dt;
   }
 
-  return { group, tick };
+  // parts ordered inside-out by size, for a one-by-one intro reveal.
+  return { group, tick, parts: [solid, wireA, shells[0], wireB, shells[1], shells[2]] };
 }

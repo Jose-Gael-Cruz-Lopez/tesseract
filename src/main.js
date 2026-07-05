@@ -299,7 +299,6 @@ const prefersReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduc
 
 const revealStatics = [];
 const reg = (mat, group) => revealStatics.push({ mat, target: mat.opacity, group });
-tesseract.group.traverse((o) => { if (o.material) reg(o.material, 'squares'); });
 reg(thinLine, 'globe');
 reg(equatorMat, 'globe');
 reg(fanMat, 'globe');
@@ -309,13 +308,20 @@ reg(ambientParticles.material, 'ambiance');
 reg(bgStars.material, 'ambiance');
 reg(yearLabel.material, 'ambiance');
 
+// The squares (tesseract cubes) appear one by one, inside-out.
+const SQUARES_START = 0.3, SQUARES_STAGGER = 0.26, SQUARES_PART_DUR = 0.55;
+const cubeParts = tesseract.parts.map((obj, i) => ({
+  obj, mat: obj.material, target: obj.material.opacity,
+  start: SQUARES_START + i * SQUARES_STAGGER,
+}));
+const SQUARES_END = SQUARES_START + (tesseract.parts.length - 1) * SQUARES_STAGGER + SQUARES_PART_DUR;
+
 const BEATS = {
-  squares: { start: 0.3, dur: 1.6 },
-  globe: { start: 1.7, dur: 1.9 },
-  ambiance: { start: 4.4, dur: 2.2 },
+  globe: { start: SQUARES_END - 0.1, dur: 1.9 },
+  ambiance: { start: 4.9, dur: 2.2 },
 };
-const NODE_START = 3.4, NODE_STAGGER = 0.16, NODE_DUR = 1.1;
-const INTRO_END = 6.8;
+const NODE_START = 4.0, NODE_STAGGER = 0.16, NODE_DUR = 1.0;
+const INTRO_END = 7.3;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
 const easeOutBack = (x) => {
@@ -335,19 +341,23 @@ threads.forEach((th) => { th._op = th.baseOp; });
 
 if (!introDone) {
   revealStatics.forEach((s) => { s.mat.opacity = 0; });
+  cubeParts.forEach((p) => { p.mat.opacity = 0; p.obj.scale.setScalar(0.0001); });
   clusters.forEach((c) => { c.revealFactor = 0; c.hub.scale.set(0.0001, 0.0001, 1); });
   threads.forEach((th) => { th.mat.opacity = 0; th.pulseMat.opacity = 0; });
-  core.scale.setScalar(0.0001);
 }
 
 function applyReveal(tt) {
   const gf = {
-    squares: easeOutCubic(clamp01((tt - BEATS.squares.start) / BEATS.squares.dur)),
     globe: easeOutCubic(clamp01((tt - BEATS.globe.start) / BEATS.globe.dur)),
     ambiance: easeOutCubic(clamp01((tt - BEATS.ambiance.start) / BEATS.ambiance.dur)),
   };
   revealStatics.forEach((s) => { s.mat.opacity = s.target * gf[s.group]; });
-  core.scale.setScalar(easeOutBack(clamp01((tt - BEATS.squares.start) / BEATS.squares.dur)));
+  // Squares: each cube fades + pops in on its own stagger, one by one.
+  cubeParts.forEach((p) => {
+    const raw = clamp01((tt - p.start) / SQUARES_PART_DUR);
+    p.mat.opacity = p.target * easeOutCubic(raw);
+    p.obj.scale.setScalar(easeOutBack(raw));
+  });
   clusters.forEach((c, i) => {
     c.revealFactor = easeOutCubic(clamp01((tt - (NODE_START + i * NODE_STAGGER)) / NODE_DUR));
   });
@@ -360,8 +370,8 @@ function updateReveal(dt) {
   if (introElapsed >= INTRO_END) {
     introDone = true;
     revealStatics.forEach((s) => { s.mat.opacity = s.target; });
+    cubeParts.forEach((p) => { p.mat.opacity = p.target; p.obj.scale.setScalar(1); });
     clusters.forEach((c) => { c.revealFactor = 1; });
-    core.scale.setScalar(1);
   }
 }
 
@@ -545,8 +555,9 @@ window.addEventListener('resize', () => {
 window.__SBG__ = {
   scene, camera, renderer, universe, clusters, hubs, yearLabel,
   select: (name) => select(clusters.find((c) => c.name === name)),
-  // Scrub the intro reveal to an absolute time (seconds) and render one frame.
-  scrub: (tt) => { introDone = false; introElapsed = tt; applyReveal(tt); renderer.render(scene, camera); },
+  // Scrub the intro reveal to an absolute time (seconds), freeze it there,
+  // and render one frame (so the running loop won't advance past it).
+  scrub: (tt) => { introElapsed = tt; applyReveal(tt); introDone = true; renderer.render(scene, camera); },
   // Snap the focus camera to its converged position and render (skips the ease).
   snapFocus: () => {
     if (selected) selected.hub.getWorldPosition(lookGoal); else lookGoal.set(0, 0, 0);
