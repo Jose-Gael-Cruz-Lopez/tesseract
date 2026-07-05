@@ -81,3 +81,13 @@ body {
   pointer-events: none;
   user-select: none;
 }
+
+/* Hover tooltip chip — the library positions .scene-tooltip, we restyle it */
+.scene-tooltip {
+  font-family: var(--font) !important;
+  font-size: 0 !important;
+  color: transparent !important;
+}
+
+.node-chip {
+  display: inline-block;
