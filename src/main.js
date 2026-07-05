@@ -33,3 +33,10 @@ const bloomPass = new UnrealBloomPass(
 graph.postProcessingComposer().addPass(bloomPass);
 
 const renderer = graph.renderer();
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  graph.width(w).height(h);
+  graph.postProcessingComposer().setSize(w, h);
