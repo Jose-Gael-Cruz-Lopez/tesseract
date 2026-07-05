@@ -77,3 +77,10 @@ export function startAnimation() {
       b.mat.opacity = b.dim;
       b.haloMat.opacity = 0.55 * b.dim;
 
+      const breath = 1 + 0.06 * Math.sin(2 * t + b.phase);
+      b.group.scale.setScalar(breath * b.hoverCurrent);
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
