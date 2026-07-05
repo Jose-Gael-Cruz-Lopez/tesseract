@@ -54,3 +54,9 @@ export function createGraph(container, data) {
     .nodeThreeObject((node) =>
       node.type === 'core'
         ? buildTesseract()
+        : node.type === 'hub'
+          ? buildHubBall(node)
+          : undefined
+    )
+    .nodeVal('val')
+    .nodeColor(nodeColorOf)
