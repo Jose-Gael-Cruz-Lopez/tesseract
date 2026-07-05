@@ -30,3 +30,8 @@ TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus sc
 
 ORBITAL RINGS (thin crimson tori around the nucleus)
 - Radii 115 / 150 / 205 / 250, tube thickness 1.2 / 1.0 / 0.9 / 0.8.
+- Colors and opacities: #e0356b @ .75, #c22f5f @ .50, #93264a @ .40, #6e1f3d @ .30.
+- Tilts: rotation.x = PI/2 + [0.16, -0.10, 0.24, -0.30], rotation.y = [0.4, -0.7, 1.4, 2.3].
+- Group them; the group rotates around Y at 0.06 rad/s.
+
+GRAPH DATA (12 clusters)
