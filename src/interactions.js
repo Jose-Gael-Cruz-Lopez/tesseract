@@ -14,3 +14,10 @@ const FLY_IN_MS = 1200;
 const FLY_HOME_MS = 1000;
 const FOCUS_DISTANCE = 190;
 
+export function setupInteractions(graph, data, container) {
+  const panel = document.getElementById('focus-panel');
+
+  // cluster -> { hub, count } (count includes the hub, its leaves and branches)
+  const clusters = new Map();
+  for (const node of data.nodes) {
+    if (!node.cluster) continue;
