@@ -60,3 +60,10 @@ export function createGraph(container, data) {
     )
     .nodeVal('val')
     .nodeColor(nodeColorOf)
+    .nodeOpacity(0.9)
+    .nodeRelSize(4)
+    .nodeResolution(12)
+    // The core never shows a tooltip; everything else gets a styled chip.
+    .nodeLabel((node) =>
+      node.type === 'core' ? null : `<div class="node-chip">${node.label}</div>`
+    )
