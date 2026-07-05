@@ -44,3 +44,12 @@ function buildWireGlobe(group) {
     opacity: 0.14,
   });
   const equatorMat = new THREE.LineBasicMaterial({
+    color: 0xdfe4ff,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const fanMat = new THREE.LineBasicMaterial({
+    color: 0x9aa0c8,
+    transparent: true,
+    opacity: 0.06,
+  });
