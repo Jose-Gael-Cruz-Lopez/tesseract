@@ -12,3 +12,11 @@ export const REDUCED_MOTION =
 
 // Rotation speeds multiply by 0.25 under reduced motion (DESIGN_SPEC · MOTION RULES).
 const SPEED_MULTIPLIER = REDUCED_MOTION ? 0.25 : 1;
+
+export const registry = {
+  spinners: [], // { obj, speed: {x, y, z} } — tesseract parts, rad/s from the spec
+  coreGlow: null, // SpriteMaterial of the core glow (pulsed each frame)
+  tesseractParts: [], // { mat, base } — for focus dimming, floor 0.4
+  hubs: new Map(), // node.id -> hub node (each carries node.__ball refs)
+  rings: null, // THREE.Group of the 4 crimson tori
+};
