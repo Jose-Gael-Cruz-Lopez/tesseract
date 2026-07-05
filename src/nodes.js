@@ -130,3 +130,10 @@ export function buildHubBall(node) {
     opacity: 1,
   });
   const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
+
+  const haloMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture(),
+    color: tint.clone(),
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
