@@ -14,3 +14,19 @@
     "3d-force-graph",
     "knowledge-graph",
     "second-brain",
+    "data-visualization",
+    "webgl"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "3d-force-graph": "^1.80.0",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
+  }
+}
