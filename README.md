@@ -26,3 +26,10 @@ npm install
 npm run dev
 ```
 
+## Controls
+
+| Input | Action |
+| --- | --- |
+| Drag | Rotate the globe |
+| Scroll | Zoom in and out |
+| Hover a node | Preview its label |
