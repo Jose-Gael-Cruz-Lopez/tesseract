@@ -24,3 +24,9 @@ TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus sc
 - Core glow: additive sprite (soft radial canvas texture), color #ff4d70, scale 130, opacity ~0.45.
 - The outermost shell (90) is 0.30 R. Do not exceed this. The nucleus must read small
   relative to the globe.
+- Continuous rotation, radians/sec: solid (x .35, y .50), wireA (x -.22, z .30),
+  wireB (y .16, x .10), shellA (y .12, x .05), shellB (z -.08, y -.05), shellC (x .04, z .03).
+- Glow opacity pulse: 0.36 + 0.12 * sin(1.7t).
+
+ORBITAL RINGS (thin crimson tori around the nucleus)
+- Radii 115 / 150 / 205 / 250, tube thickness 1.2 / 1.0 / 0.9 / 0.8.
