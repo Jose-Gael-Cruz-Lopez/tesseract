@@ -48,3 +48,11 @@ export function generateBrain(seed = 42) {
 
   const R = GLOBE_RADIUS;
   const nodes = [];
+  const links = [];
+
+  nodes.push({
+    id: 'core',
+    type: 'core',
+    cluster: null,
+    label: 'Core',
+    val: 20,
