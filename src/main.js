@@ -67,3 +67,10 @@ function reportDrawCalls(tag) {
   info.reset();
   let frames = 0;
   (function count() {
+    if (++frames <= 10) return requestAnimationFrame(count);
+    console.log(
+      `[second-brain-globe] ${tag} draw calls/frame:`,
+      Math.round(info.render.calls / 10)
+    );
+    info.autoReset = true;
+  })();
