@@ -4,12 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="An interactive 3D knowledge globe. Every cluster of thought, tethered to a single core." />
+    <meta name="theme-color" content="#060310" />
     <title>Mnemosphere · 2026</title>
     <!-- Critical background: paint dark on the very first frame so there is no
-         white flash before the JS-imported stylesheet loads. -->
+         white flash before the JS-imported stylesheet loads. Covers html, body
+         and the canvas (blank before its first WebGL frame). -->
     <style>
-      html, body { margin: 0; height: 100%; background: #060310; }
       :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #060310; }
+      canvas { display: block; background: #060310; }
     </style>
   </head>
   <body>
