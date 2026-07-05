@@ -122,3 +122,14 @@ body {
   pointer-events: none;
   transition: opacity 0.35s ease, transform 0.35s ease;
   z-index: 10;
+}
+
+#focus-panel.visible {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
