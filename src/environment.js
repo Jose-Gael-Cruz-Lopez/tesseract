@@ -16,3 +16,12 @@ function circleGeometry(radius, segments, y = 0) {
     positions[i * 3 + 1] = y;
     positions[i * 3 + 2] = Math.sin(a) * radius;
   }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return geo;
+}
+
+function meridianGeometry(phi, segments) {
+  // Full vertical circle through the poles, rotated phi around Y.
+  const positions = new Float32Array(segments * 3);
+  for (let i = 0; i < segments; i++) {
