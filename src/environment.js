@@ -154,3 +154,12 @@ function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand })
   return new THREE.Points(geo, mat);
 }
 
+function buildStream(fromDir, toDir, rand) {
+  // 46 warm dots scattered along a bezier arc hugging the shell at ~0.82 R.
+  const shellR = 0.82 * R;
+  const count = 46;
+
+  const from = new THREE.Vector3(...fromDir).normalize().multiplyScalar(shellR);
+  const to = new THREE.Vector3(...toDir).normalize().multiplyScalar(shellR);
+  const mid1 = from.clone().lerp(to, 0.33).normalize().multiplyScalar(shellR * 1.06);
+  const mid2 = from.clone().lerp(to, 0.66).normalize().multiplyScalar(shellR * 1.06);
