@@ -26,3 +26,10 @@ registry.rings = rings;
 // while the wireframe globe and palette colors stay readable.
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.75, // strength
+  0.5, // radius
+  0.25 // threshold
+);
+graph.postProcessingComposer().addPass(bloomPass);
+
+const renderer = graph.renderer();
