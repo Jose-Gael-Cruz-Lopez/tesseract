@@ -61,3 +61,9 @@ TETHERS AND ENERGY
 - linkDirectionalParticles 2 per tether, width 3.5, color #ffc2cf,
   speed random per link in [0.004, 0.008], random initial offset.
 - Spokes and branches are straight, no particles.
+
+ENVIRONMENT (added to graph.scene(), grouped under one "environment" THREE.Group)
+- Latitude circles every 15 degrees from -75 to +75, 128 segments each.
+- 12 meridian circles. One bright equator LineLoop at 160 segments.
+- Radial fan: 144 line spokes at y = 0 from r = 65 out to r = 300 (the dense disc look).
+- Inner dust: 500 additive points, radius 80 to 295, size 4, palette colors dimmed to 80%.
