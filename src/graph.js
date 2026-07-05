@@ -40,3 +40,10 @@ export function particleCountOf(link) {
   return link.cluster === focusState.cluster ? 4 : 2;
 }
 
+export function particleSpeedOf(link) {
+  if (REDUCED_MOTION) return 0;
+  return (link.particleSpeed || 0) * (link.cluster === focusState.cluster ? 2.2 : 1);
+}
+
+export function createGraph(container, data) {
+  const graph = new ForceGraph3D(container, { controlType: 'orbit' })
