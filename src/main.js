@@ -12,3 +12,10 @@ import { setupInteractions } from './interactions.js';
 const container = document.getElementById('app');
 const data = generateBrain(42);
 const graph = createGraph(container, data);
+
+// Environment: wireframe globe, rings, fan, dust, stars, streams, year label.
+const { group: environment, rings } = buildEnvironment();
+graph.scene().add(environment);
+registry.rings = rings;
+
+// Bloom (DESIGN_SPEC · BLOOM): the red core, hub balls, particles and dust
