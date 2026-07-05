@@ -164,3 +164,13 @@ body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* WebGL context-loss overlay */
+#gl-lost {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 3, 16, 0.92);
