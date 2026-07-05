@@ -139,3 +139,11 @@ export function generateBrain(seed = 42) {
 
       if (rand() < 0.25) {
         const branchId = `${leafId}-b`;
+        nodes.push({
+          id: branchId,
+          type: 'branch',
+          cluster: name,
+          label: `${name} · node ${num}.1`,
+          val: 1,
+          color: pick(NODE_PALETTE),
+          x: hx + range(-45, 45),
