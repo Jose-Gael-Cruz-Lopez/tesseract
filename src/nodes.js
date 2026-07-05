@@ -108,3 +108,10 @@ export function buildTesseract() {
   registry.tesseractParts = [
     { mat: solidMat, base: 1 },
     { mat: wireAMat, base: 0.7 },
+    { mat: wireBMat, base: 0.35 },
+    { mat: shells[0].material, base: 0.1 },
+    { mat: shells[1].material, base: 0.07 },
+    { mat: shells[2].material, base: 0.045 },
+  ];
+
+  return group;
