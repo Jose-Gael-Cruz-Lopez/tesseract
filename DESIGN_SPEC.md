@@ -88,3 +88,8 @@ MOTION RULES
   requestAnimationFrame loop, independent of the force simulation.
 - Hub breathing: scale multiplier 1 + 0.06 * sin(2t + phase), unique phase per hub.
 - If prefers-reduced-motion: autoRotate off, particle speed 0, rotation speeds * 0.25.
+
+BLOOM
+- UnrealBloomPass: strength 0.75, radius 0.5, threshold 0.25 (tuned in-browser from the
+  original 1.1 / 0.5 / 0.15, which saturated every node to white). The red core, hub
+  balls, particles, and dust glow while the wireframe globe stays subtle.
