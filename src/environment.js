@@ -227,3 +227,12 @@ function buildYearLabel() {
       depthWrite: false,
     })
   );
+  sprite.scale.set(140, 35, 1);
+  sprite.position.set(0, 340, 0);
+  return sprite;
+}
+
+export function buildEnvironment(seed = 1337) {
+  // Local seeded RNG: the environment is reproducible too.
+  let a = seed >>> 0;
+  const rand = () => {
