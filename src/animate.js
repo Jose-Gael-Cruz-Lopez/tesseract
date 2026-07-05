@@ -20,3 +20,10 @@ export const registry = {
   hubs: new Map(), // node.id -> hub node (each carries node.__ball refs)
   rings: null, // THREE.Group of the 4 crimson tori
 };
+
+// Focus mode state, mutated by interactions.js, read by accessors + this loop.
+export const focusState = { cluster: null, hub: null };
+
+let started = false;
+
+export function startAnimation() {
