@@ -82,3 +82,9 @@ UI CHROME
 - Focus panel, right side, vertically centered: cluster name, node count, orbit radius %,
   a thin gradient bar (#ff2d55 to #ffd166), and "click empty space to release".
   Translucent dark card, blur backdrop, fades in/out.
+
+MOTION RULES
+- All continuous motion (tesseract, rings, glow pulse, hub breathing) runs in one
+  requestAnimationFrame loop, independent of the force simulation.
+- Hub breathing: scale multiplier 1 + 0.06 * sin(2t + phase), unique phase per hub.
+- If prefers-reduced-motion: autoRotate off, particle speed 0, rotation speeds * 0.25.
