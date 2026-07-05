@@ -282,3 +282,12 @@ export function buildEnvironment(seed = 1337) {
   group.add(buildStream([-0.8, -0.35, 0.55], [0.55, -0.6, -0.6], rand));
 
   group.add(buildYearLabel());
+
+  // The environment must never intercept raycasting: hovering a leaf through
+  // the wireframe has to keep working.
+  group.traverse((obj) => {
+    obj.raycast = () => {};
+  });
+
+  return { group, rings };
+}
