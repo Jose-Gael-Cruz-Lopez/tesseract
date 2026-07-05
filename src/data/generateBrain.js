@@ -56,3 +56,11 @@ export function generateBrain(seed = 42) {
     cluster: null,
     label: 'Core',
     val: 20,
+    color: '#ff3355',
+    fx: 0,
+    fy: 0,
+    fz: 0,
+  });
+
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
