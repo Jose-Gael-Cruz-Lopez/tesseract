@@ -64,3 +64,10 @@ export function buildTesseract() {
   // Frosted shells 48 / 68 / 90 — outermost is 0.30 R, the hard size cap.
   const shellSizes = [48, 68, 90];
   const shellOpacities = [0.1, 0.07, 0.045];
+  const shells = shellSizes.map((side, i) => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xcabfd6,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      transparent: true,
+      opacity: shellOpacities[i],
