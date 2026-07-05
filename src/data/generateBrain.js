@@ -64,3 +64,12 @@ export function generateBrain(seed = 42) {
 
   const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
+  CLUSTER_NAMES.forEach((name, i) => {
+    // Fibonacci-sphere direction with jitter 0.22, renormalized.
+    const fy = 1 - (i + 0.5) * (2 / CLUSTER_NAMES.length);
+    const fr = Math.sqrt(Math.max(0, 1 - fy * fy));
+    const theta = GOLDEN_ANGLE * i;
+    let dir = [
+      Math.cos(theta) * fr + range(-0.22, 0.22),
+      fy + range(-0.22, 0.22),
+      Math.sin(theta) * fr + range(-0.22, 0.22),
