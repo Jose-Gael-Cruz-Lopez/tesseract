@@ -434,7 +434,7 @@ function updateReveal(dt) {
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-2, -2);
 const tooltip = document.getElementById('tooltip');
-const treeEl = document.getElementById('tree');
+const sidebarEl = document.getElementById('sidebar');
 
 // Open a node's page. Real http(s) URLs open in a new tab; the default
 // placeholder routes (#/cluster/page) just update the URL in place.
@@ -443,49 +443,97 @@ function openNode(node) {
   else window.location.hash = node.url;
 }
 
-// Obsidian-style file tree: each cluster is a collapsible folder of pages.
-function buildTree() {
+const ICON = {
+  chevron: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+  page: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/></svg>',
+  home: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  pencil: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+};
+const elh = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+};
+const labelSpan = (text) => { const s = elh('span', 'sb-label'); s.textContent = text; return s; };
+
+// Expand/collapse a cluster's page list.
+function setExpanded(c, open) {
+  c.expandedState = open;
+  c.childrenEl.style.display = open ? 'block' : 'none';
+  c.itemEl.classList.toggle('open', open);
+}
+
+// Notion-style sidebar: workspace header, nav + search, cluster list, footer.
+function buildSidebar() {
+  const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
+
+  const nav = elh('div', 'sb-nav');
+  const home = elh('button', 'sb-home', ICON.home + '<span>Home</span>');
+  home.addEventListener('click', () => select(null));
+  const searchBtn = elh('button', 'sb-iconbtn', ICON.search);
+  nav.append(home, searchBtn);
+
+  const searchWrap = elh('div', 'sb-search');
+  const searchInput = elh('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Search pages…';
+  searchWrap.appendChild(searchInput);
+  searchBtn.addEventListener('click', () => searchInput.focus());
+
+  const scroll = elh('div', 'sb-scroll');
+  scroll.appendChild(elh('div', 'sb-section', 'Clusters'));
   clusters.forEach((c) => {
-    const folder = document.createElement('div');
-    folder.className = 'folder';
-    const twisty = document.createElement('span');
-    twisty.className = 'twisty';
-    twisty.textContent = '›'; // ›
-    const label = document.createElement('span');
-    label.className = 'folder-name';
-    label.textContent = c.name;
-    folder.append(twisty, label);
-    folder.addEventListener('click', () => select(c));
+    const item = elh('div', 'sb-item');
+    const tw = elh('span', 'sb-twisty', ICON.chevron);
+    item.append(tw, elh('span', 'sb-icon', ICON.page), labelSpan(c.name));
+    tw.addEventListener('click', (e) => { e.stopPropagation(); setExpanded(c, !c.expandedState); });
+    item.addEventListener('click', () => select(c));
 
-    const children = document.createElement('div');
-    children.className = 'children';
+    const children = elh('div', 'sb-children');
     children.style.display = 'none';
+    c.subEls = [];
     c.pnodes.forEach((node) => {
-      const file = document.createElement('div');
-      file.className = 'file';
-      file.textContent = node.title;
-      file.title = node.title;
-      file.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
-      children.appendChild(file);
+      const sub = elh('div', 'sb-sub');
+      sub.append(elh('span', 'sb-icon', ICON.page), labelSpan(node.title));
+      sub.title = node.title;
+      sub.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
+      children.appendChild(sub);
+      c.subEls.push(sub);
     });
-
-    treeEl.append(folder, children);
-    c.folderEl = folder;
+    scroll.append(item, children);
+    c.itemEl = item;
     c.childrenEl = children;
+    c.expandedState = false;
+  });
+
+  const footer = elh('div', 'sb-footer');
+  footer.appendChild(elh('button', 'sb-new', ICON.pencil + '<span>New</span>'));
+
+  sidebarEl.append(header, nav, searchWrap, scroll, footer);
+
+  // Live filter as you type (Notion-style search).
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    clusters.forEach((c) => {
+      const nameMatch = c.name.toLowerCase().includes(q);
+      let anyPage = false;
+      c.subEls.forEach((sub, k) => {
+        const m = !q || nameMatch || c.pnodes[k].title.toLowerCase().includes(q);
+        sub.style.display = m ? '' : 'none';
+        if (q && m) anyPage = true;
+      });
+      const show = !q || nameMatch || anyPage;
+      c.itemEl.style.display = show ? '' : 'none';
+      const open = q ? show && (anyPage || nameMatch) : c.expandedState;
+      c.childrenEl.style.display = open ? 'block' : 'none';
+      c.itemEl.classList.toggle('open', open);
+    });
   });
 }
 
-// Expand + highlight one folder (the focused cluster); collapse the rest.
-function setTreeOpen(c) {
-  clusters.forEach((cl) => {
-    const open = cl === c;
-    cl.folderEl.classList.toggle('open', open);
-    cl.childrenEl.style.display = open ? 'block' : 'none';
-  });
-  if (c) c.folderEl.scrollIntoView({ block: 'nearest' });
-}
-
-buildTree();
+buildSidebar();
 
 let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
 let tooltipXY = [0, 0], hoverCluster = null, selected = null;
@@ -588,10 +636,12 @@ function select(c) {
   if (selected) {
     if (!wasFocused) preFocusDist = camDist; // remember the free-look zoom
     camDist = FOCUS_DIST; // fly the camera in to the hub
-    setTreeOpen(selected); // expand + highlight this folder in the tree
+    clusters.forEach((cl) => cl.itemEl.classList.toggle('selected', cl === selected));
+    setExpanded(selected, true); // expand this cluster's pages
+    selected.itemEl.scrollIntoView({ block: 'nearest' });
   } else {
     if (wasFocused) camDist = preFocusDist; // restore the previous zoom
-    setTreeOpen(null);
+    clusters.forEach((cl) => cl.itemEl.classList.remove('selected'));
   }
 }
 el.addEventListener('click', () => {
