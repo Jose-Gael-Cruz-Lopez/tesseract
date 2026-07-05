@@ -45,3 +45,11 @@ export function setupInteractions(graph, data, container) {
     panel.querySelector('.panel-title').textContent = hub.cluster;
     panel.querySelector('.panel-count').textContent = `${entry.count} nodes`;
     panel.querySelector('.panel-orbit').textContent = `orbit at ${orbitPct}% radius`;
+    panel.classList.add('visible');
+  }
+
+  function hidePanel() {
+    panel.classList.remove('visible');
+  }
+
+  function focusHub(hub) {
