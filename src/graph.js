@@ -33,3 +33,10 @@ export function linkColorOf(link) {
     return link.kind === 'tether' ? DIMMED_TETHER : DIMMED_LINK;
   }
   return link.kind === 'tether' ? FOCUSED_TETHER : LINK_COLORS[link.kind];
+}
+
+export function particleCountOf(link) {
+  if (REDUCED_MOTION || link.kind !== 'tether') return 0;
+  return link.cluster === focusState.cluster ? 4 : 2;
+}
+
