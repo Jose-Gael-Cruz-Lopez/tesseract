@@ -163,3 +163,12 @@ function buildStream(fromDir, toDir, rand) {
   const to = new THREE.Vector3(...toDir).normalize().multiplyScalar(shellR);
   const mid1 = from.clone().lerp(to, 0.33).normalize().multiplyScalar(shellR * 1.06);
   const mid2 = from.clone().lerp(to, 0.66).normalize().multiplyScalar(shellR * 1.06);
+  const curve = new THREE.CubicBezierCurve3(from, mid1, mid2, to);
+  const samples = curve.getPoints(count - 1);
+
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const warm = [new THREE.Color('#ffb454'), new THREE.Color('#ffd166')];
+
+  samples.forEach((p, i) => {
+    positions.set(
