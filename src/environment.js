@@ -62,3 +62,12 @@ function buildWireGlobe(group) {
       wireMat
     );
     group.add(loop);
+  }
+
+  // 12 meridian circles.
+  for (let m = 0; m < 12; m++) {
+    group.add(new THREE.LineLoop(meridianGeometry((m / 12) * Math.PI, 128), wireMat));
+  }
+
+  // One bright equator at 160 segments.
+  group.add(new THREE.LineLoop(circleGeometry(R, 160), equatorMat));
