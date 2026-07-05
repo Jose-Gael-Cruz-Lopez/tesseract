@@ -122,3 +122,12 @@ export function generateBrain(seed = 42) {
         label: `${name} · node ${num}`,
         val,
         color: pick(NODE_PALETTE),
+        // Unpinned, but seeded near the hub so the layout settles quickly
+        // into the dandelion shape instead of migrating from the origin.
+        x: hx + range(-35, 35),
+        y: hy + range(-35, 35),
+        z: hz + range(-35, 35),
+      });
+
+      links.push({
+        source: hubId,
