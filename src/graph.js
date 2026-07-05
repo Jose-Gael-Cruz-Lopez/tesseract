@@ -81,3 +81,10 @@ export function createGraph(container, data) {
     .linkDirectionalParticleSpeed(particleSpeedOf)
     .linkDirectionalParticleOffset((link) => link.particleOffset || 0)
     .d3VelocityDecay(0.4)
+    .warmupTicks(80)
+    .cooldownTime(6000);
+
+  // Forces — configured BEFORE data lands so the warmup ticks use them.
+  // No centering force: core + hubs are pinned; a center force would drag
+  // every leaf toward the origin and crush the dandelion clusters.
+  graph.d3Force('center', null);
