@@ -60,3 +60,13 @@ body {
 }
 
 .brand-sub {
+  margin-top: 7px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+}
+
+/* Bottom-center hint */
+.hint {
+  position: fixed;
