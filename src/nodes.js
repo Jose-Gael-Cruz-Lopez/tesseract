@@ -115,3 +115,10 @@ export function buildTesseract() {
   ];
 
   return group;
+}
+
+const IVORY = new THREE.Color('#fff3dd');
+
+export function buildHubBall(node) {
+  const group = new THREE.Group();
+  const radius = 11 * node.weight;
