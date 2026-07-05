@@ -133,3 +133,13 @@ body {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.panel-count {
+  margin-top: 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+}
