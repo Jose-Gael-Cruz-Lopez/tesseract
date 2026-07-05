@@ -96,10 +96,8 @@ for (let i = 0; i < 12; i++) {
   universe.add(m);
 }
 /* bright equator ring */
-universe.add(new THREE.LineLoop(
-  latCircleGeo(R, 0, 160),
-  new THREE.LineBasicMaterial({ color: 0xdfe4ff, transparent: true, opacity: 0.5 })
-));
+const equatorMat = new THREE.LineBasicMaterial({ color: 0xdfe4ff, transparent: true, opacity: 0.5 });
+universe.add(new THREE.LineLoop(latCircleGeo(R, 0, 160), equatorMat));
 /* dense radial fan disc at the equator plane */
 const fanPts = [];
 for (let a = 0; a < 360; a += 2.5) {
@@ -109,10 +107,8 @@ for (let a = 0; a < 360; a += 2.5) {
     new THREE.Vector3(Math.cos(r) * R, 0, Math.sin(r) * R)
   );
 }
-universe.add(new THREE.LineSegments(
-  new THREE.BufferGeometry().setFromPoints(fanPts),
-  new THREE.LineBasicMaterial({ color: 0x9aa0c8, transparent: true, opacity: 0.06 })
-));
+const fanMat = new THREE.LineBasicMaterial({ color: 0x9aa0c8, transparent: true, opacity: 0.06 });
+universe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fanPts), fanMat));
 
 /* ---------- tesseract core (kept from our build) ---------- */
 const core = new THREE.Group();
@@ -230,6 +226,7 @@ for (let i = 0; i < clusterNames.length; i++) {
 }
 
 /* ---------- warm dotted streams along arcs ---------- */
+const streamMats = [];
 function makeStream() {
   const a = randDir().multiplyScalar(R * 0.82);
   const b = randDir().multiplyScalar(R * 0.82);
@@ -243,7 +240,9 @@ function makeStream() {
     const c = new THREE.Color(rand() < 0.7 ? 0xffb454 : 0xffd166);
     col.push(c.r, c.g, c.b);
   }
-  universe.add(makePoints(pos, col, 0.34, 0.9));
+  const pts = makePoints(pos, col, 0.34, 0.9);
+  universe.add(pts);
+  streamMats.push(pts.material);
 }
 makeStream();
 makeStream();
@@ -260,8 +259,10 @@ function scatter(count, rMin, rMax, size, opacity, dim) {
   }
   return makePoints(pos, col, size, opacity);
 }
-universe.add(scatter(420, 3, R * 0.98, 0.16, 0.75, 0.8));
-scene.add(scatter(260, R * 1.3, R * 3.2, 0.2, 0.5, 0.55));
+const ambientParticles = scatter(420, 3, R * 0.98, 0.16, 0.75, 0.8);
+universe.add(ambientParticles);
+const bgStars = scatter(260, R * 1.3, R * 3.2, 0.2, 0.5, 0.55);
+scene.add(bgStars);
 
 /* ---------- floating year label ---------- */
 function textSprite(text) {
@@ -280,6 +281,81 @@ function textSprite(text) {
 const yearLabel = textSprite('2026');
 yearLabel.position.set(0, R + 1.7, 0);
 universe.add(yearLabel);
+
+/* ---------- intro reveal (staggered load-in) ----------
+   Groups appear one at a time: squares -> globe (+rings) -> nodes (clusters
+   pop in one by one) -> ambiance (streams, dust, stars, label). Static
+   materials fade via a per-group factor; clusters/tethers fade + pop via a
+   per-cluster reveal factor read in the animation loop. */
+const prefersReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+const revealStatics = [];
+const reg = (mat, group) => revealStatics.push({ mat, target: mat.opacity, group });
+tesseract.group.traverse((o) => { if (o.material) reg(o.material, 'squares'); });
+reg(thinLine, 'globe');
+reg(equatorMat, 'globe');
+reg(fanMat, 'globe');
+ringGroup.traverse((o) => { if (o.material) reg(o.material, 'globe'); });
+streamMats.forEach((m) => reg(m, 'ambiance'));
+reg(ambientParticles.material, 'ambiance');
+reg(bgStars.material, 'ambiance');
+reg(yearLabel.material, 'ambiance');
+
+const BEATS = {
+  squares: { start: 0.15, dur: 0.9 },
+  globe: { start: 0.95, dur: 1.0 },
+  ambiance: { start: 2.3, dur: 1.3 },
+};
+const NODE_START = 1.8, NODE_STAGGER = 0.08, NODE_DUR = 0.6;
+const INTRO_END = 3.6;
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeOutBack = (x) => {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
+let introElapsed = 0;
+let introDone = prefersReduced;
+
+// Base (un-revealed) opacities the loop lerps; the reveal factor multiplies them.
+clusters.forEach((c) => {
+  c._lineOp = c.baseLineOp; c._majOp = c.baseMajOp; c._minOp = c.baseMinOp; c._hubOp = c.hubBaseOp;
+  c.revealFactor = 1;
+});
+threads.forEach((th) => { th._op = th.baseOp; });
+
+if (!introDone) {
+  revealStatics.forEach((s) => { s.mat.opacity = 0; });
+  clusters.forEach((c) => { c.revealFactor = 0; c.hub.scale.set(0.0001, 0.0001, 1); });
+  threads.forEach((th) => { th.mat.opacity = 0; th.pulseMat.opacity = 0; });
+  core.scale.setScalar(0.0001);
+}
+
+function applyReveal(tt) {
+  const gf = {
+    squares: easeOutCubic(clamp01((tt - BEATS.squares.start) / BEATS.squares.dur)),
+    globe: easeOutCubic(clamp01((tt - BEATS.globe.start) / BEATS.globe.dur)),
+    ambiance: easeOutCubic(clamp01((tt - BEATS.ambiance.start) / BEATS.ambiance.dur)),
+  };
+  revealStatics.forEach((s) => { s.mat.opacity = s.target * gf[s.group]; });
+  core.scale.setScalar(easeOutBack(clamp01((tt - BEATS.squares.start) / BEATS.squares.dur)));
+  clusters.forEach((c, i) => {
+    c.revealFactor = easeOutCubic(clamp01((tt - (NODE_START + i * NODE_STAGGER)) / NODE_DUR));
+  });
+}
+
+function updateReveal(dt) {
+  if (introDone) return;
+  introElapsed += dt;
+  applyReveal(introElapsed);
+  if (introElapsed >= INTRO_END) {
+    introDone = true;
+    revealStatics.forEach((s) => { s.mat.opacity = s.target; });
+    clusters.forEach((c) => { c.revealFactor = 1; });
+    core.scale.setScalar(1);
+  }
+}
 
 /* ---------- interaction: drag, zoom, hover, click-to-focus ---------- */
 const raycaster = new THREE.Raycaster();
@@ -382,6 +458,8 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   t += dt;
 
+  updateReveal(dt);
+
   if (!dragging) {
     universe.rotation.y += velY + 0.0009;
     universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
@@ -397,23 +475,32 @@ function animate() {
 
   clusters.forEach((c) => {
     const f = selected ? (c === selected ? 1 : 0.1) : 1;
-    c.lineMat.opacity += (c.baseLineOp * f - c.lineMat.opacity) * 0.08;
-    c.majorMat.opacity += (c.baseMajOp * f - c.majorMat.opacity) * 0.08;
-    c.minorMat.opacity += (c.baseMinOp * f - c.minorMat.opacity) * 0.08;
-    c.hubMat.opacity += (c.hubBaseOp * Math.min(f * 1.1, 1) - c.hubMat.opacity) * 0.08;
+    const rv = c.revealFactor;
+    // Lerp the base opacities (focus dimming), then apply the reveal factor.
+    c._lineOp += (c.baseLineOp * f - c._lineOp) * 0.08;
+    c._majOp += (c.baseMajOp * f - c._majOp) * 0.08;
+    c._minOp += (c.baseMinOp * f - c._minOp) * 0.08;
+    c._hubOp += (c.hubBaseOp * Math.min(f * 1.1, 1) - c._hubOp) * 0.08;
+    c.lineMat.opacity = c._lineOp * rv;
+    c.majorMat.opacity = c._majOp * rv;
+    c.minorMat.opacity = c._minOp * rv;
+    c.hubMat.opacity = c._hubOp * rv;
     c.group.rotateOnAxis(c.spinAxis, c.spinSpeed * dt);
     const active = c === hoverCluster || c === selected;
-    const target = c.hubBase * (1 + 0.09 * Math.sin(t * 2 + c.phase)) * (active ? 1.5 : 1);
+    const target = c.hubBase * (1 + 0.09 * Math.sin(t * 2 + c.phase)) * (active ? 1.5 : 1) * rv;
     c.hub.scale.x += (target - c.hub.scale.x) * 0.15;
     c.hub.scale.y = c.hub.scale.x;
   });
 
   threads.forEach((th) => {
     const f = selected ? (th.cluster === selected ? 2.6 : 0.25) : 1;
-    th.mat.opacity += (Math.min(th.baseOp * f, 0.85) - th.mat.opacity) * 0.08;
+    const rv = th.cluster.revealFactor;
+    th._op += (Math.min(th.baseOp * f, 0.85) - th._op) * 0.08;
+    th.mat.opacity = th._op * rv;
     th.t = (th.t + th.speed * dt * (th.cluster === selected ? 2.2 : 1)) % 1;
     th.pulse.position.copy(th.curve.getPoint(th.t));
-    th.pulseMat.opacity = selected && th.cluster !== selected ? 0.1 : 0.55 + 0.45 * Math.sin(th.t * Math.PI);
+    const pulseOp = selected && th.cluster !== selected ? 0.1 : 0.55 + 0.45 * Math.sin(th.t * Math.PI);
+    th.pulseMat.opacity = pulseOp * rv;
   });
 
   updateHover();
@@ -431,4 +518,6 @@ window.addEventListener('resize', () => {
 window.__SBG__ = {
   scene, camera, renderer, universe, clusters, hubs, yearLabel,
   select: (name) => select(clusters.find((c) => c.name === name)),
+  // Scrub the intro reveal to an absolute time (seconds) and render one frame.
+  scrub: (tt) => { introDone = false; introElapsed = tt; applyReveal(tt); renderer.render(scene, camera); },
 };
