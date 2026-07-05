@@ -117,3 +117,12 @@ function buildRings() {
 }
 
 function randomDirection(rand) {
+  const u = rand() * 2 - 1;
+  const phi = rand() * Math.PI * 2;
+  const s = Math.sqrt(1 - u * u);
+  return [s * Math.cos(phi), u, s * Math.sin(phi)];
+}
+
+function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand }) {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
