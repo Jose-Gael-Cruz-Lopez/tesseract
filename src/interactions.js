@@ -76,3 +76,11 @@ export function setupInteractions(graph, data, container) {
     showPanel(hub);
   }
 
+  function release() {
+    if (!focusState.hub) return;
+
+    const previous = focusState.hub;
+    focusState.cluster = null;
+    focusState.hub = null;
+    if (previous.__ball) previous.__ball.hoverTarget = 1;
+
