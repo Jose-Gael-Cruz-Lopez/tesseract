@@ -144,3 +144,11 @@ export function buildHubBall(node) {
 
   group.add(halo, ball);
 
+  // Refs for the animation loop and interactions: no scene traversal needed.
+  node.__ball = {
+    group,
+    mat,
+    haloMat,
+    radius,
+    hoverTarget: 1,
+    hoverCurrent: 1,
