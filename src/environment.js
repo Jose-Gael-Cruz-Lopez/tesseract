@@ -108,3 +108,12 @@ function buildRings() {
         depthWrite: false,
       })
     );
+    torus.rotation.x = Math.PI / 2 + tiltX[i];
+    torus.rotation.y = rotY[i];
+    rings.add(torus);
+  });
+
+  return rings;
+}
+
+function randomDirection(rand) {
