@@ -95,3 +95,10 @@ export function createGraph(container, data) {
       node.type === 'leaf' || node.type === 'branch' ? -35 : -160
     );
 
+  graph.graphData(data);
+
+  graph.cameraPosition(CAMERA_HOME, { x: 0, y: 0, z: 0 });
+
+  const controls = graph.controls();
+  controls.autoRotate = !REDUCED_MOTION;
+  controls.autoRotateSpeed = 0.35;
