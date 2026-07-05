@@ -107,3 +107,11 @@ export function setupInteractions(graph, data, container) {
 
   graph.onNodeClick((node) => {
     if (!node || node.type === 'core') return;
+    // Clicking a leaf or branch focuses its parent cluster, same flow.
+    const hub = node.type === 'hub' ? node : clusters.get(node.cluster)?.hub;
+    if (!hub) return;
+    if (focusState.hub === hub) {
+      release(); // clicking the focused hub again releases
+    } else {
+      focusHub(hub);
+    }
