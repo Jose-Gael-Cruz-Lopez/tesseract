@@ -70,3 +70,10 @@ export function startAnimation() {
 
       // Hover/focus swell is lerped toward its target, never snapped.
       b.hoverCurrent += (b.hoverTarget - b.hoverCurrent) * Math.min(1, dt * 8);
+
+      const inFocus = !focusState.cluster || node.cluster === focusState.cluster;
+      const dimTargetHub = inFocus ? 1 : 0.1;
+      b.dim += (dimTargetHub - b.dim) * Math.min(1, dt * 6);
+      b.mat.opacity = b.dim;
+      b.haloMat.opacity = 0.55 * b.dim;
+
