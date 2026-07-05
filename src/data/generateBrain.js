@@ -40,3 +40,11 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+export function generateBrain(seed = 42) {
+  const rand = mulberry32(seed);
+  const range = (min, max) => min + rand() * (max - min);
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+
+  const R = GLOBE_RADIUS;
+  const nodes = [];
