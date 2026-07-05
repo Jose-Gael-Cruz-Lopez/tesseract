@@ -81,3 +81,11 @@ export function generateBrain(seed = 42) {
     const [hx, hy, hz] = dir.map((c) => c * radius);
     const hubId = `hub-${i}`;
     const clusterColor = NODE_PALETTE[i % NODE_PALETTE.length];
+
+    nodes.push({
+      id: hubId,
+      type: 'hub',
+      cluster: name,
+      label: name,
+      val: 10,
+      color: clusterColor,
