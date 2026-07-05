@@ -126,3 +126,12 @@ function randomDirection(rand) {
 function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand }) {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const color = new THREE.Color();
+
+  for (let i = 0; i < count; i++) {
+    const [dx, dy, dz] = randomDirection(rand);
+    const r = minR + rand() * (maxR - minR);
+    positions.set([dx * r, dy * r, dz * r], i * 3);
+    color.set(NODE_PALETTE[Math.floor(rand() * NODE_PALETTE.length)]);
+    color.multiplyScalar(dimFactor);
+    colors.set([color.r, color.g, color.b], i * 3);
