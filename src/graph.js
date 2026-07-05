@@ -74,3 +74,10 @@ export function createGraph(container, data) {
     .linkWidth(0)
     .linkCurvature((link) => (link.kind === 'tether' ? 0.18 : 0))
     .linkCurveRotation((link) => link.curveRotation || 0)
+    // Energy pulses along the tethers, all values precomputed in the data.
+    .linkDirectionalParticles(particleCountOf)
+    .linkDirectionalParticleWidth(3.5)
+    .linkDirectionalParticleColor(() => '#ffc2cf')
+    .linkDirectionalParticleSpeed(particleSpeedOf)
+    .linkDirectionalParticleOffset((link) => link.particleOffset || 0)
+    .d3VelocityDecay(0.4)
