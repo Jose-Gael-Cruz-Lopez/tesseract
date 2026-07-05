@@ -84,3 +84,11 @@ export function setupInteractions(graph, data, container) {
     focusState.hub = null;
     if (previous.__ball) previous.__ball.hoverTarget = 1;
 
+    refreshStyling();
+    hidePanel();
+    graph.cameraPosition(CAMERA_HOME, { x: 0, y: 0, z: 0 }, FLY_HOME_MS);
+
+    setTimeout(() => {
+      // Only resume the idle orbit if the user did not re-focus mid-flight.
+      if (!focusState.hub && !REDUCED_MOTION) graph.controls().autoRotate = true;
+    }, FLY_HOME_MS);
