@@ -19,3 +19,10 @@ A dark wireframe globe holds twelve glowing clusters of knowledge. At the center
 
 ## Quickstart
 
+```bash
+git clone https://github.com/Jose-Gael-Cruz-Lopez/second-brain-globe.git
+cd second-brain-globe
+npm install
+npm run dev
+```
+
