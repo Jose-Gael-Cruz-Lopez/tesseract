@@ -131,3 +131,11 @@ export function generateBrain(seed = 42) {
 
       links.push({
         source: hubId,
+        target: leafId,
+        kind: 'spoke',
+        cluster: name,
+        distance: range(25, 65),
+      });
+
+      if (rand() < 0.25) {
+        const branchId = `${leafId}-b`;
