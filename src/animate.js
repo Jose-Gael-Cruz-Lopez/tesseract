@@ -34,3 +34,10 @@ export function startAnimation() {
   // deprecated in the pinned three r185 and warns on every load. Same behavior
   // (dt clamped to 0.05, per DESIGN_SPEC · MOTION RULES), no console noise.
   let last = null;
+  let t = 0; // motion-time: already scaled by the reduced-motion multiplier
+  let tesseractDim = 1;
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+
+    if (last === null) last = now;
