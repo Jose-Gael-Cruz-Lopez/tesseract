@@ -156,3 +156,11 @@ export function generateBrain(seed = 42) {
           target: branchId,
           kind: 'branch',
           cluster: name,
+          distance: range(15, 30),
+        });
+      }
+    }
+  });
+
+  return { nodes, links };
+}
