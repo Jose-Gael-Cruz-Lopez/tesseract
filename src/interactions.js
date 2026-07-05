@@ -68,3 +68,11 @@ export function setupInteractions(graph, data, container) {
     const distance = Math.hypot(hub.x, hub.y, hub.z) || 1;
     const ratio = 1 + FOCUS_DISTANCE / distance;
     graph.cameraPosition(
+      { x: hub.x * ratio, y: hub.y * ratio, z: hub.z * ratio },
+      hub,
+      FLY_IN_MS
+    );
+
+    showPanel(hub);
+  }
+
