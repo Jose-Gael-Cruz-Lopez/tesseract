@@ -19,3 +19,13 @@ body {
   overflow: hidden;
   background: var(--bg);
   font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+/* Radial vignette darkening the viewport edges (DESIGN_SPEC · WORLD) */
+.vignette {
