@@ -264,3 +264,12 @@ export function buildEnvironment(seed = 1337) {
     })
   );
 
+  // Background stars: 300 points, radius 400..950, dimmed to 55%, opacity 0.5.
+  group.add(
+    buildPointsCloud({
+      count: 300,
+      minR: 400,
+      maxR: 950,
+      size: 5,
+      dimFactor: 0.55,
+      opacity: 0.5,
