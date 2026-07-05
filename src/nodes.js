@@ -100,3 +100,11 @@ export function buildTesseract() {
     { tag: 'tesseract', obj: wireA, speed: { x: -0.22, y: 0, z: 0.3 } },
     { tag: 'tesseract', obj: wireB, speed: { x: 0.1, y: 0.16, z: 0 } },
     { tag: 'tesseract', obj: shells[0], speed: { x: 0.05, y: 0.12, z: 0 } },
+    { tag: 'tesseract', obj: shells[1], speed: { x: 0, y: -0.05, z: -0.08 } },
+    { tag: 'tesseract', obj: shells[2], speed: { x: 0.04, y: 0, z: 0.03 } }
+  );
+
+  registry.coreGlow = glowMat;
+  registry.tesseractParts = [
+    { mat: solidMat, base: 1 },
+    { mat: wireAMat, base: 0.7 },
