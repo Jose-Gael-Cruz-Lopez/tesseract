@@ -93,3 +93,10 @@ export function buildTesseract() {
   glow.scale.set(130, 130, 1);
 
   group.add(solid, wireA, wireB, ...shells, glow);
+
+  // Continuous rotation speeds in rad/s, straight from the spec.
+  registry.spinners.push(
+    { tag: 'tesseract', obj: solid, speed: { x: 0.35, y: 0.5, z: 0 } },
+    { tag: 'tesseract', obj: wireA, speed: { x: -0.22, y: 0, z: 0.3 } },
+    { tag: 'tesseract', obj: wireB, speed: { x: 0.1, y: 0.16, z: 0 } },
+    { tag: 'tesseract', obj: shells[0], speed: { x: 0.05, y: 0.12, z: 0 } },
