@@ -137,3 +137,10 @@ export function buildHubBall(node) {
     transparent: true,
     opacity: 0.55,
     blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const halo = new THREE.Sprite(haloMat);
+  halo.scale.set(3.2 * radius, 3.2 * radius, 1);
+
+  group.add(halo, ball);
+
