@@ -47,3 +47,10 @@ export function particleSpeedOf(link) {
 
 export function createGraph(container, data) {
   const graph = new ForceGraph3D(container, { controlType: 'orbit' })
+    .backgroundColor('#060310')
+    .showNavInfo(false)
+    .enableNodeDrag(false)
+    // Nodes: custom objects for core + hubs, library-default spheres for the rest.
+    .nodeThreeObject((node) =>
+      node.type === 'core'
+        ? buildTesseract()
