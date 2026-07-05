@@ -100,3 +100,10 @@ export function setupInteractions(graph, data, container) {
       hoveredHub.__ball.hoverTarget = 1;
     }
     hoveredHub = node && node.type === 'hub' ? node : null;
+    if (hoveredHub && hoveredHub.__ball) hoveredHub.__ball.hoverTarget = 1.25;
+
+    container.style.cursor = node && node.type !== 'core' ? 'pointer' : null;
+  });
+
+  graph.onNodeClick((node) => {
+    if (!node || node.type === 'core') return;
