@@ -273,3 +273,12 @@ export function buildEnvironment(seed = 1337) {
       size: 5,
       dimFactor: 0.55,
       opacity: 0.5,
+      rand,
+    })
+  );
+
+  // Two warm dotted streams hugging the shell.
+  group.add(buildStream([1, 0.55, 0.2], [-0.4, 0.75, 0.75], rand));
+  group.add(buildStream([-0.8, -0.35, 0.55], [0.55, -0.6, -0.6], rand));
+
+  group.add(buildYearLabel());
