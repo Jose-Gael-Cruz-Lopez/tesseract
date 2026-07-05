@@ -122,3 +122,11 @@ const IVORY = new THREE.Color('#fff3dd');
 export function buildHubBall(node) {
   const group = new THREE.Group();
   const radius = 11 * node.weight;
+  const tint = new THREE.Color(node.color).lerp(IVORY, 0.55);
+
+  const mat = new THREE.MeshBasicMaterial({
+    color: tint,
+    transparent: true,
+    opacity: 1,
+  });
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
