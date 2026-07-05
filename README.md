@@ -12,3 +12,10 @@ A dark wireframe globe holds twelve glowing clusters of knowledge. At the center
 
 - **Tesseract nucleus.** A solid red cube inside counter-rotating wire cubes and frosted shells, with a pulsing additive glow. The power source of the network.
 - **Force-directed dandelion clusters.** Twelve hubs pinned on a fibonacci sphere, each puffing out 16 to 30 leaves through per-link distances and tuned charge forces.
+- **Energy pulses.** Bright particles continuously travel from the core outward along every tether, each with its own seeded speed and offset.
+- **Click-to-focus cinematics.** Click a hub and the camera flies in while everything outside the cluster falls away to near-black. Escape restores the globe.
+- **Bloom post-processing.** UnrealBloomPass makes the core, hub balls, particles and dust glow while the wireframe stays subtle.
+- **Seeded reproducible data.** One seed, one layout. The whole graph and environment are generated from a tiny mulberry32 PRNG.
+
+## Quickstart
+
