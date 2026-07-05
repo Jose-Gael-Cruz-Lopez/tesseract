@@ -135,3 +135,12 @@ function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand })
     color.set(NODE_PALETTE[Math.floor(rand() * NODE_PALETTE.length)]);
     color.multiplyScalar(dimFactor);
     colors.set([color.r, color.g, color.b], i * 3);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size,
+    map: makeGlowTexture(),
