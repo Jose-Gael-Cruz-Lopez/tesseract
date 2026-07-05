@@ -74,3 +74,10 @@ To swap in real data, replace the `generateBrain(42)` call in `src/main.js` with
 
 **GitHub Pages** needs the base path set in `vite.config.js`:
 
+```js
+export default defineConfig({
+  base: '/second-brain-globe/',
+  resolve: { dedupe: ['three'] },
+});
+```
+
