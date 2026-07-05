@@ -90,3 +90,12 @@ function buildRings() {
   // Thin crimson tori around the nucleus (DESIGN_SPEC · ORBITAL RINGS).
   const rings = new THREE.Group();
   rings.name = 'rings';
+
+  const radii = [115, 150, 205, 250];
+  const tubes = [1.2, 1.0, 0.9, 0.8];
+  const colors = [0xe0356b, 0xc22f5f, 0x93264a, 0x6e1f3d];
+  const opacities = [0.75, 0.5, 0.4, 0.3];
+  const tiltX = [0.16, -0.1, 0.24, -0.3];
+  const rotY = [0.4, -0.7, 1.4, 2.3];
+
+  radii.forEach((radius, i) => {
