@@ -25,3 +25,13 @@ function meridianGeometry(phi, segments) {
   // Full vertical circle through the poles, rotated phi around Y.
   const positions = new Float32Array(segments * 3);
   for (let i = 0; i < segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const r = Math.sin(t) * R;
+    positions[i * 3] = r * Math.cos(phi);
+    positions[i * 3 + 1] = Math.cos(t) * R;
+    positions[i * 3 + 2] = r * Math.sin(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return geo;
+}
