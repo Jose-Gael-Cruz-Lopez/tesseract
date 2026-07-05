@@ -91,3 +91,14 @@ body {
 
 .node-chip {
   display: inline-block;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(10, 6, 24, 0.82);
+  border: 1px solid rgba(255, 120, 150, 0.35);
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
