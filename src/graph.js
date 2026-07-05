@@ -67,3 +67,10 @@ export function createGraph(container, data) {
     .nodeLabel((node) =>
       node.type === 'core' ? null : `<div class="node-chip">${node.label}</div>`
     )
+    // Links: rgba alpha carries the transparency (verified: the library
+    // multiplies linkOpacity by the color's alpha channel).
+    .linkColor(linkColorOf)
+    .linkOpacity(1)
+    .linkWidth(0)
+    .linkCurvature((link) => (link.kind === 'tether' ? 0.18 : 0))
+    .linkCurveRotation((link) => link.curveRotation || 0)
