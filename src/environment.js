@@ -181,3 +181,12 @@ function buildStream(fromDir, toDir, rand) {
     );
     const c = warm[Math.floor(rand() * warm.length)];
     colors.set([c.r, c.g, c.b], i * 3);
+  });
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: 8,
+    map: makeGlowTexture(),
