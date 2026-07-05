@@ -73,3 +73,11 @@ export function generateBrain(seed = 42) {
       Math.cos(theta) * fr + range(-0.22, 0.22),
       fy + range(-0.22, 0.22),
       Math.sin(theta) * fr + range(-0.22, 0.22),
+    ];
+    const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+    dir = dir.map((c) => c / len);
+
+    const radius = range(0.55 * R, 0.9 * R);
+    const [hx, hy, hz] = dir.map((c) => c * radius);
+    const hubId = `hub-${i}`;
+    const clusterColor = NODE_PALETTE[i % NODE_PALETTE.length];
