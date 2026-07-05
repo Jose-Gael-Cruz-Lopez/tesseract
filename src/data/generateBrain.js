@@ -6,3 +6,12 @@ export const GLOBE_RADIUS = 300;
 
 export const NODE_PALETTE = [
   '#ffd166',
+  '#ffb454',
+  '#ff5d8f',
+  '#ff2d55',
+  '#c8b6ff',
+  '#e8ecff',
+  '#86d1ff',
+];
+
+export const CLUSTER_NAMES = [
