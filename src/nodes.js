@@ -78,3 +78,11 @@ export function buildTesseract() {
       Math.random() * Math.PI * 2,
       Math.random() * Math.PI * 2
     );
+    return shell;
+  });
+
+  const glowMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture(),
+    color: 0xff4d70,
+    transparent: true,
+    opacity: 0.45,
