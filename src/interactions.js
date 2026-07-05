@@ -115,3 +115,11 @@ export function setupInteractions(graph, data, container) {
     } else {
       focusHub(hub);
     }
+  });
+
+  graph.onBackgroundClick(release);
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') release();
+  });
+}
