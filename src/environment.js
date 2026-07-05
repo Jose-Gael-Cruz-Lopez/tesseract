@@ -35,3 +35,12 @@ function meridianGeometry(phi, segments) {
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   return geo;
 }
+
+function buildWireGlobe(group) {
+  // One shared material per opacity tier keeps materials countable.
+  const wireMat = new THREE.LineBasicMaterial({
+    color: 0xa9b0d6,
+    transparent: true,
+    opacity: 0.14,
+  });
+  const equatorMat = new THREE.LineBasicMaterial({
