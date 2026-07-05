@@ -245,3 +245,12 @@ export function buildEnvironment(seed = 1337) {
 
   const group = new THREE.Group();
   group.name = 'environment';
+
+  buildWireGlobe(group);
+
+  const rings = buildRings();
+  group.add(rings);
+
+  // Inner dust: 500 additive points, radius 80..295, palette dimmed to 80%.
+  group.add(
+    buildPointsCloud({
