@@ -53,3 +53,10 @@ renderer.domElement.addEventListener('webglcontextlost', (event) => {
 setupInteractions(graph, data, container);
 startAnimation();
 
+// Diagnostics: single three copy + draw call budget (target < 150).
+console.log(
+  `[second-brain-globe] three r${THREE.REVISION}, ` +
+    `${data.nodes.length} nodes / ${data.links.length} links`
+);
+
+// renderer.info auto-resets between composer passes, so a naive read reports
