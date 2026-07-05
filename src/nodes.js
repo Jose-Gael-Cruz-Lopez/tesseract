@@ -71,3 +71,10 @@ export function buildTesseract() {
       depthWrite: false,
       transparent: true,
       opacity: shellOpacities[i],
+    });
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(side, side, side), mat);
+    shell.rotation.set(
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2
+    );
