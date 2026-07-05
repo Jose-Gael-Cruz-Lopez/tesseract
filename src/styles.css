@@ -143,3 +143,13 @@ body {
   letter-spacing: 0.12em;
   color: var(--ink-dim);
 }
+
+.panel-orbit {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+}
+
+.panel-bar {
+  margin-top: 16px;
