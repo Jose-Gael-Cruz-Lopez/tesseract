@@ -89,3 +89,12 @@ export function generateBrain(seed = 42) {
       label: name,
       val: 10,
       color: clusterColor,
+      weight: range(0.9, 1.3),
+      breathePhase: rand() * Math.PI * 2,
+      fx: hx,
+      fy: hy,
+      fz: hz,
+    });
+
+    // Tether: both endpoints are fixed, so distance = actual geometric distance.
+    links.push({
