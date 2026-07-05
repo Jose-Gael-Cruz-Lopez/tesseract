@@ -19,3 +19,10 @@ graph.scene().add(environment);
 registry.rings = rings;
 
 // Bloom (DESIGN_SPEC · BLOOM): the red core, hub balls, particles and dust
+// glow; threshold keeps the faint wireframe below the bloom cutoff.
+// Tuned from the spec's starting point (1.1 / 0.5 / 0.15): at that strength
+// every leaf saturated to white and the nucleus drowned in its own glow.
+// 0.75 / 0.5 / 0.25 keeps the core, hub balls, particles and dust glowing
+// while the wireframe globe and palette colors stay readable.
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
