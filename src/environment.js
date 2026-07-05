@@ -190,3 +190,12 @@ function buildStream(fromDir, toDir, rand) {
   const mat = new THREE.PointsMaterial({
     size: 8,
     map: makeGlowTexture(),
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  return new THREE.Points(geo, mat);
+}
+
