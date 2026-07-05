@@ -46,3 +46,10 @@ window.addEventListener('resize', () => {
 // Resilience: a lost WebGL context gets a friendly reload message instead of
 // a frozen black canvas.
 renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  document.getElementById('gl-lost').classList.add('visible');
+});
+
+setupInteractions(graph, data, container);
+startAnimation();
+
