@@ -4,31 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="An interactive 3D knowledge globe. Every cluster of thought, tethered to a single core." />
-    <title>Second Brain Globe</title>
+    <title>Second Brain · 2026</title>
   </head>
   <body>
-    <div id="app"></div>
-    <div class="vignette" aria-hidden="true"></div>
-
-    <header class="brand">
-      <div class="brand-title">Second Brain</div>
-      <div class="brand-sub">Interactive knowledge globe</div>
-    </header>
-
-    <div class="hint">drag to rotate · scroll to zoom · click a hub</div>
-
-    <aside id="focus-panel" aria-live="polite">
-      <h2 class="panel-title"></h2>
-      <div class="panel-count"></div>
-      <div class="panel-orbit"></div>
-      <div class="panel-bar"></div>
-      <div class="panel-release">click empty space to release</div>
-    </aside>
-
-    <div id="gl-lost">
-      <div class="gl-lost-card">
-        <p>The graphics context was lost.</p>
-        <button type="button" onclick="location.reload()">Reload the globe</button>
+    <div class="vignette"></div>
+    <div id="ui">
+      <div class="brand">
+        <h1>Second Brain</h1>
+        <p>Interactive knowledge globe</p>
+      </div>
+      <div class="hint">drag to rotate &nbsp;·&nbsp; scroll to zoom &nbsp;·&nbsp; click a hub</div>
+      <div id="tooltip"></div>
+      <div id="panel">
+        <h2 id="p-name"></h2>
+        <div class="meta" id="p-meta"></div>
+        <div class="bar"></div>
+        <div class="esc">click empty space to release</div>
       </div>
     </div>
 

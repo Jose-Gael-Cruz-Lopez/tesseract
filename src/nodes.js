@@ -1,146 +1,90 @@
-// Custom nodeThreeObject factories (DESIGN_SPEC · TESSERACT NUCLEUS, HUB BALLS).
+// Shared dot texture (from the reference) + our tesseract nucleus (kept).
 
 import * as THREE from 'three';
-import { registry } from './animate.js';
 
-let glowTexture = null;
-
-// 64px soft radial gradient, built once and shared by every glow sprite,
-// the dust clouds and the streams.
-export function makeGlowTexture() {
-  if (glowTexture) return glowTexture;
-  const size = 64;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const grad = ctx.createRadialGradient(
-    size / 2, size / 2, 0,
-    size / 2, size / 2, size / 2
-  );
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(0.7, 'rgba(255,255,255,0.14)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-  glowTexture = new THREE.CanvasTexture(canvas);
-  return glowTexture;
+// Soft radial dot texture, shared by every sprite and points cloud.
+let dotTexture = null;
+export function makeDotTexture() {
+  if (dotTexture) return dotTexture;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  dotTexture = new THREE.CanvasTexture(c);
+  return dotTexture;
 }
 
+// The tesseract nucleus, kept from our own build (NOT the reference's cubes):
+// a solid lit red cube inside counter-rotating wire cubes and frosted shells,
+// no glow. Our R=300 proportions scaled to the reference globe R=11 so it keeps
+// the same look relative to the sphere. Returns the group plus a tick(dt) that
+// applies the whole-group spin and each cube's own rotation.
 export function buildTesseract() {
   const group = new THREE.Group();
 
-  // Rebuild-safe: nodeThreeObject can be re-invoked; never double-register.
-  registry.spinners = registry.spinners.filter((s) => s.tag !== 'tesseract');
-  registry.tesseractParts = [];
-
   const solidMat = new THREE.MeshLambertMaterial({
     color: 0xff3355,
-    transparent: true, // so focus mode can dim it
+    transparent: true,
     opacity: 1,
   });
-  const solid = new THREE.Mesh(new THREE.BoxGeometry(26, 26, 26), solidMat);
+  const solid = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.95), solidMat);
 
-  const wireAMat = new THREE.LineBasicMaterial({
-    color: 0xffc9d4,
-    transparent: true,
-    opacity: 0.7,
-  });
   const wireA = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, 40)),
-    wireAMat
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.47, 1.47, 1.47)),
+    new THREE.LineBasicMaterial({ color: 0xffc9d4, transparent: true, opacity: 0.7 })
   );
-
-  const wireBMat = new THREE.LineBasicMaterial({
-    color: 0xffdbe3,
-    transparent: true,
-    opacity: 0.35,
-  });
   const wireB = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(56, 56, 56)),
-    wireBMat
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(2.05, 2.05, 2.05)),
+    new THREE.LineBasicMaterial({ color: 0xffdbe3, transparent: true, opacity: 0.35 })
   );
 
-  // Frosted shells 48 / 68 / 90 — outermost is 0.30 R, the hard size cap.
-  const shellSizes = [48, 68, 90];
-  const shellOpacities = [0.1, 0.07, 0.045];
-  const shells = shellSizes.map((side, i) => {
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xcabfd6,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      transparent: true,
-      opacity: shellOpacities[i],
-    });
-    const shell = new THREE.Mesh(new THREE.BoxGeometry(side, side, side), mat);
-    shell.rotation.set(
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2
+  const shellSizes = [1.76, 2.49, 3.3];
+  const shellOps = [0.1, 0.07, 0.045];
+  const shells = shellSizes.map((s, i) => {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(s, s, s),
+      new THREE.MeshBasicMaterial({
+        color: 0xcabfd6,
+        transparent: true,
+        opacity: shellOps[i],
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
     );
-    return shell;
+    m.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    );
+    return m;
   });
 
-  // No glow sprite: the nucleus is a solid + wireframe tesseract, no bloom.
   group.add(solid, wireA, wireB, ...shells);
 
-  // Continuous rotation speeds in rad/s. The whole group also spins as one
-  // about the sphere's center, so every cube ("square") rotates together on
-  // top of its own motion.
-  registry.spinners.push(
-    { tag: 'tesseract', obj: group, speed: { x: 0.03, y: 0.09, z: 0.02 } },
-    { tag: 'tesseract', obj: solid, speed: { x: 0.35, y: 0.5, z: 0 } },
-    { tag: 'tesseract', obj: wireA, speed: { x: -0.22, y: 0, z: 0.3 } },
-    { tag: 'tesseract', obj: wireB, speed: { x: 0.1, y: 0.16, z: 0 } },
-    { tag: 'tesseract', obj: shells[0], speed: { x: 0.05, y: 0.12, z: 0 } },
-    { tag: 'tesseract', obj: shells[1], speed: { x: 0, y: -0.05, z: -0.08 } },
-    { tag: 'tesseract', obj: shells[2], speed: { x: 0.04, y: 0, z: 0.03 } }
-  );
+  function tick(dt) {
+    // whole group spins about the sphere center
+    group.rotation.x += 0.03 * dt;
+    group.rotation.y += 0.09 * dt;
+    group.rotation.z += 0.02 * dt;
+    // each cube counter-rotates at its own pace
+    solid.rotation.x += 0.35 * dt;
+    solid.rotation.y += 0.5 * dt;
+    wireA.rotation.x -= 0.22 * dt;
+    wireA.rotation.z += 0.3 * dt;
+    wireB.rotation.y += 0.16 * dt;
+    wireB.rotation.x += 0.1 * dt;
+    shells[0].rotation.y += 0.12 * dt;
+    shells[0].rotation.x += 0.05 * dt;
+    shells[1].rotation.z -= 0.08 * dt;
+    shells[1].rotation.y -= 0.05 * dt;
+    shells[2].rotation.x += 0.04 * dt;
+    shells[2].rotation.z += 0.03 * dt;
+  }
 
-  registry.tesseractParts = [
-    { mat: solidMat, base: 1 },
-    { mat: wireAMat, base: 0.7 },
-    { mat: wireBMat, base: 0.35 },
-    { mat: shells[0].material, base: 0.1 },
-    { mat: shells[1].material, base: 0.07 },
-    { mat: shells[2].material, base: 0.045 },
-  ];
-
-  return group;
-}
-
-const IVORY = new THREE.Color('#fff3dd');
-
-export function buildHubBall(node) {
-  const group = new THREE.Group();
-  // 11.6 * weight matches the reference hub footprint: its sprite nominal
-  // size (0.85 * scale on globe R = 11) treated as a sphere diameter, scaled
-  // to R = 300. weight 0.8..1.7 -> radius ~9.3..19.7.
-  const radius = 11.6 * node.weight;
-  // Solid 3D sphere, lightly lifted toward ivory so the cluster color still
-  // reads. No halo, no bloom: a shaded sphere lit by the graph's default
-  // lights, like a standard 3d-force-graph node.
-  const tint = new THREE.Color(node.color).lerp(IVORY, 0.2);
-
-  const mat = new THREE.MeshLambertMaterial({
-    color: tint,
-    transparent: true, // so focus mode can dim it
-    opacity: 1,
-  });
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
-  group.add(ball);
-
-  // Refs for the animation loop and interactions: no scene traversal needed.
-  node.__ball = {
-    group,
-    mat,
-    radius,
-    hoverTarget: 1,
-    hoverCurrent: 1,
-    dim: 1,
-    phase: node.breathePhase ?? 0,
-  };
-  registry.hubs.set(node.id, node);
-
-  return group;
+  return { group, tick };
 }

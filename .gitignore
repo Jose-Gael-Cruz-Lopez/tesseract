@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist-ssr/
 
+# Vite cache
+.vite/
+
 # Logs
 logs/
 *.log

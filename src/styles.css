@@ -1,11 +1,3 @@
-:root {
-  --bg: #000000;
-  --ink: #eef1ff;
-  --ink-dim: #8b90ad;
-  --ink-faint: #6d7290;
-  --font: 'Helvetica Neue', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -14,194 +6,128 @@
 
 html,
 body {
-  width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
-  font-family: var(--font);
-  -webkit-font-smoothing: antialiased;
+  background: #060310;
+  overscroll-behavior: none;
 }
 
-#app {
+canvas {
+  display: block;
+}
+
+#ui {
   position: fixed;
   inset: 0;
+  pointer-events: none;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #cfd4ea;
 }
 
-/* Radial vignette darkening the viewport edges (DESIGN_SPEC · WORLD) */
+.brand {
+  position: absolute;
+  top: 22px;
+  left: 26px;
+}
+
+.brand h1 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  color: #eef1ff;
+  text-transform: uppercase;
+}
+
+.brand p {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #8b90ad;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #6d7290;
+  white-space: nowrap;
+}
+
+#tooltip {
+  position: absolute;
+  padding: 6px 11px;
+  background: rgba(14, 8, 26, 0.85);
+  border: 1px solid rgba(255, 120, 150, 0.35);
+  border-radius: 6px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffd9e2;
+  display: none;
+  transform: translate(-50%, -170%);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
+#panel {
+  position: absolute;
+  top: 50%;
+  right: 26px;
+  transform: translateY(-50%);
+  width: 212px;
+  padding: 16px 18px;
+  background: rgba(10, 6, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+#panel.show {
+  opacity: 1;
+}
+
+#panel h2 {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #fff;
+  font-weight: 600;
+}
+
+#panel .meta {
+  margin-top: 9px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #9aa0c0;
+  text-transform: uppercase;
+  line-height: 1.95;
+}
+
+#panel .bar {
+  margin-top: 12px;
+  height: 2px;
+  background: linear-gradient(90deg, #ff2d55, #ffd166);
+  border-radius: 2px;
+}
+
+#panel .esc {
+  margin-top: 11px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #5f6482;
+  text-transform: uppercase;
+}
+
 .vignette {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(0, 0, 0, 0) 52%,
-    rgba(0, 0, 0, 0.55) 82%,
-    rgba(0, 0, 0, 0.85) 100%
-  );
-  z-index: 5;
-}
-
-/* Top-left brand block (DESIGN_SPEC · UI CHROME) */
-.brand {
-  position: fixed;
-  top: 30px;
-  left: 34px;
-  z-index: 10;
-  pointer-events: none;
-  user-select: none;
-}
-
-.brand-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-
-.brand-sub {
-  margin-top: 7px;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.2em;
-  color: var(--ink-dim);
-}
-
-/* Bottom-center hint */
-.hint {
-  position: fixed;
-  bottom: 26px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: var(--ink-faint);
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* Hover tooltip chip — the library positions .scene-tooltip, we restyle it */
-.scene-tooltip {
-  font-family: var(--font) !important;
-  font-size: 0 !important;
-  color: transparent !important;
-}
-
-.node-chip {
-  display: inline-block;
-  padding: 6px 12px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: rgba(10, 6, 24, 0.82);
-  border: 1px solid rgba(255, 120, 150, 0.35);
-  border-radius: 6px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  white-space: nowrap;
-}
-
-/* Focus panel, right side, vertically centered */
-#focus-panel {
-  position: fixed;
-  right: 38px;
-  top: 50%;
-  width: 236px;
-  padding: 24px 26px;
-  transform: translateY(-50%) translateX(14px);
-  background: rgba(12, 8, 28, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s ease, transform 0.35s ease;
-  z-index: 10;
-}
-
-#focus-panel.visible {
-  opacity: 1;
-  transform: translateY(-50%) translateX(0);
-}
-
-.panel-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-
-.panel-count {
-  margin-top: 12px;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-dim);
-}
-
-.panel-orbit {
-  margin-top: 4px;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-dim);
-}
-
-.panel-bar {
-  margin-top: 16px;
-  height: 2px;
-  border-radius: 1px;
-  background: linear-gradient(90deg, #ff2d55, #ffd166);
-}
-
-.panel-release {
-  margin-top: 16px;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-/* WebGL context-loss overlay */
-#gl-lost {
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.92);
-  z-index: 100;
-}
-
-#gl-lost.visible {
-  display: flex;
-}
-
-.gl-lost-card {
-  text-align: center;
-  color: var(--ink);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-}
-
-.gl-lost-card button {
-  margin-top: 18px;
-  padding: 10px 22px;
-  font-family: var(--font);
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid rgba(255, 120, 150, 0.5);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.gl-lost-card button:hover {
-  background: rgba(255, 51, 85, 0.15);
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(2, 0, 8, 0.8) 100%);
 }

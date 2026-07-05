@@ -1,5 +1,15 @@
 SECOND BRAIN GLOBE · DESIGN SPEC
 
+NOTE (current implementation): the app is now a single self-contained three.js
+scene in src/main.js (glowing additive sprite/point clusters, curved bezier
+tethers, custom drag/zoom controls) with the tesseract nucleus in src/nodes.js.
+It no longer uses 3d-force-graph, force simulation, a { nodes, links } data
+model, bloom, or the R = 300 world below. The globe radius is R = 11 and the
+background is #060310. The WORLD/PALETTE/TESSERACT/RINGS/ENVIRONMENT sections
+still describe the look faithfully; the GRAPH DATA, HUB BALLS, LEAVES, TETHERS,
+MOTION and POST-PROCESSING sections describe the earlier architecture and are
+kept as historical reference. src/main.js is the source of truth.
+
 WORLD
 - Globe radius R = 300 world units. Everything below is in world units.
 - Background: #000000 (pure black). A CSS radial-gradient (black) vignette darkens the edges.
