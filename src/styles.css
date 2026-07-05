@@ -112,3 +112,13 @@ body {
   top: 50%;
   width: 236px;
   padding: 24px 26px;
+  transform: translateY(-50%) translateX(14px);
+  background: rgba(12, 8, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 10;
