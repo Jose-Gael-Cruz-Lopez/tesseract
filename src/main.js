@@ -60,3 +60,10 @@ console.log(
 );
 
 // renderer.info auto-resets between composer passes, so a naive read reports
+// garbage. Accumulate over 10 frames and report the per-frame average.
+function reportDrawCalls(tag) {
+  const info = renderer.info;
+  info.autoReset = false;
+  info.reset();
+  let frames = 0;
+  (function count() {
