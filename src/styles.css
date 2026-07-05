@@ -50,3 +50,13 @@ body {
   pointer-events: none;
   user-select: none;
 }
+
+.brand-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.brand-sub {
