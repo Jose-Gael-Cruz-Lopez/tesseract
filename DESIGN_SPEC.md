@@ -72,3 +72,8 @@ ENVIRONMENT (added to graph.scene(), grouped under one "environment" THREE.Group
   along a bezier arc hugging the shell at ~0.82 R.
 - Year label "2026": canvas text sprite, letterspaced, rgba(232,236,255,0.92),
   positioned at (0, 340, 0), sprite scale roughly 140 x 35.
+
+UI CHROME
+- Top-left brand block: "SECOND BRAIN" (12px, 600 weight, 0.42em letterspacing, uppercase,
+  #eef1ff) over "Interactive knowledge globe" (10px, 0.2em, #8b90ad).
+- Bottom-center hint: "drag to rotate · scroll to zoom · click a hub" (10px, 0.22em, #6d7290).
