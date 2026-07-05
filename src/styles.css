@@ -39,3 +39,14 @@ body {
     rgba(3, 1, 10, 0.85) 100%
   );
   z-index: 5;
+}
+
+/* Top-left brand block (DESIGN_SPEC · UI CHROME) */
+.brand {
+  position: fixed;
+  top: 30px;
+  left: 34px;
+  z-index: 10;
+  pointer-events: none;
+  user-select: none;
+}
