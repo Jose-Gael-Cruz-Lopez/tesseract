@@ -19,3 +19,8 @@ TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus sc
 - Solid cube: 26 units/side, MeshBasicMaterial #ff3355.
 - Wire cube A: 40/side, EdgesGeometry LineSegments, #ffc9d4, opacity 0.70.
 - Wire cube B: 56/side, #ffdbe3, opacity 0.35.
+- Frosted shells: cubes at 48, 68, 90 per side. MeshBasicMaterial #cabfd6, DoubleSide,
+  depthWrite false, opacity 0.10 / 0.07 / 0.045. Each shell gets a random static base rotation.
+- Core glow: additive sprite (soft radial canvas texture), color #ff4d70, scale 130, opacity ~0.45.
+- The outermost shell (90) is 0.30 R. Do not exceed this. The nucleus must read small
+  relative to the globe.
