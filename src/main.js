@@ -140,6 +140,17 @@ const hubs = [];
 const threads = [];
 const golden = Math.PI * (3 - Math.sqrt(5));
 
+// (Re)build a tether's curve + geometry from its hub's current position, so
+// the tether follows when the hub is dragged around.
+function retetherThread(thread) {
+  const end = thread.cluster.group.position;
+  const c = thread.curve;
+  c.v0.copy(end).normalize().multiplyScalar(2.1);
+  c.v1.copy(end).multiplyScalar(0.5).addScaledVector(thread.jitterDir, end.length() * 0.14);
+  c.v2.copy(end).multiplyScalar(0.965);
+  thread.line.geometry.setFromPoints(c.getPoints(48));
+}
+
 for (let i = 0; i < clusterNames.length; i++) {
   const n = clusterNames.length;
   const yy = 1 - ((i + 0.5) * 2) / n;
@@ -171,11 +182,13 @@ for (let i = 0; i < clusterNames.length; i++) {
 
   const majPos = [], majCol = [], minPos = [], minCol = [], linePts = [];
   const count = 16 + Math.floor(rand() * 14);
+  let maxOff = 0; // farthest leaf/branch offset from the hub (for drag bounds)
   for (let k = 0; k < count; k++) {
     const d = randDir();
     const len = (0.7 + rand() * 1.8) * scale;
     const p = d.clone().multiplyScalar(len);
     if (p.length() > budget) p.setLength(budget); // keep the leaf inside the shell
+    maxOff = Math.max(maxOff, p.length());
     linePts.push(0, 0, 0, p.x, p.y, p.z);
     const c = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
     if (rand() < 0.3) { majPos.push(p.x, p.y, p.z); majCol.push(c.r, c.g, c.b); }
@@ -184,6 +197,7 @@ for (let i = 0; i < clusterNames.length; i++) {
     if (rand() < 0.28) {
       const p2 = p.clone().add(randDir().multiplyScalar(0.55 * scale));
       if (p2.length() > budget) p2.setLength(budget); // keep the branch inside too
+      maxOff = Math.max(maxOff, p2.length());
       linePts.push(p.x, p.y, p.z, p2.x, p2.y, p2.z);
       const c2 = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
       minPos.push(p2.x, p2.y, p2.z); minCol.push(c2.r, c2.g, c2.b);
@@ -204,6 +218,7 @@ for (let i = 0; i < clusterNames.length; i++) {
     lineMat, majorMat: major.material, minorMat: minor.material,
     baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
     nodeCount: count,
+    maxOffset: maxOff,
     spinAxis: randDir(),
     spinSpeed: (rand() * 0.5 + 0.2) * 0.15,
     phase: rand() * Math.PI * 2,
@@ -213,12 +228,13 @@ for (let i = 0; i < clusterNames.length; i++) {
   hubs.push(hub);
 
   /* tether: curved thread from the core out to this hub */
-  const end = g.position.clone();
-  const start = end.clone().normalize().multiplyScalar(2.1);
-  const mid = end.clone().multiplyScalar(0.5).add(randDir().multiplyScalar(end.length() * 0.14));
-  const curve = new THREE.QuadraticBezierCurve3(start, mid, end.clone().multiplyScalar(0.965));
+  const jitterDir = randDir();
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
+  );
   const tMat = new THREE.LineBasicMaterial({ color: 0xff6d8a, transparent: true, opacity: 0.26 });
-  universe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(48)), tMat));
+  const tLine = new THREE.Line(new THREE.BufferGeometry(), tMat);
+  universe.add(tLine);
 
   const pulseMat = new THREE.SpriteMaterial({
     map: dotTex, color: 0xffc2cf, transparent: true, opacity: 0.9,
@@ -228,9 +244,13 @@ for (let i = 0; i < clusterNames.length; i++) {
   pulse.scale.set(0.34, 0.34, 1);
   universe.add(pulse);
 
-  const thread = { curve, mat: tMat, baseOp: 0.26, pulse, pulseMat, t: rand(), speed: 0.1 + rand() * 0.16, cluster };
+  const thread = {
+    curve, line: tLine, jitterDir, mat: tMat, baseOp: 0.26,
+    pulse, pulseMat, t: rand(), speed: 0.1 + rand() * 0.16, cluster,
+  };
   cluster.thread = thread;
   threads.push(thread);
+  retetherThread(thread); // build the curve from the hub's current position
 }
 
 /* ---------- warm dotted streams along arcs ---------- */
@@ -393,23 +413,58 @@ const lookTarget = new THREE.Vector3(0, 0, 0);
 const lookGoal = new THREE.Vector3(0, 0, 0);
 let preFocusDist = camDist;
 
+// Hub dragging: grab a glowing hub and slide its whole cluster around inside
+// the globe. The hub can't cross into the central cubes or leave the shell.
+let draggedHub = null;
+const dragPlane = new THREE.Plane();
+const dragHit = new THREE.Vector3();
+const dragNormal = new THREE.Vector3();
+const CUBE_RADIUS = 3.6; // hub can't get closer than this (blocked by the cubes)
+const GLOBE_INNER = R * 0.97; // the cluster's farthest node stays inside the shell
+
+function updateMouse(cx, cy) {
+  mouse.x = (cx / window.innerWidth) * 2 - 1;
+  mouse.y = -(cy / window.innerHeight) * 2 + 1;
+}
+function maybeGrabHub() {
+  if (selected) return; // no dragging while focused
+  raycaster.setFromCamera(mouse, camera);
+  const hit = raycaster.intersectObjects(hubs)[0];
+  if (!hit) return;
+  draggedHub = hit.object.userData.cluster;
+  camera.getWorldDirection(dragNormal);
+  dragPlane.setFromNormalAndCoplanarPoint(dragNormal, draggedHub.hub.getWorldPosition(new THREE.Vector3()));
+  el.style.cursor = 'grabbing';
+}
+function moveHub() {
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(dragPlane, dragHit)) return;
+  universe.worldToLocal(dragHit);
+  if (dragHit.lengthSq() < 1e-6) return;
+  // Keep the hub between the cubes and the shell so its leaves stay inside.
+  const rMax = Math.max(CUBE_RADIUS, GLOBE_INNER - draggedHub.maxOffset);
+  dragHit.setLength(THREE.MathUtils.clamp(dragHit.length(), CUBE_RADIUS, rMax));
+  draggedHub.group.position.copy(dragHit);
+  retetherThread(draggedHub.thread);
+}
+
 function onDown(x, y) { dragging = true; lastX = x; lastY = y; moved = 0; el.style.cursor = 'grabbing'; }
 function onMove(x, y) {
   if (!dragging) return;
   const dx = x - lastX, dy = y - lastY;
   moved += Math.abs(dx) + Math.abs(dy);
   lastX = x; lastY = y;
+  if (draggedHub) { moveHub(); return; } // sliding a hub around
   if (selected) return; // view is locked on the focused hub; release to rotate
   velY = dx * 0.0035; velX = dy * 0.0035;
   universe.rotation.y += velY;
   universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
 }
-function onUp() { dragging = false; el.style.cursor = 'grab'; }
+function onUp() { dragging = false; draggedHub = null; el.style.cursor = 'grab'; }
 
-el.addEventListener('mousedown', (e) => onDown(e.clientX, e.clientY));
+el.addEventListener('mousedown', (e) => { updateMouse(e.clientX, e.clientY); maybeGrabHub(); onDown(e.clientX, e.clientY); });
 window.addEventListener('mousemove', (e) => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  updateMouse(e.clientX, e.clientY);
   tooltipXY = [e.clientX, e.clientY];
   onMove(e.clientX, e.clientY);
 });
@@ -424,13 +479,20 @@ function touchDist(e) {
   return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 }
 el.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 1) onDown(e.touches[0].clientX, e.touches[0].clientY);
-  else if (e.touches.length === 2) { pinchStart = touchDist(e); pinchBaseDist = camDist; dragging = false; }
+  if (e.touches.length === 1) {
+    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+    maybeGrabHub();
+    onDown(e.touches[0].clientX, e.touches[0].clientY);
+  } else if (e.touches.length === 2) {
+    pinchStart = touchDist(e); pinchBaseDist = camDist; dragging = false; draggedHub = null;
+  }
 }, { passive: false });
 el.addEventListener('touchmove', (e) => {
   e.preventDefault();
-  if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY);
-  else if (e.touches.length === 2 && pinchStart > 0) {
+  if (e.touches.length === 1) {
+    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  } else if (e.touches.length === 2 && pinchStart > 0) {
     camDist = THREE.MathUtils.clamp((pinchBaseDist * pinchStart) / touchDist(e), 10, 55);
   }
 }, { passive: false });
@@ -553,7 +615,8 @@ window.addEventListener('resize', () => {
 
 // Dev handle for inspecting the scene from the console.
 window.__SBG__ = {
-  scene, camera, renderer, universe, clusters, hubs, yearLabel,
+  scene, camera, renderer, universe, clusters, hubs, yearLabel, raycaster, mouse,
+  grabbed: () => draggedHub && draggedHub.name,
   select: (name) => select(clusters.find((c) => c.name === name)),
   // Scrub the intro reveal to an absolute time (seconds), freeze it there,
   // and render one frame (so the running loop won't advance past it).
@@ -564,5 +627,20 @@ window.__SBG__ = {
     lookTarget.copy(lookGoal); curDist = camDist;
     camera.position.copy(camDir).multiplyScalar(curDist).add(lookTarget);
     camera.lookAt(lookTarget); renderer.render(scene, camera);
+  },
+  // Dev: drive the real drag clamp toward a requested radius; returns the result.
+  dragTest: (name, reqRadius) => {
+    const c = clusters.find((x) => x.name === name);
+    draggedHub = c;
+    const target = c.group.position.clone().setLength(Math.max(0.01, reqRadius));
+    const rMax = Math.max(CUBE_RADIUS, GLOBE_INNER - c.maxOffset);
+    target.setLength(THREE.MathUtils.clamp(target.length(), CUBE_RADIUS, rMax));
+    c.group.position.copy(target);
+    retetherThread(c.thread);
+    draggedHub = null;
+    // farthest node from center after the move (must stay < R)
+    let worst = c.group.position.length() + c.maxOffset;
+    return { reqRadius, hubRadius: +c.group.position.length().toFixed(2), rMax: +rMax.toFixed(2),
+      cubeRadius: CUBE_RADIUS, farthestNode: +worst.toFixed(2), globeR: R };
   },
 };
