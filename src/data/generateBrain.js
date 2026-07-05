@@ -15,3 +15,11 @@ export const NODE_PALETTE = [
 ];
 
 export const CLUSTER_NAMES = [
+  'Projects',
+  'People',
+  'Ideas',
+  'Research',
+  'Content',
+  'Code',
+  'Reading',
+  'Health',
