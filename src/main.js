@@ -310,12 +310,12 @@ reg(bgStars.material, 'ambiance');
 reg(yearLabel.material, 'ambiance');
 
 const BEATS = {
-  squares: { start: 0.15, dur: 0.9 },
-  globe: { start: 0.95, dur: 1.0 },
-  ambiance: { start: 2.3, dur: 1.3 },
+  squares: { start: 0.3, dur: 1.6 },
+  globe: { start: 1.7, dur: 1.9 },
+  ambiance: { start: 4.4, dur: 2.2 },
 };
-const NODE_START = 1.8, NODE_STAGGER = 0.08, NODE_DUR = 0.6;
-const INTRO_END = 3.6;
+const NODE_START = 3.4, NODE_STAGGER = 0.16, NODE_DUR = 1.1;
+const INTRO_END = 6.8;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
 const easeOutBack = (x) => {
@@ -377,16 +377,22 @@ let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
 let tooltipXY = [0, 0], hoverCluster = null, selected = null;
 let pinchStart = 0, pinchBaseDist = 0;
 
+// Camera focus: clicking a hub flies the look-at + distance to it.
+const FOCUS_DIST = 13;
+const lookTarget = new THREE.Vector3(0, 0, 0);
+const lookGoal = new THREE.Vector3(0, 0, 0);
+let preFocusDist = camDist;
+
 function onDown(x, y) { dragging = true; lastX = x; lastY = y; moved = 0; el.style.cursor = 'grabbing'; }
 function onMove(x, y) {
-  if (dragging) {
-    const dx = x - lastX, dy = y - lastY;
-    velY = dx * 0.0035; velX = dy * 0.0035;
-    universe.rotation.y += velY;
-    universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
-    moved += Math.abs(dx) + Math.abs(dy);
-    lastX = x; lastY = y;
-  }
+  if (!dragging) return;
+  const dx = x - lastX, dy = y - lastY;
+  moved += Math.abs(dx) + Math.abs(dy);
+  lastX = x; lastY = y;
+  if (selected) return; // view is locked on the focused hub; release to rotate
+  velY = dx * 0.0035; velX = dy * 0.0035;
+  universe.rotation.y += velY;
+  universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
 }
 function onUp() { dragging = false; el.style.cursor = 'grab'; }
 
@@ -421,13 +427,17 @@ el.addEventListener('touchmove', (e) => {
 el.addEventListener('touchend', () => { onUp(); pinchStart = 0; });
 
 function select(c) {
+  const wasFocused = !!selected;
   selected = selected === c ? null : c;
   if (selected) {
+    if (!wasFocused) preFocusDist = camDist; // remember the free-look zoom
+    camDist = FOCUS_DIST; // fly the camera in to the hub
     pName.textContent = selected.name;
     const pct = Math.round((selected.group.position.length() / R) * 100);
     pMeta.innerHTML = selected.nodeCount + ' nodes<br>linked to core<br>orbit at ' + pct + '% radius';
     panel.classList.add('show');
   } else {
+    if (wasFocused) camDist = preFocusDist; // restore the previous zoom
     panel.classList.remove('show');
   }
 }
@@ -469,14 +479,23 @@ function animate() {
   updateReveal(dt);
 
   if (!dragging) {
-    universe.rotation.y += velY + 0.0009;
-    universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
+    // Auto-rotate only when nothing is focused, so the hub stays put in view.
+    if (!selected) {
+      universe.rotation.y += velY + 0.0009;
+      universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
+    }
     velY *= 0.94; velX *= 0.94;
   }
 
+  // Focus: ease the look-at toward the selected hub's world position (its
+  // "white orbit"), or back to the globe center when released.
+  if (selected) selected.hub.getWorldPosition(lookGoal);
+  else lookGoal.set(0, 0, 0);
+  lookTarget.lerp(lookGoal, 0.08);
+
   curDist += (camDist - curDist) * 0.07;
-  camera.position.copy(camDir).multiplyScalar(curDist);
-  camera.lookAt(0, 0, 0);
+  camera.position.copy(camDir).multiplyScalar(curDist).add(lookTarget);
+  camera.lookAt(lookTarget);
 
   tesseract.tick(dt);
   ringGroup.rotation.y += 0.06 * dt;
@@ -528,4 +547,11 @@ window.__SBG__ = {
   select: (name) => select(clusters.find((c) => c.name === name)),
   // Scrub the intro reveal to an absolute time (seconds) and render one frame.
   scrub: (tt) => { introDone = false; introElapsed = tt; applyReveal(tt); renderer.render(scene, camera); },
+  // Snap the focus camera to its converged position and render (skips the ease).
+  snapFocus: () => {
+    if (selected) selected.hub.getWorldPosition(lookGoal); else lookGoal.set(0, 0, 0);
+    lookTarget.copy(lookGoal); curDist = camDist;
+    camera.position.copy(camDir).multiplyScalar(curDist).add(lookTarget);
+    camera.lookAt(lookTarget); renderer.render(scene, camera);
+  },
 };
