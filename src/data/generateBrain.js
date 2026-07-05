@@ -98,3 +98,11 @@ export function generateBrain(seed = 42) {
 
     // Tether: both endpoints are fixed, so distance = actual geometric distance.
     links.push({
+      source: 'core',
+      target: hubId,
+      kind: 'tether',
+      cluster: name,
+      distance: radius,
+      curveRotation: rand() * Math.PI * 2,
+      particleSpeed: range(0.004, 0.008),
+      particleOffset: rand(),
