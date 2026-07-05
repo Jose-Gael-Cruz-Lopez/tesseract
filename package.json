@@ -1,0 +1,16 @@
+{
+  "name": "second-brain-globe",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "An interactive 3D knowledge globe. Every cluster of thought, tethered to a single core.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jose-Gael-Cruz-Lopez/second-brain-globe.git"
+  },
+  "keywords": [
+    "threejs",
+    "3d-force-graph",
+    "knowledge-graph",
+    "second-brain",
