@@ -62,3 +62,11 @@ export function startAnimation() {
     }
     if (registry.coreGlow) {
       registry.coreGlow.opacity = (0.36 + 0.12 * Math.sin(1.7 * t)) * tesseractDim;
+    }
+
+    for (const node of registry.hubs.values()) {
+      const b = node.__ball;
+      if (!b) continue;
+
+      // Hover/focus swell is lerped toward its target, never snapped.
+      b.hoverCurrent += (b.hoverTarget - b.hoverCurrent) * Math.min(1, dt * 8);
