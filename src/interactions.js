@@ -21,3 +21,11 @@ export function setupInteractions(graph, data, container) {
   const clusters = new Map();
   for (const node of data.nodes) {
     if (!node.cluster) continue;
+    if (!clusters.has(node.cluster)) clusters.set(node.cluster, { hub: null, count: 0 });
+    const entry = clusters.get(node.cluster);
+    entry.count += 1;
+    if (node.type === 'hub') entry.hub = node;
+  }
+
+  // Re-applying the accessors with fresh function identities makes the
+  // library re-digest colors/particles without rebuilding custom objects.
