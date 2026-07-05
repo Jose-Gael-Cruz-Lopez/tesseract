@@ -53,3 +53,12 @@ function buildWireGlobe(group) {
     transparent: true,
     opacity: 0.06,
   });
+
+  // Latitude circles every 15° from -75 to +75, 128 segments each.
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const rad = (lat * Math.PI) / 180;
+    const loop = new THREE.LineLoop(
+      circleGeometry(Math.cos(rad) * R, 128, Math.sin(rad) * R),
+      wireMat
+    );
+    group.add(loop);
