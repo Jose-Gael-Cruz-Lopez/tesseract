@@ -29,3 +29,11 @@ export function setupInteractions(graph, data, container) {
 
   // Re-applying the accessors with fresh function identities makes the
   // library re-digest colors/particles without rebuilding custom objects.
+  function refreshStyling() {
+    graph
+      .nodeColor((n) => nodeColorOf(n))
+      .linkColor((l) => linkColorOf(l))
+      .linkDirectionalParticles((l) => particleCountOf(l))
+      .linkDirectionalParticleSpeed((l) => particleSpeedOf(l));
+  }
+
