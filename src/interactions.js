@@ -92,3 +92,11 @@ export function setupInteractions(graph, data, container) {
       // Only resume the idle orbit if the user did not re-focus mid-flight.
       if (!focusState.hub && !REDUCED_MOTION) graph.controls().autoRotate = true;
     }, FLY_HOME_MS);
+  }
+
+  let hoveredHub = null;
+  graph.onNodeHover((node) => {
+    if (hoveredHub && hoveredHub.__ball && hoveredHub !== focusState.hub) {
+      hoveredHub.__ball.hoverTarget = 1;
+    }
+    hoveredHub = node && node.type === 'hub' ? node : null;
