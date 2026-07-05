@@ -254,3 +254,13 @@ export function buildEnvironment(seed = 1337) {
   // Inner dust: 500 additive points, radius 80..295, palette dimmed to 80%.
   group.add(
     buildPointsCloud({
+      count: 500,
+      minR: 80,
+      maxR: 295,
+      size: 4,
+      dimFactor: 0.8,
+      opacity: 1,
+      rand,
+    })
+  );
+
