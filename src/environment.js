@@ -80,3 +80,13 @@ function buildWireGlobe(group) {
     const cos = Math.cos(a);
     const sin = Math.sin(a);
     fanPositions.set([cos * 65, 0, sin * 65, cos * R, 0, sin * R], i * 6);
+  }
+  const fanGeo = new THREE.BufferGeometry();
+  fanGeo.setAttribute('position', new THREE.BufferAttribute(fanPositions, 3));
+  group.add(new THREE.LineSegments(fanGeo, fanMat));
+}
+
+function buildRings() {
+  // Thin crimson tori around the nucleus (DESIGN_SPEC · ORBITAL RINGS).
+  const rings = new THREE.Group();
+  rings.name = 'rings';
