@@ -218,3 +218,12 @@ function buildYearLabel() {
   for (const ch of text) {
     ctx.fillText(ch, x, canvas.height / 2 + 4);
     x += ctx.measureText(ch).width + tracking;
+  }
+
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(canvas),
+      transparent: true,
+      depthWrite: false,
+    })
+  );
