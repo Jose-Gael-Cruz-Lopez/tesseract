@@ -55,3 +55,10 @@ export function startAnimation() {
     if (registry.rings) registry.rings.rotation.y += 0.06 * mdt;
 
     // Focus dimming for the nucleus: never below ~40% so the center survives.
+    const dimTarget = focusState.cluster ? 0.4 : 1;
+    tesseractDim += (dimTarget - tesseractDim) * Math.min(1, dt * 6);
+    for (const part of registry.tesseractParts) {
+      part.mat.opacity = part.base * tesseractDim;
+    }
+    if (registry.coreGlow) {
+      registry.coreGlow.opacity = (0.36 + 0.12 * Math.sin(1.7 * t)) * tesseractDim;
