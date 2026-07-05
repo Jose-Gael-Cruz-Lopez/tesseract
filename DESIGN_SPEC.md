@@ -51,3 +51,8 @@ HUB BALLS (custom object; these must read as solid spheres, not sprites)
 - SphereGeometry radius 11 * weight, 24 x 24 segments.
 - MeshBasicMaterial, color = cluster tint (see palette), transparent true so it can dim.
 - Halo: additive soft sprite behind the ball, scale 3.2 * ball radius, opacity 0.55.
+- Hover or focus: ball scales to 1.25x, lerped, never snapped.
+
+LEAVES (library-default spheres)
+- nodeRelSize 4, nodeOpacity 0.9, nodeResolution 12. Sized by val, colored per node.
+
