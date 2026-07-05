@@ -53,3 +53,10 @@ export function setupInteractions(graph, data, container) {
   }
 
   function focusHub(hub) {
+    const previous = focusState.hub;
+    if (previous && previous !== hub && previous.__ball) {
+      previous.__ball.hoverTarget = 1;
+    }
+
+    focusState.cluster = hub.cluster;
+    focusState.hub = hub;
