@@ -95,3 +95,10 @@ Enable Pages for the `gh-pages` branch in the repo settings.
 
 - **Real data adapters.** First-class importers for Obsidian vaults, Notion exports and Supabase tables.
 - **Search beam.** Type a query and a light path traces from the core to the matching node.
+- **Time scrubber.** The floating year label becomes a control that filters the graph by time.
+- **Cluster dive.** Expand a hub into its own sub-globe and navigate down the hierarchy.
+
+## Stack and credits
+
+- [3d-force-graph](https://github.com/vasturiano/3d-force-graph) by [vasturiano](https://github.com/vasturiano)
+- [three.js](https://threejs.org/) (pinned to the exact version 3d-force-graph expects, single copy enforced via Vite dedupe)
