@@ -42,11 +42,11 @@ GRAPH DATA (12 clusters)
 - Cluster names: Projects, People, Ideas, Research, Content, Code, Reading, Health,
   Finance, Travel, Journal, Learning.
 - One core node: id "core", type "core", fixed at fx = fy = fz = 0.
-- 12 hub nodes: type "hub", each with a weight in [0.9, 1.3]. Positions: fibonacci-sphere
+- 12 hub nodes: type "hub", each with a weight in [0.8, 1.7]. Positions: fibonacci-sphere
   directions with jitter 0.22, at radius 0.45 R to 0.70 R from origin. Fixed via fx/fy/fz.
   (Pulled in from the shell so clusters have room to fan out and stay inside the globe.)
-- Leaves: 16 to 30 per hub, type "leaf". val distribution: 70% val 1, 20% val 2, 10% val 5.
-  Color: random from node palette.
+- Leaves: 16 to 30 per hub, type "leaf". val distribution: 70% val 1, 30% val 7 (two-tier,
+  ported from the reference). Color: random from node palette.
 - Branches: ~25% of leaves get one grandchild, type "branch", val 1.
 - Links: kind "tether" (core to each hub), kind "spoke" (hub to leaf, per-link distance
   random 18 to 48), kind "branch" (leaf to grandchild, distance random 12 to 24).
@@ -55,13 +55,16 @@ GRAPH DATA (12 clusters)
   to <= 0.95 R each tick, so no dot (and therefore no link) ever pokes outside the globe.
 
 HUB BALLS (custom object; solid shaded 3D spheres, no glow)
-- SphereGeometry radius 11 * weight, 24 x 24 segments.
+- SphereGeometry radius 11.6 * weight, 24 x 24 segments (sized to match the reference
+  hub footprint: sprite nominal size 0.85 * scale on globe R = 11, as a sphere diameter).
 - MeshLambertMaterial (lit by the graph's default lights), color = cluster color lerped
   20% toward ivory #fff3dd, transparent true so it can dim. No halo sprite.
 - Hover or focus: ball scales to 1.25x, lerped, never snapped.
 
 LEAVES (library-default spheres)
-- nodeRelSize 4, nodeOpacity 0.9, nodeResolution 12. Sized by val, colored per node.
+- nodeRelSize 3.55, nodeOpacity 0.9, nodeResolution 12. Sized by val (radius =
+  cbrt(val) * nodeRelSize), colored per node. val 1 -> radius 3.55, val 7 -> ~6.82,
+  matching the reference point sizes 0.26 / 0.5 scaled to R = 300.
 
 TETHERS AND ENERGY
 - Tethers use linkCurvature 0.18 with a random linkCurveRotation in [0, 2*PI).

@@ -91,7 +91,9 @@ export function createGraph(container, data) {
     .nodeVal('val')
     .nodeColor(nodeColorOf)
     .nodeOpacity(0.9)
-    .nodeRelSize(4)
+    // 3.55 matches the reference minor-leaf size: val 1 -> radius 3.55,
+    // val 7 -> ~6.82 (leaf radius = cbrt(val) * nodeRelSize).
+    .nodeRelSize(3.55)
     .nodeResolution(12)
     // The core never shows a tooltip; everything else gets a styled chip.
     .nodeLabel((node) =>

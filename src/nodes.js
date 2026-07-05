@@ -113,7 +113,10 @@ const IVORY = new THREE.Color('#fff3dd');
 
 export function buildHubBall(node) {
   const group = new THREE.Group();
-  const radius = 11 * node.weight;
+  // 11.6 * weight matches the reference hub footprint: its sprite nominal
+  // size (0.85 * scale on globe R = 11) treated as a sphere diameter, scaled
+  // to R = 300. weight 0.8..1.7 -> radius ~9.3..19.7.
+  const radius = 11.6 * node.weight;
   // Solid 3D sphere, lightly lifted toward ivory so the cluster color still
   // reads. No halo, no bloom: a shaded sphere lit by the graph's default
   // lights, like a standard 3d-force-graph node.

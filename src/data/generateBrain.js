@@ -92,7 +92,9 @@ export function generateBrain(seed = 42) {
       label: name,
       val: 10,
       color: clusterColor,
-      weight: range(0.9, 1.3),
+      // Weight range ported from the reference (its hub sprite scale 0.8..1.7)
+      // so hub sizes vary the same way.
+      weight: range(0.8, 1.7),
       breathePhase: rand() * Math.PI * 2,
       fx: hx,
       fy: hy,
@@ -114,8 +116,11 @@ export function generateBrain(seed = 42) {
     const leafCount = 16 + Math.floor(rand() * 15); // 16..30
     for (let j = 0; j < leafCount; j++) {
       const leafId = `${hubId}-leaf-${j}`;
+      // Two-tier leaf sizes ported from the reference: 70% "minor", 30% "major".
+      // With nodeRelSize 3.55 (graph.js), val 1 -> radius 3.55, val 7 -> ~6.82,
+      // matching the reference point sizes 0.26 and 0.5 scaled to R = 300.
       const roll = rand();
-      const val = roll < 0.7 ? 1 : roll < 0.9 ? 2 : 5;
+      const val = roll < 0.7 ? 1 : 7;
       const num = String(j + 1).padStart(2, '0');
 
       nodes.push({
