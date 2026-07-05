@@ -79,18 +79,20 @@ canvas {
   top: 50%;
   right: 26px;
   transform: translateY(-50%);
-  width: 212px;
+  width: 250px;
   padding: 16px 18px;
   background: rgba(10, 6, 20, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   backdrop-filter: blur(8px);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.35s ease;
 }
 
 #panel.show {
   opacity: 1;
+  pointer-events: auto; /* so the page list is clickable when shown */
 }
 
 #panel h2 {
@@ -117,8 +119,53 @@ canvas {
   border-radius: 2px;
 }
 
+#panel .pages {
+  margin-top: 13px;
+  max-height: 42vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 120, 150, 0.4) transparent;
+}
+
+#panel .pages::-webkit-scrollbar {
+  width: 5px;
+}
+
+#panel .pages::-webkit-scrollbar-thumb {
+  background: rgba(255, 120, 150, 0.35);
+  border-radius: 3px;
+}
+
+#panel .page-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: #c7ccea;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+#panel .page-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-left-color: #ff5d8f;
+}
+
 #panel .esc {
-  margin-top: 11px;
+  margin-top: 12px;
   font-size: 9px;
   letter-spacing: 0.18em;
   color: #5f6482;

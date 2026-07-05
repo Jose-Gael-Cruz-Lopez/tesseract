@@ -18,6 +18,7 @@ function mulberry32(a) {
   };
 }
 const rand = mulberry32(42);
+const titleRand = mulberry32(1234); // separate stream so titles don't shift the layout
 
 /* ---------- renderer / scene ---------- */
 const scene = new THREE.Scene();
@@ -135,6 +136,20 @@ ringGroup.add(makeRing(9.4, 0x6e1f3d, 0.3, -0.3, 2.3, 0.018));
 /* ---------- node clusters (dandelion webs) + tethers to core ---------- */
 const paletteHex = [0xffd166, 0xffb454, 0xff5d8f, 0xff2d55, 0xc8b6ff, 0xe8ecff, 0x86d1ff];
 const clusterNames = ['Projects', 'People', 'Ideas', 'Research', 'Content', 'Code', 'Reading', 'Health', 'Finance', 'Travel', 'Journal', 'Learning'];
+// Placeholder page titles for the nodes (swap in real notes/pages later).
+const PAGE_TITLES = [
+  'Morning pages', 'Reading list', 'Idea backlog', 'Weekly review', 'Book notes',
+  'Project brief', 'Meeting notes', 'Trip itinerary', 'Budget tracker', 'Habit log',
+  'Recipe box', 'Workout plan', 'Gift ideas', 'Bucket list', 'Learning log',
+  'Favorite quotes', 'Dream journal', 'Goals 2026', 'Reflections', 'Research dump',
+  'Draft outline', 'Interview prep', 'Highlights', 'Side project', 'Newsletter drafts',
+  'Wishlist', 'People to meet', 'Health metrics', 'Investment notes', 'Travel hacks',
+  'Language study', 'Podcast queue', 'Movie watchlist', 'Design inspiration', 'Code snippets',
+  'Career map', 'Networking', 'Daily journal', 'Mind map', 'Sketchbook',
+  'Voice memos', 'Someday maybe', 'Inbox', 'Field notes', 'Scratchpad',
+  'Cheat sheet', 'Manifesto', 'Playbook', 'Rabbit holes', 'Open questions',
+];
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const clusters = [];
 const hubs = [];
 const threads = [];
@@ -208,6 +223,15 @@ for (let i = 0; i < clusterNames.length; i++) {
       minIdx.push(pnodes.length - 1); minCol.push(col2.r, col2.g, col2.b);
     }
   }
+  // Give every node a page title (unique within the cluster) and a URL.
+  const titlePool = PAGE_TITLES.slice();
+  for (let a = titlePool.length - 1; a > 0; a--) { const b = Math.floor(titleRand() * (a + 1)); const tmp = titlePool[a]; titlePool[a] = titlePool[b]; titlePool[b] = tmp; }
+  const clusterSlug = slugify(clusterNames[i]);
+  pnodes.forEach((n, k) => {
+    n.title = titlePool[k % titlePool.length];
+    n.url = '#/' + clusterSlug + '/' + slugify(n.title); // swap for a real page URL
+  });
+
   const flat = (idxs) => { const a = []; idxs.forEach((ix) => { const q = pnodes[ix].pos; a.push(q.x, q.y, q.z); }); return a; };
   const major = makePoints(flat(majIdx), majCol, 0.5, 0.95);
   const minor = makePoints(flat(minIdx), minCol, 0.26, 0.9);
@@ -413,6 +437,14 @@ const tooltip = document.getElementById('tooltip');
 const panel = document.getElementById('panel');
 const pName = document.getElementById('p-name');
 const pMeta = document.getElementById('p-meta');
+const pPages = document.getElementById('p-pages');
+
+// Open a node's page. Real http(s) URLs open in a new tab; the default
+// placeholder routes (#/cluster/page) just update the URL in place.
+function openNode(node) {
+  if (/^https?:/i.test(node.url)) window.open(node.url, '_blank', 'noopener');
+  else window.location.hash = node.url;
+}
 
 let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
 let tooltipXY = [0, 0], hoverCluster = null, selected = null;
@@ -517,7 +549,18 @@ function select(c) {
     camDist = FOCUS_DIST; // fly the camera in to the hub
     pName.textContent = selected.name;
     const pct = Math.round((selected.group.position.length() / R) * 100);
-    pMeta.innerHTML = selected.nodeCount + ' nodes<br>linked to core<br>orbit at ' + pct + '% radius';
+    pMeta.innerHTML = selected.pnodes.length + ' pages<br>linked to core<br>orbit at ' + pct + '% radius';
+    // List every page attached to this hub; each one is a link to its node.
+    pPages.innerHTML = '';
+    selected.pnodes.forEach((node) => {
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'page-link';
+      link.textContent = node.title;
+      link.addEventListener('click', () => openNode(node));
+      pPages.appendChild(link);
+    });
+    pPages.scrollTop = 0;
     panel.classList.add('show');
   } else {
     if (wasFocused) camDist = preFocusDist; // restore the previous zoom
