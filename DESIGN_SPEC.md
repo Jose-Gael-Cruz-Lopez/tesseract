@@ -77,3 +77,8 @@ UI CHROME
 - Top-left brand block: "SECOND BRAIN" (12px, 600 weight, 0.42em letterspacing, uppercase,
   #eef1ff) over "Interactive knowledge globe" (10px, 0.2em, #8b90ad).
 - Bottom-center hint: "drag to rotate · scroll to zoom · click a hub" (10px, 0.22em, #6d7290).
+- Hover tooltip via the library's nodeLabel, styled through the .scene-tooltip class:
+  dark translucent chip, 1px rgba(255,120,150,0.35) border, uppercase, letterspaced.
+- Focus panel, right side, vertically centered: cluster name, node count, orbit radius %,
+  a thin gradient bar (#ff2d55 to #ffd166), and "click empty space to release".
+  Translucent dark card, blur backdrop, fades in/out.
