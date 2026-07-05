@@ -57,3 +57,10 @@ export function buildTesseract() {
     opacity: 0.35,
   });
   const wireB = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(56, 56, 56)),
+    wireBMat
+  );
+
+  // Frosted shells 48 / 68 / 90 — outermost is 0.30 R, the hard size cap.
+  const shellSizes = [48, 68, 90];
+  const shellOpacities = [0.1, 0.07, 0.045];
