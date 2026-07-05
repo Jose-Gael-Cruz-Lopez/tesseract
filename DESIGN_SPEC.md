@@ -46,3 +46,8 @@ GRAPH DATA (12 clusters)
 - Links: kind "tether" (core to each hub), kind "spoke" (hub to leaf, per-link distance
   random 25 to 65), kind "branch" (leaf to grandchild, distance random 15 to 30).
 - All randomness comes from a seeded RNG so layouts are reproducible.
+
+HUB BALLS (custom object; these must read as solid spheres, not sprites)
+- SphereGeometry radius 11 * weight, 24 x 24 segments.
+- MeshBasicMaterial, color = cluster tint (see palette), transparent true so it can dim.
+- Halo: additive soft sprite behind the ball, scale 3.2 * ball radius, opacity 0.55.
