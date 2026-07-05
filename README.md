@@ -88,3 +88,10 @@ npm run build
 git subtree push --prefix dist origin gh-pages
 # or: npx gh-pages -d dist
 ```
+
+Enable Pages for the `gh-pages` branch in the repo settings.
+
+## Roadmap
+
+- **Real data adapters.** First-class importers for Obsidian vaults, Notion exports and Supabase tables.
+- **Search beam.** Type a query and a light path traces from the core to the matching node.
