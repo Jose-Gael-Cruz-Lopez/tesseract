@@ -27,3 +27,11 @@ export function makeGlowTexture() {
   return glowTexture;
 }
 
+export function buildTesseract() {
+  const group = new THREE.Group();
+
+  // Rebuild-safe: nodeThreeObject can be re-invoked; never double-register.
+  registry.spinners = registry.spinners.filter((s) => s.tag !== 'tesseract');
+  registry.tesseractParts = [];
+
+  const solidMat = new THREE.MeshBasicMaterial({
