@@ -7,3 +7,12 @@ import { GLOBE_RADIUS, NODE_PALETTE } from './data/generateBrain.js';
 import { makeGlowTexture } from './nodes.js';
 
 const R = GLOBE_RADIUS;
+
+function circleGeometry(radius, segments, y = 0) {
+  const positions = new Float32Array(segments * 3);
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    positions[i * 3] = Math.cos(a) * radius;
+    positions[i * 3 + 1] = y;
+    positions[i * 3 + 2] = Math.sin(a) * radius;
+  }
