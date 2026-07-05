@@ -99,3 +99,12 @@ function buildRings() {
   const rotY = [0.4, -0.7, 1.4, 2.3];
 
   radii.forEach((radius, i) => {
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, tubes[i], 8, 96),
+      new THREE.MeshBasicMaterial({
+        color: colors[i],
+        transparent: true,
+        opacity: opacities[i],
+        depthWrite: false,
+      })
+    );
