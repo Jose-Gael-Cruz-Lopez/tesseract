@@ -60,3 +60,11 @@ export function setupInteractions(graph, data, container) {
 
     focusState.cluster = hub.cluster;
     focusState.hub = hub;
+    if (hub.__ball) hub.__ball.hoverTarget = 1.25;
+
+    refreshStyling();
+    graph.controls().autoRotate = false;
+
+    const distance = Math.hypot(hub.x, hub.y, hub.z) || 1;
+    const ratio = 1 + FOCUS_DISTANCE / distance;
+    graph.cameraPosition(
