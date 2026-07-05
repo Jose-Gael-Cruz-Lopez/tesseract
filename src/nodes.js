@@ -86,3 +86,10 @@ export function buildTesseract() {
     color: 0xff4d70,
     transparent: true,
     opacity: 0.45,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.set(130, 130, 1);
+
+  group.add(solid, wireA, wireB, ...shells, glow);
