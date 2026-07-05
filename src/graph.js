@@ -19,3 +19,10 @@ function hexToRgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
+
+// Focus-aware accessors. Exported so interactions.js can re-apply them when
+// focusState changes (fresh function identity forces the library to digest).
+export function nodeColorOf(node) {
+  if (!focusState.cluster || node.cluster === focusState.cluster) return node.color;
+  return hexToRgba(node.color, 0.1);
+}
