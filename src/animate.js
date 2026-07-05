@@ -15,7 +15,6 @@ const SPEED_MULTIPLIER = REDUCED_MOTION ? 0.25 : 1;
 
 export const registry = {
   spinners: [], // { obj, speed: {x, y, z} } — tesseract parts, rad/s from the spec
-  coreGlow: null, // SpriteMaterial of the core glow (pulsed each frame)
   tesseractParts: [], // { mat, base } — for focus dimming, floor 0.4
   hubs: new Map(), // node.id -> hub node (each carries node.__ball refs)
   rings: null, // THREE.Group of the 4 crimson tori
@@ -60,9 +59,6 @@ export function startAnimation() {
     for (const part of registry.tesseractParts) {
       part.mat.opacity = part.base * tesseractDim;
     }
-    if (registry.coreGlow) {
-      registry.coreGlow.opacity = (0.36 + 0.12 * Math.sin(1.7 * t)) * tesseractDim;
-    }
 
     for (const node of registry.hubs.values()) {
       const b = node.__ball;
@@ -75,7 +71,6 @@ export function startAnimation() {
       const dimTargetHub = inFocus ? 1 : 0.1;
       b.dim += (dimTargetHub - b.dim) * Math.min(1, dt * 6);
       b.mat.opacity = b.dim;
-      b.haloMat.opacity = 0.55 * b.dim;
 
       const breath = 1 + 0.06 * Math.sin(2 * t + b.phase);
       b.group.scale.setScalar(breath * b.hoverCurrent);

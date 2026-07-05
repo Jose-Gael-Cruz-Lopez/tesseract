@@ -148,7 +148,7 @@ function buildPointsCloud({ count, minR, maxR, size, dimFactor, opacity, rand })
     transparent: true,
     opacity,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
 
   return new THREE.Points(geo, mat);
@@ -193,7 +193,7 @@ function buildStream(fromDir, toDir, rand) {
     vertexColors: true,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
 
   return new THREE.Points(geo, mat);

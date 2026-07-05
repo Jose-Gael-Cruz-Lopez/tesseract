@@ -1,7 +1,6 @@
 import './styles.css';
 
 import * as THREE from 'three';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 import { generateBrain } from './data/generateBrain.js';
 import { createGraph } from './graph.js';
@@ -18,29 +17,13 @@ const { group: environment, rings } = buildEnvironment();
 graph.scene().add(environment);
 registry.rings = rings;
 
-// Bloom (DESIGN_SPEC · BLOOM): the red core, hub balls, particles and dust
-// glow; threshold keeps the faint wireframe below the bloom cutoff.
-// Tuned from the spec's starting point (1.1 / 0.5 / 0.15): at that strength
-// every leaf saturated to white and the nucleus drowned in its own glow.
-// 0.75 / 0.5 / 0.25 keeps the core, hub balls, particles and dust glowing
-// while the wireframe globe and palette colors stay readable.
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.75, // strength
-  0.5, // radius
-  0.25 // threshold
-);
-graph.postProcessingComposer().addPass(bloomPass);
-
+// No post-processing: the scene renders straight to the canvas so nothing
+// blooms or glows. Black background, solid nodes, plain wireframe.
 const renderer = graph.renderer();
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 window.addEventListener('resize', () => {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  graph.width(w).height(h);
-  graph.postProcessingComposer().setSize(w, h);
-  bloomPass.setSize(w, h);
+  graph.width(window.innerWidth).height(window.innerHeight);
 });
 
 // Resilience: a lost WebGL context gets a friendly reload message instead of
@@ -59,8 +42,7 @@ console.log(
     `${data.nodes.length} nodes / ${data.links.length} links`
 );
 
-// renderer.info auto-resets between composer passes, so a naive read reports
-// garbage. Accumulate over 10 frames and report the per-frame average.
+// Accumulate over 10 frames and report the per-frame average.
 function reportDrawCalls(tag) {
   const info = renderer.info;
   info.autoReset = false;
@@ -79,5 +61,5 @@ function reportDrawCalls(tag) {
 requestAnimationFrame(() => reportDrawCalls('first paint'));
 graph.onEngineStop(() => console.log('[second-brain-globe] simulation frozen'));
 
-// Dev handle for tuning bloom and inspecting the scene from the console.
-window.__SBG__ = { graph, bloomPass, renderer, focusState };
+// Dev handle for inspecting the scene from the console.
+window.__SBG__ = { graph, renderer, focusState };

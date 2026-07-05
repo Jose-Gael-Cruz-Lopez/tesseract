@@ -2,31 +2,33 @@ SECOND BRAIN GLOBE · DESIGN SPEC
 
 WORLD
 - Globe radius R = 300 world units. Everything below is in world units.
-- Background: #060310. A CSS radial-gradient vignette overlay darkens the viewport edges.
+- Background: #000000 (pure black). A CSS radial-gradient (black) vignette darkens the edges.
+- No glow anywhere: no bloom post-processing, no additive glow sprites. Nodes are solid
+  shaded 3D spheres; the nucleus is a solid + wireframe tesseract. Nothing blooms.
 - Camera home position: { x: 0, y: 150, z: 780 }, looking at origin.
 - Controls: orbit, autoRotate on at speed 0.35, damping 0.05, minDistance 260, maxDistance 1500.
 
 PALETTE
 - Node palette (leaves, dust): #ffd166, #ffb454, #ff5d8f, #ff2d55, #c8b6ff, #e8ecff, #86d1ff
 - Globe wire: #a9b0d6 at 0.14 opacity. Equator: #dfe4ff at 0.5. Radial fan: #9aa0c8 at 0.06.
-- Core red: #ff3355. Core glow: #ff4d70. Wire cubes: #ffc9d4 / #ffdbe3. Frosted shells: #cabfd6.
+- Core red: #ff3355. Wire cubes: #ffc9d4 / #ffdbe3. Frosted shells: #cabfd6. (No core glow.)
 - Rings: #e0356b, #c22f5f, #93264a, #6e1f3d.
 - Spoke links: rgba(214,219,245,0.40). Branch links: rgba(214,219,245,0.30).
 - Tether links: rgba(255,109,138,0.35). Tether particles: #ffc2cf.
-- Hub ball tint: the cluster's palette color lerped 55% toward warm ivory #fff3dd.
+- Hub ball tint: the cluster's palette color lerped 20% toward warm ivory #fff3dd.
 
 TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus scale)
-- Solid cube: 26 units/side, MeshBasicMaterial #ff3355.
+- Solid cube: 26 units/side, MeshLambertMaterial #ff3355 (shaded, not glowing).
 - Wire cube A: 40/side, EdgesGeometry LineSegments, #ffc9d4, opacity 0.70.
 - Wire cube B: 56/side, #ffdbe3, opacity 0.35.
 - Frosted shells: cubes at 48, 68, 90 per side. MeshBasicMaterial #cabfd6, DoubleSide,
   depthWrite false, opacity 0.10 / 0.07 / 0.045. Each shell gets a random static base rotation.
-- Core glow: additive sprite (soft radial canvas texture), color #ff4d70, scale 130, opacity ~0.45.
+- No core glow sprite (removed): the nucleus does not glow. The solid cube uses
+  MeshLambertMaterial so it reads as a shaded 3D cube.
 - The outermost shell (90) is 0.30 R. Do not exceed this. The nucleus must read small
   relative to the globe.
 - Continuous rotation, radians/sec: solid (x .35, y .50), wireA (x -.22, z .30),
   wireB (y .16, x .10), shellA (y .12, x .05), shellB (z -.08, y -.05), shellC (x .04, z .03).
-- Glow opacity pulse: 0.36 + 0.12 * sin(1.7t).
 
 ORBITAL RINGS (thin crimson tori around the nucleus)
 - Radii 115 / 150 / 205 / 250, tube thickness 1.2 / 1.0 / 0.9 / 0.8.
@@ -47,10 +49,10 @@ GRAPH DATA (12 clusters)
   random 25 to 65), kind "branch" (leaf to grandchild, distance random 15 to 30).
 - All randomness comes from a seeded RNG so layouts are reproducible.
 
-HUB BALLS (custom object; these must read as solid spheres, not sprites)
+HUB BALLS (custom object; solid shaded 3D spheres, no glow)
 - SphereGeometry radius 11 * weight, 24 x 24 segments.
-- MeshBasicMaterial, color = cluster tint (see palette), transparent true so it can dim.
-- Halo: additive soft sprite behind the ball, scale 3.2 * ball radius, opacity 0.55.
+- MeshLambertMaterial (lit by the graph's default lights), color = cluster color lerped
+  20% toward ivory #fff3dd, transparent true so it can dim. No halo sprite.
 - Hover or focus: ball scales to 1.25x, lerped, never snapped.
 
 LEAVES (library-default spheres)
@@ -66,8 +68,8 @@ ENVIRONMENT (added to graph.scene(), grouped under one "environment" THREE.Group
 - Latitude circles every 15 degrees from -75 to +75, 128 segments each.
 - 12 meridian circles. One bright equator LineLoop at 160 segments.
 - Radial fan: 144 line spokes at y = 0 from r = 65 out to r = 300 (the dense disc look).
-- Inner dust: 500 additive points, radius 80 to 295, size 4, palette colors dimmed to 80%.
-- Background stars: 300 points, radius 400 to 950, size 5, dimmed to 55%, opacity 0.5.
+- Inner dust: 500 points (normal blending, no glow), radius 80 to 295, size 4, palette dimmed 80%.
+- Background stars: 300 points (normal blending), radius 400 to 950, size 5, dimmed 55%, opacity 0.5.
 - Two "streams": 46 warm dots each (mix #ffb454 / #ffd166, size 8) scattered with jitter 9
   along a bezier arc hugging the shell at ~0.82 R.
 - Year label "2026": canvas text sprite, letterspaced, rgba(232,236,255,0.92),
@@ -84,12 +86,11 @@ UI CHROME
   Translucent dark card, blur backdrop, fades in/out.
 
 MOTION RULES
-- All continuous motion (tesseract, rings, glow pulse, hub breathing) runs in one
+- All continuous motion (tesseract rotation, ring drift, hub breathing) runs in one
   requestAnimationFrame loop, independent of the force simulation.
 - Hub breathing: scale multiplier 1 + 0.06 * sin(2t + phase), unique phase per hub.
 - If prefers-reduced-motion: autoRotate off, particle speed 0, rotation speeds * 0.25.
 
-BLOOM
-- UnrealBloomPass: strength 0.75, radius 0.5, threshold 0.25 (tuned in-browser from the
-  original 1.1 / 0.5 / 0.15, which saturated every node to white). The red core, hub
-  balls, particles, and dust glow while the wireframe globe stays subtle.
+POST-PROCESSING
+- None. The scene renders straight to the canvas: no UnrealBloomPass, no glow.
+  Black background, solid shaded nodes, plain wireframe globe.

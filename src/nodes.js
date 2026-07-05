@@ -34,7 +34,7 @@ export function buildTesseract() {
   registry.spinners = registry.spinners.filter((s) => s.tag !== 'tesseract');
   registry.tesseractParts = [];
 
-  const solidMat = new THREE.MeshBasicMaterial({
+  const solidMat = new THREE.MeshLambertMaterial({
     color: 0xff3355,
     transparent: true, // so focus mode can dim it
     opacity: 1,
@@ -81,18 +81,8 @@ export function buildTesseract() {
     return shell;
   });
 
-  const glowMat = new THREE.SpriteMaterial({
-    map: makeGlowTexture(),
-    color: 0xff4d70,
-    transparent: true,
-    opacity: 0.45,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const glow = new THREE.Sprite(glowMat);
-  glow.scale.set(130, 130, 1);
-
-  group.add(solid, wireA, wireB, ...shells, glow);
+  // No glow sprite: the nucleus is a solid + wireframe tesseract, no bloom.
+  group.add(solid, wireA, wireB, ...shells);
 
   // Continuous rotation speeds in rad/s, straight from the spec.
   registry.spinners.push(
@@ -104,7 +94,6 @@ export function buildTesseract() {
     { tag: 'tesseract', obj: shells[2], speed: { x: 0.04, y: 0, z: 0.03 } }
   );
 
-  registry.coreGlow = glowMat;
   registry.tesseractParts = [
     { mat: solidMat, base: 1 },
     { mat: wireAMat, base: 0.7 },
@@ -122,33 +111,23 @@ const IVORY = new THREE.Color('#fff3dd');
 export function buildHubBall(node) {
   const group = new THREE.Group();
   const radius = 11 * node.weight;
-  const tint = new THREE.Color(node.color).lerp(IVORY, 0.55);
+  // Solid 3D sphere, lightly lifted toward ivory so the cluster color still
+  // reads. No halo, no bloom: a shaded sphere lit by the graph's default
+  // lights, like a standard 3d-force-graph node.
+  const tint = new THREE.Color(node.color).lerp(IVORY, 0.2);
 
-  const mat = new THREE.MeshBasicMaterial({
+  const mat = new THREE.MeshLambertMaterial({
     color: tint,
-    transparent: true,
+    transparent: true, // so focus mode can dim it
     opacity: 1,
   });
   const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
-
-  const haloMat = new THREE.SpriteMaterial({
-    map: makeGlowTexture(),
-    color: tint.clone(),
-    transparent: true,
-    opacity: 0.55,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const halo = new THREE.Sprite(haloMat);
-  halo.scale.set(3.2 * radius, 3.2 * radius, 1);
-
-  group.add(halo, ball);
+  group.add(ball);
 
   // Refs for the animation loop and interactions: no scene traversal needed.
   node.__ball = {
     group,
     mat,
-    haloMat,
     radius,
     hoverTarget: 1,
     hoverCurrent: 1,
