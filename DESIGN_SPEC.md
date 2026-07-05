@@ -40,3 +40,9 @@ GRAPH DATA (12 clusters)
 - One core node: id "core", type "core", fixed at fx = fy = fz = 0.
 - 12 hub nodes: type "hub", each with a weight in [0.9, 1.3]. Positions: fibonacci-sphere
   directions with jitter 0.22, at radius 0.55 R to 0.90 R from origin. Fixed via fx/fy/fz.
+- Leaves: 16 to 30 per hub, type "leaf". val distribution: 70% val 1, 20% val 2, 10% val 5.
+  Color: random from node palette.
+- Branches: ~25% of leaves get one grandchild, type "branch", val 1.
+- Links: kind "tether" (core to each hub), kind "spoke" (hub to leaf, per-link distance
+  random 25 to 65), kind "branch" (leaf to grandchild, distance random 15 to 30).
+- All randomness comes from a seeded RNG so layouts are reproducible.
