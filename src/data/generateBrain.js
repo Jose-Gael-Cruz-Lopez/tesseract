@@ -106,3 +106,11 @@ export function generateBrain(seed = 42) {
       curveRotation: rand() * Math.PI * 2,
       particleSpeed: range(0.004, 0.008),
       particleOffset: rand(),
+    });
+
+    const leafCount = 16 + Math.floor(rand() * 15); // 16..30
+    for (let j = 0; j < leafCount; j++) {
+      const leafId = `${hubId}-leaf-${j}`;
+      const roll = rand();
+      const val = roll < 0.7 ? 1 : roll < 0.9 ? 2 : 5;
+      const num = String(j + 1).padStart(2, '0');
