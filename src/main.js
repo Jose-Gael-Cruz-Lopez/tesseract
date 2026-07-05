@@ -256,9 +256,11 @@ for (let i = 0; i < clusterNames.length; i++) {
     baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
     nodeCount: count,
     maxOffset: maxOff,
+    accent: '#' + paletteHex[i % paletteHex.length].toString(16).padStart(6, '0'),
     phase: rand() * Math.PI * 2,
   };
   hub.userData.cluster = cluster;
+  pnodes.forEach((n) => { n.cluster = cluster; }); // each page maps to its central topic
   clusters.push(cluster);
   hubs.push(hub);
 
@@ -436,11 +438,132 @@ const mouse = new THREE.Vector2(-2, -2);
 const tooltip = document.getElementById('tooltip');
 const sidebarEl = document.getElementById('sidebar');
 
-// Open a node's page. Real http(s) URLs open in a new tab; the default
-// placeholder routes (#/cluster/page) just update the URL in place.
+/* ---------- Notion-style page view (opens when a node's page is clicked) ---------- */
+const pageEl = document.getElementById('page');
+const pgCover = document.getElementById('pg-cover');
+const pgCluster = document.getElementById('pg-cluster');
+const pgPtitle = document.getElementById('pg-ptitle');
+const pgTitle = document.getElementById('pg-title');
+const pgContent = document.getElementById('pg-content');
+const pgConnected = document.getElementById('pg-connected');
+const pgEdited = document.getElementById('pg-edited');
+const pgDoc = document.getElementById('pg-doc');
+const pgMenu = document.getElementById('pg-menu');
+let currentNode = null;
+let activeSub = null;
+
+const pageKey = (node) => 'mnemo:page:' + node.url;
+const loadPage = (node) => { try { return JSON.parse(localStorage.getItem(pageKey(node))) || {}; } catch (e) { return {}; } };
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+function relTime(ts) {
+  if (!ts) return 'just now';
+  const s = (Date.now() - ts) / 1000;
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+let saveTimer = 0;
+function persistPage() {
+  if (!currentNode) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const title = pgTitle.textContent.trim() || currentNode.title;
+    const data = { title, body: pgContent.innerHTML, edited: Date.now() };
+    localStorage.setItem(pageKey(currentNode), JSON.stringify(data));
+    pgEdited.textContent = 'Edited ' + relTime(data.edited);
+    pgPtitle.textContent = title;
+    if (currentNode.subEl) currentNode.subEl.querySelector('.sb-label').textContent = title;
+  }, 350);
+}
+
+// Every page IS one of the globe's nodes; opening it shows a Notion-style doc.
 function openNode(node) {
-  if (/^https?:/i.test(node.url)) window.open(node.url, '_blank', 'noopener');
-  else window.location.hash = node.url;
+  currentNode = node;
+  const c = node.cluster;
+  const saved = loadPage(node);
+  const title = saved.title || node.title;
+  pgCluster.textContent = c.name;
+  pgPtitle.textContent = title;
+  pgTitle.textContent = title;
+  pgContent.innerHTML = saved.body || '';
+  pgEdited.textContent = 'Edited ' + relTime(saved.edited);
+  pgCover.style.background = `linear-gradient(115deg, ${hexA(c.accent, 0.5)}, ${hexA(c.accent, 0.12)})`;
+  pgConnected.innerHTML = `<span class="dot" style="background:${c.accent}"></span>Part of&nbsp;<strong style="color:#e8e8ea;font-weight:600">${c.name}</strong>&nbsp;· a node on the globe`;
+  setExpanded(c, true);
+  if (activeSub) activeSub.classList.remove('active');
+  activeSub = node.subEl || null;
+  if (activeSub) { activeSub.classList.add('active'); activeSub.scrollIntoView({ block: 'nearest' }); }
+  pageEl.querySelector('.pg-scroll').scrollTop = 0;
+  pgMenu.classList.remove('show');
+  pageEl.classList.add('show');
+  pageEl.setAttribute('aria-hidden', 'false');
+  window.location.hash = node.url;
+}
+
+function closePage() {
+  if (!pageEl.classList.contains('show')) return;
+  pageEl.classList.remove('show');
+  pageEl.setAttribute('aria-hidden', 'true');
+  pgMenu.classList.remove('show');
+  if (activeSub) { activeSub.classList.remove('active'); activeSub = null; }
+  currentNode = null;
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
+// Breadcrumb / "Part of" -> back to the globe, focused on this cluster.
+function gotoCluster() {
+  const cl = currentNode && currentNode.cluster;
+  closePage();
+  if (cl && selected !== cl) select(cl);
+}
+
+function buildPageChrome() {
+  ['Ask AI', 'AI Meeting Notes', 'Database', 'Form', 'Templates'].forEach((t) =>
+    document.getElementById('pg-gs').appendChild(elh('button', null, t))
+  );
+
+  const fonts = elh('div', 'pg-fonts');
+  const fontBtns = [];
+  [['Default', 'default'], ['Serif', 'serif'], ['Mono', 'mono']].forEach(([lbl, cls]) => {
+    const b = elh('button', 'pg-font' + (cls === 'default' ? ' active' : ''), `<span class="big">Ag</span><span class="lbl">${lbl}</span>`);
+    b.addEventListener('click', () => {
+      pgDoc.classList.remove('serif', 'mono');
+      if (cls !== 'default') pgDoc.classList.add(cls);
+      fontBtns.forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+    fontBtns.push(b); fonts.appendChild(b);
+  });
+  pgMenu.appendChild(fonts);
+  pgMenu.appendChild(elh('div', 'pg-msep'));
+  const row = (label, opts = {}) => {
+    const r = elh('div', 'pg-mrow', `<span>${label}</span>` + (opts.key ? `<span class="mkey">${opts.key}</span>` : '') + (opts.toggle ? '<span class="pg-switch"></span>' : ''));
+    if (opts.toggle) r.addEventListener('click', () => { r.classList.toggle('on'); opts.toggle(r.classList.contains('on')); });
+    else if (opts.onClick) r.addEventListener('click', opts.onClick);
+    pgMenu.appendChild(r);
+  };
+  row('Copy link', { key: '⌘L', onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(location.href); pgMenu.classList.remove('show'); } });
+  row('Duplicate', { key: '⌘D' });
+  row('Move to Trash', { onClick: () => { if (currentNode) localStorage.removeItem(pageKey(currentNode)); closePage(); } });
+  pgMenu.appendChild(elh('div', 'pg-msep'));
+  row('Small text', { toggle: (on) => pgDoc.classList.toggle('small', on) });
+  row('Full width', { toggle: (on) => pgDoc.classList.toggle('wide', on) });
+  pgMenu.appendChild(elh('div', 'pg-msep'));
+  row('Export');
+  row('Version history');
+
+  pgTitle.addEventListener('input', persistPage);
+  pgContent.addEventListener('input', persistPage);
+  pgCluster.addEventListener('click', gotoCluster);
+  pgConnected.addEventListener('click', gotoCluster);
+  document.getElementById('pg-close').addEventListener('click', closePage);
+  document.getElementById('pg-more').addEventListener('click', (e) => { e.stopPropagation(); pgMenu.classList.toggle('show'); });
+  document.querySelector('.pg-share').addEventListener('click', () => { if (navigator.clipboard) navigator.clipboard.writeText(location.href); });
+  document.addEventListener('click', (e) => {
+    if (pgMenu.classList.contains('show') && !pgMenu.contains(e.target) && e.target.id !== 'pg-more') pgMenu.classList.remove('show');
+  });
 }
 
 const ICON = {
@@ -501,6 +624,7 @@ function buildSidebar() {
       sub.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
       children.appendChild(sub);
       c.subEls.push(sub);
+      node.subEl = sub;
     });
     scroll.append(item, children);
     c.itemEl = item;
@@ -534,6 +658,7 @@ function buildSidebar() {
 }
 
 buildSidebar();
+buildPageChrome();
 
 let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
 let tooltipXY = [0, 0], hoverCluster = null, selected = null;
@@ -631,6 +756,7 @@ el.addEventListener('touchmove', (e) => {
 el.addEventListener('touchend', () => { onUp(); pinchStart = 0; });
 
 function select(c) {
+  closePage(); // a sidebar/globe selection returns from any open page
   const wasFocused = !!selected;
   selected = selected === c ? null : c;
   if (selected) {
@@ -650,7 +776,11 @@ el.addEventListener('click', () => {
   const hits = raycaster.intersectObjects(hubs);
   select(hits.length ? hits[0].object.userData.cluster : null);
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) select(selected); });
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (pageEl.classList.contains('show')) closePage();
+  else if (selected) select(selected);
+});
 
 function updateHover() {
   if (dragging) { hoverCluster = null; tooltip.style.display = 'none'; return; }

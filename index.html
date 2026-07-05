@@ -24,6 +24,36 @@
 
     <aside id="sidebar" aria-label="Pages"></aside>
 
+    <section id="page" aria-hidden="true">
+      <header class="pg-top">
+        <div class="pg-crumbs">
+          <button class="pg-cluster" id="pg-cluster"></button>
+          <span class="pg-sep">/</span>
+          <span class="pg-ptitle" id="pg-ptitle"></span>
+          <span class="pg-private">Private</span>
+        </div>
+        <div class="pg-tools">
+          <span class="pg-edited" id="pg-edited"></span>
+          <button class="pg-share">Share</button>
+          <button class="pg-tool" id="pg-more" aria-label="More actions">•••</button>
+          <button class="pg-tool pg-close" id="pg-close" aria-label="Back to globe">Back to globe</button>
+        </div>
+      </header>
+      <div class="pg-scroll">
+        <div class="pg-cover" id="pg-cover"></div>
+        <article class="pg-doc" id="pg-doc">
+          <h1 class="pg-title" id="pg-title" contenteditable="true" spellcheck="false" data-ph="Untitled"></h1>
+          <button class="pg-connected" id="pg-connected"></button>
+          <div class="pg-content" id="pg-content" contenteditable="true" spellcheck="false" data-ph="Write something, or link this note to the globe…"></div>
+          <div class="pg-getstarted">
+            <div class="pg-gs-label">Get started with</div>
+            <div class="pg-gs-row" id="pg-gs"></div>
+          </div>
+        </article>
+      </div>
+      <div class="pg-menu" id="pg-menu"></div>
+    </section>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
