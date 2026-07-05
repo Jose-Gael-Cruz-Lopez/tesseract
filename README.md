@@ -81,3 +81,10 @@ export default defineConfig({
 });
 ```
 
+Then build and publish the `dist/` folder:
+
+```bash
+npm run build
+git subtree push --prefix dist origin gh-pages
+# or: npx gh-pages -d dist
+```
