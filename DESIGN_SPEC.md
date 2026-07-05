@@ -14,3 +14,8 @@ PALETTE
 - Spoke links: rgba(214,219,245,0.40). Branch links: rgba(214,219,245,0.30).
 - Tether links: rgba(255,109,138,0.35). Tether particles: #ffc2cf.
 - Hub ball tint: the cluster's palette color lerped 55% toward warm ivory #fff3dd.
+
+TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus scale)
+- Solid cube: 26 units/side, MeshBasicMaterial #ff3355.
+- Wire cube A: 40/side, EdgesGeometry LineSegments, #ffc9d4, opacity 0.70.
+- Wire cube B: 56/side, #ffdbe3, opacity 0.35.
