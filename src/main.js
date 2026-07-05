@@ -74,3 +74,10 @@ function reportDrawCalls(tag) {
     );
     info.autoReset = true;
   })();
+}
+
+requestAnimationFrame(() => reportDrawCalls('first paint'));
+graph.onEngineStop(() => console.log('[second-brain-globe] simulation frozen'));
+
+// Dev handle for tuning bloom and inspecting the scene from the console.
+window.__SBG__ = { graph, bloomPass, renderer, focusState };
