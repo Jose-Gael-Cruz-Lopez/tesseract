@@ -41,3 +41,10 @@ export function startAnimation() {
     requestAnimationFrame(frame);
 
     if (last === null) last = now;
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    const mdt = dt * SPEED_MULTIPLIER;
+    t += mdt;
+
+    for (const s of registry.spinners) {
+      s.obj.rotation.x += s.speed.x * mdt;
