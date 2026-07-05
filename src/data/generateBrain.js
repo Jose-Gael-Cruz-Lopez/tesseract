@@ -23,3 +23,11 @@ export const CLUSTER_NAMES = [
   'Code',
   'Reading',
   'Health',
+  'Finance',
+  'Travel',
+  'Journal',
+  'Learning',
+];
+
+// mulberry32: tiny, fast, good-enough seeded PRNG (no dependency).
+function mulberry32(seed) {
