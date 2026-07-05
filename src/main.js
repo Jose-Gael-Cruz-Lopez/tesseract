@@ -40,3 +40,9 @@ window.addEventListener('resize', () => {
   const h = window.innerHeight;
   graph.width(w).height(h);
   graph.postProcessingComposer().setSize(w, h);
+  bloomPass.setSize(w, h);
+});
+
+// Resilience: a lost WebGL context gets a friendly reload message instead of
+// a frozen black canvas.
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
