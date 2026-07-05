@@ -71,3 +71,12 @@ function buildWireGlobe(group) {
 
   // One bright equator at 160 segments.
   group.add(new THREE.LineLoop(circleGeometry(R, 160), equatorMat));
+
+  // Radial fan: 144 spokes at y = 0 from r = 65 to r = 300, single draw call.
+  const spokes = 144;
+  const fanPositions = new Float32Array(spokes * 2 * 3);
+  for (let i = 0; i < spokes; i++) {
+    const a = (i / spokes) * Math.PI * 2;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    fanPositions.set([cos * 65, 0, sin * 65, cos * R, 0, sin * R], i * 6);
