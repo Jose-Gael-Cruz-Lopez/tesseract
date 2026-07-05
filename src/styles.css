@@ -1,0 +1,10 @@
+:root {
+  --bg: #060310;
+  --ink: #eef1ff;
+  --ink-dim: #8b90ad;
+  --ink-faint: #6d7290;
+  --font: 'Helvetica Neue', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+}
+
+* {
+  margin: 0;
