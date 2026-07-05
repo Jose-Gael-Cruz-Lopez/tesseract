@@ -56,3 +56,8 @@ HUB BALLS (custom object; these must read as solid spheres, not sprites)
 LEAVES (library-default spheres)
 - nodeRelSize 4, nodeOpacity 0.9, nodeResolution 12. Sized by val, colored per node.
 
+TETHERS AND ENERGY
+- Tethers use linkCurvature 0.18 with a random linkCurveRotation in [0, 2*PI).
+- linkDirectionalParticles 2 per tether, width 3.5, color #ffc2cf,
+  speed random per link in [0.004, 0.008], random initial offset.
+- Spokes and branches are straight, no particles.
