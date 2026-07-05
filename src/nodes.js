@@ -49,3 +49,11 @@ export function buildTesseract() {
   const wireA = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, 40)),
     wireAMat
+  );
+
+  const wireBMat = new THREE.LineBasicMaterial({
+    color: 0xffdbe3,
+    transparent: true,
+    opacity: 0.35,
+  });
+  const wireB = new THREE.LineSegments(
