@@ -3,8 +3,38 @@
 import ForceGraph3D from '3d-force-graph';
 import { focusState, REDUCED_MOTION } from './animate.js';
 import { buildTesseract, buildHubBall } from './nodes.js';
+import { GLOBE_RADIUS } from './data/generateBrain.js';
 
 export const CAMERA_HOME = { x: 0, y: 150, z: 780 };
+
+// Keep every unpinned node inside the globe: a d3-force that clamps each
+// node's distance from origin to <= maxR every tick, so no dot (and therefore
+// no link between dots) ever pokes through the wireframe shell.
+function radialBound(maxR) {
+  let nodes = [];
+  const force = () => {
+    for (const n of nodes) {
+      if (n.fx != null) continue; // core + hubs are pinned and already inside
+      const d = Math.hypot(n.x || 0, n.y || 0, n.z || 0);
+      if (d > maxR) {
+        const s = maxR / d;
+        n.x *= s;
+        n.y *= s;
+        n.z *= s;
+        // bleed off the outward velocity so it settles against the shell
+        if (n.vx != null) {
+          n.vx *= 0.4;
+          n.vy *= 0.4;
+          n.vz *= 0.4;
+        }
+      }
+    }
+  };
+  force.initialize = (n) => {
+    nodes = n;
+  };
+  return force;
+}
 
 const LINK_COLORS = {
   tether: 'rgba(255,109,138,0.35)',
@@ -94,6 +124,8 @@ export function createGraph(container, data) {
     .strength((node) =>
       node.type === 'leaf' || node.type === 'branch' ? -35 : -160
     );
+  // Everything stays inside the shell (0.95 R leaves a hair of margin).
+  graph.d3Force('bound', radialBound(GLOBE_RADIUS * 0.95));
 
   graph.graphData(data);
 

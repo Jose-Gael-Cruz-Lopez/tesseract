@@ -84,8 +84,11 @@ export function buildTesseract() {
   // No glow sprite: the nucleus is a solid + wireframe tesseract, no bloom.
   group.add(solid, wireA, wireB, ...shells);
 
-  // Continuous rotation speeds in rad/s, straight from the spec.
+  // Continuous rotation speeds in rad/s. The whole group also spins as one
+  // about the sphere's center, so every cube ("square") rotates together on
+  // top of its own motion.
   registry.spinners.push(
+    { tag: 'tesseract', obj: group, speed: { x: 0.03, y: 0.09, z: 0.02 } },
     { tag: 'tesseract', obj: solid, speed: { x: 0.35, y: 0.5, z: 0 } },
     { tag: 'tesseract', obj: wireA, speed: { x: -0.22, y: 0, z: 0.3 } },
     { tag: 'tesseract', obj: wireB, speed: { x: 0.1, y: 0.16, z: 0 } },

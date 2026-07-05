@@ -27,8 +27,10 @@ TESSERACT NUCLEUS (the core node's custom object; deliberately small, nucleus sc
   MeshLambertMaterial so it reads as a shaded 3D cube.
 - The outermost shell (90) is 0.30 R. Do not exceed this. The nucleus must read small
   relative to the globe.
-- Continuous rotation, radians/sec: solid (x .35, y .50), wireA (x -.22, z .30),
-  wireB (y .16, x .10), shellA (y .12, x .05), shellB (z -.08, y -.05), shellC (x .04, z .03).
+- Continuous rotation, radians/sec: the whole group (x .03, y .09, z .02) so every cube
+  spins together about the sphere's center, plus each cube's own motion:
+  solid (x .35, y .50), wireA (x -.22, z .30), wireB (y .16, x .10),
+  shellA (y .12, x .05), shellB (z -.08, y -.05), shellC (x .04, z .03).
 
 ORBITAL RINGS (thin crimson tori around the nucleus)
 - Radii 115 / 150 / 205 / 250, tube thickness 1.2 / 1.0 / 0.9 / 0.8.
@@ -41,13 +43,16 @@ GRAPH DATA (12 clusters)
   Finance, Travel, Journal, Learning.
 - One core node: id "core", type "core", fixed at fx = fy = fz = 0.
 - 12 hub nodes: type "hub", each with a weight in [0.9, 1.3]. Positions: fibonacci-sphere
-  directions with jitter 0.22, at radius 0.55 R to 0.90 R from origin. Fixed via fx/fy/fz.
+  directions with jitter 0.22, at radius 0.45 R to 0.70 R from origin. Fixed via fx/fy/fz.
+  (Pulled in from the shell so clusters have room to fan out and stay inside the globe.)
 - Leaves: 16 to 30 per hub, type "leaf". val distribution: 70% val 1, 20% val 2, 10% val 5.
   Color: random from node palette.
 - Branches: ~25% of leaves get one grandchild, type "branch", val 1.
 - Links: kind "tether" (core to each hub), kind "spoke" (hub to leaf, per-link distance
-  random 25 to 65), kind "branch" (leaf to grandchild, distance random 15 to 30).
+  random 18 to 48), kind "branch" (leaf to grandchild, distance random 12 to 24).
 - All randomness comes from a seeded RNG so layouts are reproducible.
+- Containment: a radial-bound d3 force clamps every unpinned node's distance from origin
+  to <= 0.95 R each tick, so no dot (and therefore no link) ever pokes outside the globe.
 
 HUB BALLS (custom object; solid shaded 3D spheres, no glow)
 - SphereGeometry radius 11 * weight, 24 x 24 segments.

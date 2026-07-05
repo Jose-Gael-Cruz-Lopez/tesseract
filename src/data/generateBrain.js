@@ -77,7 +77,10 @@ export function generateBrain(seed = 42) {
     const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
     dir = dir.map((c) => c / len);
 
-    const radius = range(0.55 * R, 0.9 * R);
+    // Hubs sit well inside the shell so their leaf clusters have room to
+    // spread without poking through the globe (a radial clamp force in
+    // graph.js is the hard guarantee).
+    const radius = range(0.45 * R, 0.7 * R);
     const [hx, hy, hz] = dir.map((c) => c * radius);
     const hubId = `hub-${i}`;
     const clusterColor = NODE_PALETTE[i % NODE_PALETTE.length];
@@ -134,7 +137,7 @@ export function generateBrain(seed = 42) {
         target: leafId,
         kind: 'spoke',
         cluster: name,
-        distance: range(25, 65),
+        distance: range(18, 48),
       });
 
       if (rand() < 0.25) {
@@ -156,7 +159,7 @@ export function generateBrain(seed = 42) {
           target: branchId,
           kind: 'branch',
           cluster: name,
-          distance: range(15, 30),
+          distance: range(12, 24),
         });
       }
     }
