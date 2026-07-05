@@ -114,3 +114,11 @@ export function generateBrain(seed = 42) {
       const roll = rand();
       const val = roll < 0.7 ? 1 : roll < 0.9 ? 2 : 5;
       const num = String(j + 1).padStart(2, '0');
+
+      nodes.push({
+        id: leafId,
+        type: 'leaf',
+        cluster: name,
+        label: `${name} · node ${num}`,
+        val,
+        color: pick(NODE_PALETTE),
