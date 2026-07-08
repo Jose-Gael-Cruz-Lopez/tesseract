@@ -597,6 +597,13 @@ function setExpanded(c, open) {
   c.itemEl.classList.toggle('open', open);
 }
 
+// Retract / restore the sidebar and remember the choice across reloads.
+const SIDEBAR_KEY = 'mnemo.sidebarCollapsed';
+function setSidebarCollapsed(collapsed) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  try { localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
