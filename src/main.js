@@ -653,6 +653,53 @@ function createClusterRow(c) {
   return item;
 }
 
+// A unique page URL within a cluster (so localStorage page keys don't collide).
+function uniqueUrl(cluster, title) {
+  const base = '#/' + slugify(cluster.name) + '/' + (slugify(title) || 'untitled');
+  const used = new Set(clusters.flatMap((c) => c.pnodes.map((n) => n.url)));
+  let url = base, i = 2;
+  while (used.has(url)) url = base + '-' + (i++);
+  return url;
+}
+
+// Rebuild a cluster's point clouds + connector lines from its current pnodes.
+// Called after a node is added or removed, since the buffers are fixed-size.
+// The major/minor split and colors are derived from the nodes themselves.
+function rebuildClusterGeometry(c) {
+  const majIdx = [], minIdx = [], majCol = [], minCol = [];
+  c.pnodes.forEach((n, k) => {
+    const col = n.col || [1, 1, 1];
+    if (n.major) { majIdx.push(k); majCol.push(col[0], col[1], col[2]); }
+    else { minIdx.push(k); minCol.push(col[0], col[1], col[2]); }
+  });
+  c.majIdx = majIdx; c.minIdx = minIdx; c.majCol = majCol; c.minCol = minCol;
+  const flat = (idxs) => { const a = []; idxs.forEach((ix) => { const q = c.pnodes[ix].pos; a.push(q.x, q.y, q.z); }); return a; };
+  universe.remove(c.major, c.minor, c.lineSeg);
+  c.major.geometry.dispose(); c.major.material.dispose();
+  c.minor.geometry.dispose(); c.minor.material.dispose();
+  c.lineSeg.geometry.dispose(); c.lineSeg.material.dispose();
+
+  const major = makePoints(flat(c.majIdx), c.majCol, 0.5, 0.95);
+  const minor = makePoints(flat(c.minIdx), c.minCol, 0.26, 0.9);
+  const linePts = new Float32Array(c.pnodes.length * 6);
+  c.pnodes.forEach((n, k) => {
+    const from = n.parent < 0 ? c.group.position : c.pnodes[n.parent].pos;
+    linePts.set([from.x, from.y, from.z, n.pos.x, n.pos.y, n.pos.z], k * 6);
+  });
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePts, 3));
+  const lineSeg = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0xd6dbf5, transparent: true, opacity: c.baseLineOp }));
+  universe.add(major, minor, lineSeg);
+
+  c.major = major; c.minor = minor; c.lineSeg = lineSeg;
+  c.majorMat = major.material; c.minorMat = minor.material; c.lineMat = lineSeg.material;
+  // Keep the currently-eased opacity so nothing pops when we swap geometry.
+  const rv = c.revealFactor ?? 1;
+  c.majorMat.opacity = (c._majOp ?? c.baseMajOp) * rv;
+  c.minorMat.opacity = (c._minOp ?? c.baseMinOp) * rv;
+  c.lineMat.opacity = (c._lineOp ?? c.baseLineOp) * rv;
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
