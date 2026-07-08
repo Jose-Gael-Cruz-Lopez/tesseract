@@ -906,6 +906,48 @@ function openClusterMenu(anchor, c) {
   });
 }
 
+// Drop a temporary inline text field into the sidebar; commit on Enter/blur.
+function promptInlineName(container, placeholder, onCommit) {
+  const row = elh('div', 'sb-inputrow');
+  const input = elh('input', 'sb-nameinput');
+  input.type = 'text';
+  input.placeholder = placeholder;
+  row.appendChild(input);
+  container.appendChild(row);
+  input.focus();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    row.remove();
+    if (commit && val) onCommit(val);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+function promptNewCluster() {
+  if (document.body.classList.contains('sidebar-collapsed')) setSidebarCollapsed(false);
+  promptInlineName(sbScroll, 'New cluster name…', (name) => {
+    const c = createCluster(name);
+    saveUserGraph();
+    select(c); // fly the camera to the fresh hub
+  });
+}
+
+function promptNewSub(cluster) {
+  setExpanded(cluster, true);
+  promptInlineName(cluster.childrenEl, 'New sub-page…', (title) => {
+    const node = addSubNode(cluster, title);
+    saveUserGraph();
+    openNode(node);
+  });
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
