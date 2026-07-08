@@ -1,0 +1,193 @@
+/* "Create your first teamspace" modal (Task 20). Reference: 22.png.
+   Colors come exclusively from src/styles/tokens.css — no hex literals. */
+
+.ts-modal {
+  width: 460px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- banner: avatars + headline + close ---------- */
+.ts-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-cream);
+  border-bottom: 1px solid var(--divider);
+  border-radius: 8px 8px 0 0;
+}
+
+.ts-banner-avatars {
+  flex: none;
+  width: 64px;
+  color: var(--text-2);
+}
+
+.ts-banner-avatars svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ts-banner-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.ts-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ts-close:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- body ---------- */
+.ts-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 32px 4px;
+}
+
+.ts-icon-tile {
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 10px;
+  background: var(--chip-gray);
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ts-icon-tile:hover {
+  background: var(--bg-active);
+}
+
+.ts-icon-caption {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ts-label {
+  align-self: flex-start;
+  margin-top: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.ts-name-input,
+.ts-desc-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+
+.ts-desc-input {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.ts-name-input:focus,
+.ts-desc-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.ts-name-sub {
+  align-self: flex-start;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ts-access-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.ts-access-icon {
+  flex: none;
+  display: flex;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+/* ---------- footer ---------- */
+.ts-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 32px 20px;
+}
+
+.ts-learn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ts-learn:hover {
+  color: var(--text-2);
+}
+
+.ts-create {
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  background: var(--blue);
+  color: var(--text-on-blue);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ts-create:hover {
+  background: var(--blue-hover);
+}
+
+.ts-create:disabled {
+  background: var(--chip-gray);
+  color: var(--text-3);
+  cursor: default;
+}
