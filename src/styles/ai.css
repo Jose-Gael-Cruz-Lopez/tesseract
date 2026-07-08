@@ -1,0 +1,268 @@
+/* AI writing surface (src/ui/ai.js): the floating bar mounted at the top of
+   a page body, its draft-template dropdown, the streaming/done bar states,
+   and the completion menu. Colors only via tokens from tokens.css. */
+
+/* ---------------------------------------------------------------- bar -- */
+
+.ai-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 24px;
+  padding: 10px 14px;
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ai-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-bar-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--blue);
+}
+
+.ai-bar-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-bar-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+  background: none;
+}
+
+.ai-bar-send {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.ai-bar-send:hover {
+  background: var(--bg-hover);
+}
+
+.ai-bar-send.is-active {
+  color: var(--blue);
+}
+
+/* ------------------------------------------------------ streaming state -- */
+
+.ai-bar-status {
+  flex: 1 1 auto;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.ai-bar-dots {
+  display: inline-block;
+  animation: ai-dots-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-bar-dots {
+    animation: none;
+  }
+}
+
+@keyframes ai-dots-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.ai-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.ai-bar-tryagain,
+.ai-bar-stop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.ai-bar-tryagain:hover,
+.ai-bar-stop:hover {
+  color: var(--text);
+}
+
+.ai-bar-glyph {
+  font-size: 13px;
+}
+
+.ai-bar-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ----------------------------------------------------------- done state -- */
+
+.ai-bar-disclaimer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ai-bar-disclaimer-text {
+  flex: 1 1 auto;
+}
+
+.ai-bar-learnmore {
+  display: inline;
+  color: var(--text-3);
+  text-decoration: underline;
+}
+
+.ai-bar-feedback {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.ai-bar-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.ai-bar-thumb:hover {
+  background: var(--bg-hover);
+}
+
+/* --------------------------------------------------------- output list -- */
+
+.ai-output {
+  margin: 4px 0;
+  padding-left: 1.4em;
+}
+
+.ai-output:empty {
+  display: none;
+  margin: 0;
+}
+
+.ai-output li {
+  list-style: disc;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.5;
+}
+
+.ai-output.ai-highlight li {
+  background: var(--bg-blue-light);
+}
+
+/* ------------------------------------------------- draft-template menu -- */
+
+.ai-menu {
+  width: 320px;
+  padding: 6px;
+}
+
+.ai-menu-label {
+  padding: 6px 8px 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ai-menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+}
+
+.ai-menu-row:hover {
+  background: var(--bg-hover);
+}
+
+.ai-menu-row-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--text-2);
+}
+
+.ai-menu-row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-menu-dots {
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.ai-menu-row-label {
+  flex: 1 1 auto;
+}
+
+.ai-menu-row-chevron {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+
+.ai-menu-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--divider);
+}
+
+/* ------------------------------------------------------- completion menu -- */
+
+.ai-completion-menu {
+  width: 260px;
+  padding: 6px;
+}
+
+.ai-completion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+}
+
+.ai-completion-row:hover {
+  background: var(--bg-hover);
+}
+
+.ai-completion-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
