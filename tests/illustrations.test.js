@@ -61,8 +61,17 @@ test('every illustration uses a thin 1.5px stroke, ink-sketch weight', () => {
 });
 
 test('trioAvatars draws three distinct round faces', () => {
-  const circles = (ART.trioAvatars.match(/<(circle|ellipse)[ >]/g) || []).length;
-  expect(circles).toBeGreaterThanOrEqual(3);
+  // Each face's head is a hand-drawn wobble: a closed <path> (ends in "Z")
+  // built from several quadratic-bezier curves that approximate a circle.
+  // Eye-dot <circle> marks are incidental decoration, not the faces
+  // themselves, so we match the head-path pattern directly rather than
+  // counting circle/ellipse primitives.
+  const headPaths = (
+    ART.trioAvatars.match(
+      /<path d="M[\d.-]+ [\d.-]+(?: Q[\d.-]+ [\d.-]+ [\d.-]+ [\d.-]+){3,} Z" \/>/g,
+    ) || []
+  ).length;
+  expect(headPaths).toBe(3);
 });
 
 test('commentsEmpty draws two speech bubbles', () => {
