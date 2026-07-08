@@ -255,10 +255,12 @@ for (let i = 0; i < clusterNames.length; i++) {
   const cluster = {
     name: clusterNames[i], group: g, hub, hubMat, hubBase,
     lineMat, majorMat: major.material, minorMat: minor.material,
-    major, minor, lineSeg, pnodes, majIdx, minIdx,
+    major, minor, lineSeg, pnodes, majIdx, minIdx, majCol, minCol,
     baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
     nodeCount: count,
     maxOffset: maxOff,
+    scale, dist, budget,
+    accentIdx: i % paletteHex.length,
     accent: '#' + paletteHex[i % paletteHex.length].toString(16).padStart(6, '0'),
     phase: rand() * Math.PI * 2,
   };
