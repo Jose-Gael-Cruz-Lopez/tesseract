@@ -537,7 +537,45 @@ body.sidebar-collapsed #page .pg-top { padding-left: 52px; }
 .pg-close { color: #9b9ba3; }
 
 .pg-scroll { flex: 1; overflow-y: auto; }
-.pg-cover { height: 190px; width: 100%; }
+
+.pg-cover {
+  position: relative;
+  height: 200px;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Change / Remove pills, top-right of the cover, revealed on hover */
+.pg-cover-tools {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(20, 18, 24, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.pg-cover:hover .pg-cover-tools { opacity: 1; }
+
+.pg-cover-btn {
+  background: transparent;
+  border: 0;
+  color: #e2e2e6;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pg-cover-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
 .pg-doc {
   max-width: 720px;
@@ -545,6 +583,216 @@ body.sidebar-collapsed #page .pg-top { padding-left: 52px; }
   padding: 0 60px 120px;
   transform: translateY(-40px);
 }
+
+/* Page icon overlapping the bottom of the cover, Notion-style */
+.pg-icon {
+  display: block;
+  width: 78px;
+  height: 78px;
+  margin: -30px 0 4px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.pg-icon:hover { background: rgba(255, 255, 255, 0.06); }
+.pg-icon .pg-emoji { font-size: 66px; line-height: 78px; }
+.pg-icon img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.pg-icon .pg-svgicon { display: flex; align-items: center; justify-content: center; height: 78px; }
+.pg-icon .pg-svgicon svg { width: 60px; height: 60px; }
+
+/* "Add icon" ghost button; only present when the page has no icon */
+.pg-addbar { height: 26px; margin-top: 8px; }
+.pg-doc:not(.no-icon) .pg-addbar { display: none; }
+
+.pg-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: #7d7d86;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pg-doc:hover .pg-add { opacity: 1; }
+.pg-add:hover { background: rgba(255, 255, 255, 0.06); color: #c7c7cd; }
+
+/* ---------- cover / icon picker popovers ---------- */
+.pg-pop {
+  position: fixed;
+  z-index: 60;
+  border-radius: 10px;
+  background: #252329;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #e2e2e6;
+  overflow: hidden;
+}
+
+.pg-pop-cover { width: 340px; }
+.pg-pop-icon { width: 372px; }
+
+.pg-pop-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pg-tab {
+  background: transparent;
+  border: 0;
+  color: #9b9ba3;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 9px 8px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.pg-tab:hover { color: #e2e2e6; }
+.pg-tab.active { color: #fff; border-bottom-color: #fff; }
+.pg-tab-remove { margin-left: auto; color: #9b9ba3; border-bottom: 0; }
+.pg-tab-remove:hover { color: #ff8080; }
+
+.pg-pop-body { padding: 12px; max-height: 340px; overflow-y: auto; }
+
+/* cover gallery */
+.pg-cover-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+.pg-cover-sw {
+  height: 48px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pg-cover-sw:hover { outline: 2px solid rgba(255, 255, 255, 0.35); outline-offset: 1px; }
+.pg-cover-sw.active { outline: 2px solid #6d9bff; outline-offset: 1px; }
+
+/* link tab */
+.pg-link-wrap { display: flex; gap: 6px; }
+
+.pg-link-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.pg-link-input::placeholder { color: #6f6f78; }
+
+.pg-link-btn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 7px;
+  background: #4b6cb7;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pg-link-btn:hover { background: #5a7bc8; }
+
+/* emoji tab */
+.pg-emoji-search {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.pg-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+
+.pg-emoji-btn {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pg-emoji-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* icons tab */
+.pg-swatches { display: flex; gap: 7px; margin-bottom: 12px; }
+
+.pg-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pg-swatch.active { outline: 2px solid #fff; outline-offset: 2px; }
+
+.pg-icon-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+
+.pg-icon-btn {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.pg-icon-btn svg { width: 22px; height: 22px; }
+.pg-icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* upload tab */
+.pg-upload-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0; }
+
+.pg-upload-btn {
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pg-upload-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.pg-upload-note { color: #7d7d86; font-size: 12px; text-align: center; }
 
 .pg-doc.wide { max-width: 1100px; }
 .pg-doc.small { font-size: 14px; }
