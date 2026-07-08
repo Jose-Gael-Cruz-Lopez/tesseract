@@ -34,3 +34,4 @@ pnpm-debug.log*
 
 # Local dev references (screenshots, not shipped)
 reference/
+.superpowers/
