@@ -1,0 +1,79 @@
+/*
+ * Mnemosphere design tokens.
+ *
+ * Every CSS color used by a surface module must come from one of these
+ * custom properties — no hex literals outside this file (exceptions:
+ * globe.css deep-space values, and gradients baked into cover presets in
+ * decor-data.js). Token *names* are frozen across the whole redesign;
+ * Task 24 may refine exact values by sampling the reference screenshots,
+ * but must not rename or remove a token here.
+ */
+
+:root {
+  --bg: #ffffff;
+  --bg-sidebar: #fbfbfa;
+  --bg-cream: #f7f6f3;
+  --bg-hover: rgba(0, 0, 0, .04);
+  --bg-active: rgba(0, 0, 0, .06);
+  --bg-blue-light: #e7f3f8;
+
+  --text: #37352f;
+  --text-2: rgba(55, 53, 47, .65);
+  --text-3: rgba(55, 53, 47, .45);
+
+  --border: rgba(55, 53, 47, .16);
+  --divider: rgba(55, 53, 47, .09);
+
+  --blue: #2383e2;
+  --blue-hover: #0077d4;
+
+  --cta-red-bg: #fdecec;
+  --cta-red-text: #eb5757;
+  --cta-red-border: rgba(235, 87, 87, .6);
+
+  --chip-gray: #e3e2e0;
+  --chip-blue: #d3e5ef;
+  --chip-green: #dbeddb;
+  --chip-yellow: #fdecc8;
+  --chip-red: #ffe2dd;
+
+  --scrim: rgba(15, 15, 15, .6);
+  --pop-bg: #ffffff;
+  --pop-shadow: 0 0 0 1px rgba(15, 15, 15, .05), 0 3px 6px rgba(15, 15, 15, .1), 0 9px 24px rgba(15, 15, 15, .2);
+
+  --sidebar-w: 240px;
+  --topbar-h: 45px;
+  --row-h: 27px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-serif: Lyon-Text, Georgia, ui-serif, serif;
+  --font-mono: iawriter-mono, Nitti, Menlo, Courier, monospace;
+}
+
+:root[data-theme="dark"] {
+  --bg: #191919;
+  --bg-sidebar: #202020;
+  --bg-cream: #191919;
+  --bg-hover: rgba(255, 255, 255, .055);
+  --bg-active: rgba(255, 255, 255, .09);
+  --bg-blue-light: rgba(35, 131, 226, .15);
+
+  --text: rgba(255, 255, 255, .9);
+  --text-2: rgba(255, 255, 255, .5);
+  --text-3: rgba(255, 255, 255, .35);
+
+  --border: rgba(255, 255, 255, .13);
+  --divider: rgba(255, 255, 255, .07);
+
+  --cta-red-bg: rgba(235, 87, 87, .12);
+  --cta-red-text: #ff7369;
+
+  --chip-gray: #5a5a5a;
+  --chip-blue: #28456c;
+  --chip-green: #2b593f;
+  --chip-yellow: #89632a;
+  --chip-red: #6e3630;
+
+  --pop-bg: #252525;
+  --pop-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 3px 6px rgba(0, 0, 0, .3), 0 9px 24px rgba(0, 0, 0, .5);
+}
