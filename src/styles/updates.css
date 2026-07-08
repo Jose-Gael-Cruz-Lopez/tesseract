@@ -1,0 +1,101 @@
+/* Updates inbox popover (src/ui/updates.js). Colors come exclusively from
+   the tokens in src/styles/tokens.css — no hex literals here. */
+
+.upd-pop {
+  width: 420px;
+  max-width: calc(100vw - 16px);
+}
+
+.upd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 6px 0 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.upd-tabs {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.upd-tab {
+  position: relative;
+  padding: 0 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-bottom: 2px solid transparent;
+}
+
+.upd-tab:hover {
+  color: var(--text);
+}
+
+.upd-tab-active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+
+.upd-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.upd-info:hover {
+  color: var(--text-2);
+}
+
+.upd-gear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  color: var(--text-2);
+}
+
+.upd-gear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.upd-body {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.upd-empty-art {
+  width: 96px;
+  color: var(--text-3);
+}
+
+.upd-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.upd-empty-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  max-width: 260px;
+}
