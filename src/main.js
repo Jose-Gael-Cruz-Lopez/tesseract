@@ -4,6 +4,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/modals.css';
 import './styles/shell.css';
+import './styles/sidebar.css';
 import './styles/globe.css';
 
 import { initTheme } from './ui/theme.js';
