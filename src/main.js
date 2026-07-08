@@ -992,6 +992,11 @@ function loadUserGraph() {
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
+  const collapseBtn = elh('button', 'sb-collapse', ICON.collapse);
+  collapseBtn.setAttribute('aria-label', 'Collapse sidebar');
+  collapseBtn.title = 'Collapse sidebar  (⌘\\)';
+  collapseBtn.addEventListener('click', () => setSidebarCollapsed(true));
+  header.appendChild(collapseBtn);
 
   const nav = elh('div', 'sb-nav');
   const home = elh('button', 'sb-home', ICON.home + '<span>Home</span>');
@@ -1007,36 +1012,37 @@ function buildSidebar() {
   searchBtn.addEventListener('click', () => searchInput.focus());
 
   const scroll = elh('div', 'sb-scroll');
+  sbScroll = scroll;
   scroll.appendChild(elh('div', 'sb-section', 'Clusters'));
-  clusters.forEach((c) => {
-    const item = elh('div', 'sb-item');
-    const tw = elh('span', 'sb-twisty', ICON.chevron);
-    item.append(tw, elh('span', 'sb-icon', ICON.page), labelSpan(c.name));
-    tw.addEventListener('click', (e) => { e.stopPropagation(); setExpanded(c, !c.expandedState); });
-    item.addEventListener('click', () => select(c));
-
-    const children = elh('div', 'sb-children');
-    children.style.display = 'none';
-    c.subEls = [];
-    c.pnodes.forEach((node) => {
-      const sub = elh('div', 'sb-sub');
-      sub.append(elh('span', 'sb-icon', ICON.page), labelSpan(node.title));
-      sub.title = node.title;
-      sub.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
-      children.appendChild(sub);
-      c.subEls.push(sub);
-      node.subEl = sub;
-    });
-    scroll.append(item, children);
-    c.itemEl = item;
-    c.childrenEl = children;
-    c.expandedState = false;
-  });
+  clusters.forEach((c) => createClusterRow(c));
 
   const footer = elh('div', 'sb-footer');
-  footer.appendChild(elh('button', 'sb-new', ICON.pencil + '<span>New</span>'));
+  const newBtn = elh('button', 'sb-new', ICON.pencil + '<span>New</span>');
+  newBtn.addEventListener('click', () => promptNewCluster());
+  footer.appendChild(newBtn);
 
   sidebarEl.append(header, nav, searchWrap, scroll, footer);
+
+  // Floating button to bring the sidebar back once it has slid away.
+  const reopenBtn = elh('button', 'sb-reopen', ICON.expand);
+  reopenBtn.setAttribute('aria-label', 'Open sidebar');
+  reopenBtn.title = 'Open sidebar  (⌘\\)';
+  reopenBtn.addEventListener('click', () => setSidebarCollapsed(false));
+  document.body.appendChild(reopenBtn);
+
+  // Restore the last state without animating the panel in on first paint.
+  const startCollapsed = (() => {
+    try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { return false; }
+  })();
+  if (startCollapsed) document.body.classList.add('sidebar-collapsed');
+
+  // ⌘\ / Ctrl+\ toggles the sidebar (Notion's shortcut).
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+      e.preventDefault();
+      setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+    }
+  });
 
   // Live filter as you type (Notion-style search).
   searchInput.addEventListener('input', () => {
