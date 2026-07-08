@@ -210,8 +210,11 @@ for (let i = 0; i < clusterNames.length; i++) {
     maxOff = Math.max(maxOff, p.length());
     const col = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
     const leafIdx = pnodes.length;
-    pnodes.push({ pos: hubPos.clone().add(p), vel: new THREE.Vector3(), rest: p.clone(), parent: -1 });
-    if (rand() < 0.3) { majIdx.push(leafIdx); majCol.push(col.r, col.g, col.b); }
+    // col/major are stamped on the node too, so a cluster's geometry can be
+    // rebuilt from pnodes alone after a node is added or removed.
+    const isMaj = rand() < 0.3;
+    pnodes.push({ pos: hubPos.clone().add(p), vel: new THREE.Vector3(), rest: p.clone(), parent: -1, col: [col.r, col.g, col.b], major: isMaj });
+    if (isMaj) { majIdx.push(leafIdx); majCol.push(col.r, col.g, col.b); }
     else { minIdx.push(leafIdx); minCol.push(col.r, col.g, col.b); }
     /* occasional two-hop branch, like the reference */
     if (rand() < 0.28) {
@@ -219,7 +222,7 @@ for (let i = 0; i < clusterNames.length; i++) {
       if (bAbs.length() > budget) bAbs.setLength(budget); // keep the branch inside too
       maxOff = Math.max(maxOff, bAbs.length());
       const col2 = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
-      pnodes.push({ pos: hubPos.clone().add(bAbs), vel: new THREE.Vector3(), rest: bAbs.clone().sub(p), parent: leafIdx });
+      pnodes.push({ pos: hubPos.clone().add(bAbs), vel: new THREE.Vector3(), rest: bAbs.clone().sub(p), parent: leafIdx, col: [col2.r, col2.g, col2.b], major: false });
       minIdx.push(pnodes.length - 1); minCol.push(col2.r, col2.g, col2.b);
     }
   }
