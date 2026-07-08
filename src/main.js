@@ -1,8 +1,8 @@
 import './styles.css';
 
 import * as THREE from 'three';
-import { makeDotTexture, buildTesseract } from './nodes.js';
-import { COVER_PRESETS, ICON_SET, ICON_COLORS, EMOJI } from './decor-data.js';
+import { makeDotTexture, buildTesseract } from './globe/nodes.js';
+import { COVER_PRESETS, ICON_SET, ICON_COLORS, EMOJI } from './data/decor-data.js';
 
 // Match the reference's r128 color look: no sRGB<->linear conversion, raw
 // output. (three r152+ enables color management by default.)
