@@ -21,6 +21,14 @@ export const COVER_PRESETS = [
   { id: 'forest', label: 'Forest',  type: 'gradient', css: 'linear-gradient(120deg,#11998e,#38ef7d)' },
   { id: 'plum',   label: 'Plum',    type: 'gradient', css: 'linear-gradient(120deg,#403b4a,#e7e9bb)' },
   { id: 'night',  label: 'Night',   type: 'gradient', css: 'linear-gradient(120deg,#232526,#414345)' },
+  // Presets referenced by the seed workspace (Personal Home / Reading List).
+  { id: 'gradient-red', label: 'Red gradient', type: 'gradient', css: 'linear-gradient(120deg,#ff6a5f,#c31432)' },
+  // "photo-books": warm photo-style stand-in — soft amber wash over dark book-spine stripes.
+  { id: 'photo-books', label: 'Books', type: 'gradient',
+    css: 'linear-gradient(160deg,rgba(255,196,120,.35),rgba(46,26,12,.55)),' +
+      'linear-gradient(90deg,#6b4226 0 9%,#8a5a30 9% 16%,#4f3018 16% 27%,#a06a38 27% 34%,' +
+      '#5d3b22 34% 45%,#8f5c33 45% 53%,#43290f 53% 64%,#9c6a3a 64% 71%,#6e4527 71% 82%,' +
+      '#855430 82% 90%,#52321b 90% 100%)' },
 ];
 
 // Tint options offered on the Icons tab (applied to the line-icon's stroke).
