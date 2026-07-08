@@ -50,9 +50,27 @@ describe('openPopover', () => {
   test('positions itself from the anchor rect, offset below by default', () => {
     openPopover(anchor, { build: () => {} });
     const pop = document.querySelector('.pop-root');
-    expect(pop.style.position).toBe('absolute');
+    expect(pop.style.position).toBe('fixed');
     expect(parseFloat(pop.style.left)).toBe(100); // anchor.left
     expect(parseFloat(pop.style.top)).toBe(226); // anchor.bottom (220) + default offset (6)
+  });
+
+  test('positions relative to the viewport, unaffected by page scroll offset', () => {
+    // getBoundingClientRect() is always viewport-relative. `.pop-root` must
+    // stay position:fixed so left/top (computed straight from the rect) line
+    // up with no scrollX/scrollY conversion — a regression guard for the
+    // "absolute + viewport-relative rect" bug (popover renders offset by the
+    // scroll position once the page has scrolled).
+    window.scrollTo(500, 1000);
+    try {
+      openPopover(anchor, { build: () => {} });
+      const pop = document.querySelector('.pop-root');
+      expect(pop.style.position).toBe('fixed');
+      expect(parseFloat(pop.style.left)).toBe(100); // anchor.left, same as with no scroll
+      expect(parseFloat(pop.style.top)).toBe(226); // anchor.bottom (220) + default offset (6)
+    } finally {
+      window.scrollTo(0, 0);
+    }
   });
 
   test('clamps horizontally so it never overflows the right edge of the viewport', () => {
@@ -159,6 +177,14 @@ describe('toast', () => {
     const chip = document.querySelector('.toast-chip');
     expect(chip).not.toBeNull();
     expect(chip.textContent).toBe('hi');
+  });
+
+  test('marks the chip .is-visible so it is revealed regardless of which ' +
+    'stylesheet\'s base .toast-chip rule (this one, or Task 2\'s base.css) ' +
+    'wins the cascade', () => {
+    toast('hi');
+    const chip = document.querySelector('.toast-chip');
+    expect(chip.classList.contains('is-visible')).toBe(true);
   });
 
   test('auto-removes after 2.4s', () => {

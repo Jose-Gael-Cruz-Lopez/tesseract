@@ -64,9 +64,12 @@ export function openPopover(anchor, { className, build, placement = 'bottom-star
 
   if (typeof build === 'function') build(root, close);
 
+  // getBoundingClientRect() is viewport-relative, so `.pop-root` must be
+  // position:fixed (see modals.css) — position:absolute would measure
+  // left/top from the document origin and drift by the scroll offset.
   const rect = anchor.getBoundingClientRect();
   const { left, top } = positionFromAnchor(rect, root.offsetWidth, root.offsetHeight, placement, offset);
-  root.style.position = 'absolute';
+  root.style.position = 'fixed';
   root.style.left = `${left}px`;
   root.style.top = `${top}px`;
 
@@ -116,5 +119,9 @@ export function toast(message) {
   const chip = el('div', 'toast-chip');
   chip.textContent = message;
   document.body.appendChild(chip);
+  // `.toast-chip` starts hidden (opacity:0) and is revealed via `.is-visible` —
+  // the same reveal contract used by Task 2's base.css toast-chip rule — so
+  // the chip actually shows regardless of which stylesheet's base rule wins.
+  chip.classList.add('is-visible');
   setTimeout(() => chip.remove(), TOAST_DURATION);
 }

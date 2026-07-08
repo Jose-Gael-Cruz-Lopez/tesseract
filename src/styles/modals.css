@@ -7,7 +7,7 @@
   background: var(--pop-bg);
   box-shadow: var(--pop-shadow);
   border-radius: 6px;
-  position: absolute;
+  position: fixed;
   z-index: 1000;
   max-width: min(360px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
@@ -44,6 +44,10 @@
 }
 
 /* ---------- toast (.toast-chip) ---------- */
+/* Hidden by default and revealed via `.is-visible` — the same contract
+   Task 2's base.css establishes for `.toast-chip` — so visibility never
+   depends on which stylesheet's base `.toast-chip` rule wins the cascade
+   once both files are loaded together. See toast() in popover.js. */
 .toast-chip {
   position: fixed;
   left: 50%;
@@ -57,4 +61,10 @@
   font-family: var(--font-ui);
   font-size: 14px;
   z-index: 1200;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toast-chip.is-visible {
+  opacity: 1;
 }
