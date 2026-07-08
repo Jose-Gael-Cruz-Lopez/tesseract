@@ -5,6 +5,7 @@ import './styles/base.css';
 import './styles/modals.css';
 import './styles/shell.css';
 import './styles/globe.css';
+import './styles/auth.css';
 
 import { initTheme } from './ui/theme.js';
 import { getSession } from './auth/auth.js';
