@@ -948,6 +948,47 @@ function promptNewSub(cluster) {
   });
 }
 
+/* ---------- persistence: user-created clusters + sub-files + deletions ---------- */
+const USER_GRAPH_KEY = 'mnemo:userGraph';
+// Names/urls of built-in items the user deleted, so they don't come back on load.
+const deletedClusters = new Set();
+const deletedNodes = new Set();
+function saveUserGraph() {
+  try {
+    const data = { clusters: [], nodes: [], deletedClusters: [...deletedClusters], deletedNodes: [...deletedNodes] };
+    clusters.forEach((c) => {
+      if (c.userCreated) {
+        const d = c.group.position.clone().normalize();
+        data.clusters.push({ name: c.name, dir: [d.x, d.y, d.z], dist: c.dist, scale: c.scale, accentIdx: c.accentIdx });
+      }
+      c.pnodes.forEach((n) => {
+        if (n.userCreated) data.nodes.push({ cluster: c.name, title: n.title, rest: [n.rest.x, n.rest.y, n.rest.z], col: n.col });
+      });
+    });
+    localStorage.setItem(USER_GRAPH_KEY, JSON.stringify(data));
+  } catch (e) { /* private mode / quota */ }
+}
+function loadUserGraph() {
+  let data;
+  try { data = JSON.parse(localStorage.getItem(USER_GRAPH_KEY)); } catch (e) { data = null; }
+  if (!data) return;
+  (data.clusters || []).forEach((cd) => {
+    if (clusters.some((c) => c.name === cd.name)) return;
+    createCluster(cd.name, { dir: cd.dir, dist: cd.dist, scale: cd.scale, accentIdx: cd.accentIdx });
+  });
+  (data.nodes || []).forEach((nd) => {
+    const c = clusters.find((cl) => cl.name === nd.cluster);
+    if (c) addSubNode(c, nd.title, { rest: nd.rest, col: nd.col });
+  });
+  // Re-apply deletions of built-in items (persist:false — already recorded).
+  (data.deletedClusters || []).forEach((name) => deletedClusters.add(name));
+  (data.deletedNodes || []).forEach((url) => deletedNodes.add(url));
+  [...deletedClusters].forEach((name) => { const c = clusters.find((x) => x.name === name); if (c) deleteCluster(c, { persist: false }); });
+  [...deletedNodes].forEach((url) => {
+    for (const c of clusters) { const n = c.pnodes.find((p) => p.url === url); if (n) { deleteNode(c, n, { persist: false }); break; } }
+  });
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
@@ -1018,6 +1059,7 @@ function buildSidebar() {
 }
 
 buildSidebar();
+loadUserGraph(); // re-create any clusters/sub-files the user made in past sessions
 buildPageChrome();
 
 let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
