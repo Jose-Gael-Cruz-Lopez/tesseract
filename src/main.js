@@ -2,6 +2,7 @@ import './styles.css';
 
 import * as THREE from 'three';
 import { makeDotTexture, buildTesseract } from './nodes.js';
+import { COVER_PRESETS, ICON_SET, ICON_COLORS, EMOJI } from './decor-data.js';
 
 // Match the reference's r128 color look: no sRGB<->linear conversion, raw
 // output. (three r152+ enables color management by default.)
@@ -446,6 +447,10 @@ const sidebarEl = document.getElementById('sidebar');
 /* ---------- Notion-style page view (opens when a node's page is clicked) ---------- */
 const pageEl = document.getElementById('page');
 const pgCover = document.getElementById('pg-cover');
+const pgIcon = document.getElementById('pg-icon');
+const pgAddbar = document.getElementById('pg-addbar');
+const pgCoverChange = document.getElementById('pg-cover-change');
+const pgCoverRemove = document.getElementById('pg-cover-remove');
 const pgCluster = document.getElementById('pg-cluster');
 const pgPtitle = document.getElementById('pg-ptitle');
 const pgTitle = document.getElementById('pg-title');
@@ -476,6 +481,8 @@ function persistPage() {
   saveTimer = setTimeout(() => {
     const title = pgTitle.textContent.trim() || currentNode.title;
     const data = { title, body: pgContent.innerHTML, edited: Date.now() };
+    if (currentNode.cover) data.cover = currentNode.cover;
+    if (currentNode.icon) data.icon = currentNode.icon;
     localStorage.setItem(pageKey(currentNode), JSON.stringify(data));
     pgEdited.textContent = 'Edited ' + relTime(data.edited);
     pgPtitle.textContent = title;
@@ -494,7 +501,10 @@ function openNode(node) {
   pgTitle.textContent = title;
   pgContent.innerHTML = saved.body || '';
   pgEdited.textContent = 'Edited ' + relTime(saved.edited);
-  pgCover.style.background = `linear-gradient(115deg, ${hexA(c.accent, 0.5)}, ${hexA(c.accent, 0.12)})`;
+  node.cover = saved.cover || null;
+  node.icon = saved.icon || null;
+  applyCover(node);
+  applyIcon(node);
   pgConnected.innerHTML = `<span class="dot" style="background:${c.accent}"></span>Part of&nbsp;<strong style="color:#e8e8ea;font-weight:600">${c.name}</strong>&nbsp;· a node on the globe`;
   setExpanded(c, true);
   if (activeSub) activeSub.classList.remove('active');
@@ -569,6 +579,234 @@ function buildPageChrome() {
   document.addEventListener('click', (e) => {
     if (pgMenu.classList.contains('show') && !pgMenu.contains(e.target) && e.target.id !== 'pg-more') pgMenu.classList.remove('show');
   });
+
+  pgIcon.addEventListener('click', (e) => { e.stopPropagation(); openIconPicker(pgIcon); });
+  pgCoverChange.addEventListener('click', (e) => { e.stopPropagation(); openCoverPicker(pgCoverChange); });
+  pgCoverRemove.addEventListener('click', (e) => { e.stopPropagation(); setCover(null); });
+}
+
+/* ---------- page decoration: customizable cover + icon ---------- */
+
+// Resolve a node's cover into a CSS `background` value. No custom cover falls
+// back to the cluster-accent gradient (the historical default).
+function coverBackground(node) {
+  const cov = node.cover;
+  if (cov) {
+    if (cov.type === 'link') return `#1a181e center / cover no-repeat url("${cov.value}")`;
+    const preset = COVER_PRESETS.find((p) => p.id === cov.value);
+    if (preset) return preset.css;
+  }
+  const a = node.cluster.accent;
+  return `linear-gradient(115deg, ${hexA(a, 0.5)}, ${hexA(a, 0.12)})`;
+}
+
+function applyCover(node) {
+  pgCover.style.background = coverBackground(node);
+  pgCoverRemove.style.display = node.cover ? '' : 'none'; // Remove only if custom
+}
+
+// Render a node's icon (emoji / line-icon / uploaded image), or hide it and let
+// the "Add icon" affordance show.
+function iconMarkup(icon) {
+  if (!icon) return '';
+  if (icon.type === 'emoji') return `<span class="pg-emoji">${icon.value}</span>`;
+  if (icon.type === 'image') return `<img src="${icon.value}" alt="">`;
+  if (icon.type === 'icon') {
+    const it = ICON_SET.find((x) => x.id === icon.value);
+    return it ? `<span class="pg-svgicon" style="color:${icon.color || '#e8e8ea'}">${it.svg}</span>` : '';
+  }
+  return '';
+}
+
+function applyIcon(node) {
+  if (node.icon) {
+    pgIcon.innerHTML = iconMarkup(node.icon);
+    pgIcon.style.display = '';
+    pgDoc.classList.remove('no-icon');
+  } else {
+    pgIcon.innerHTML = '';
+    pgIcon.style.display = 'none';
+    pgDoc.classList.add('no-icon');
+  }
+  // The "Add icon" ghost button shows only while there is no icon.
+  pgAddbar.innerHTML = '';
+  if (!node.icon) {
+    const add = elh('button', 'pg-add', ICON.face + '<span>Add icon</span>');
+    add.addEventListener('click', (e) => { e.stopPropagation(); openIconPicker(add); });
+    pgAddbar.appendChild(add);
+  }
+}
+
+function setCover(cover) {
+  if (!currentNode) return;
+  currentNode.cover = cover;
+  applyCover(currentNode);
+  persistPage();
+  closePgPop();
+}
+
+function setIcon(icon) {
+  if (!currentNode) return;
+  currentNode.icon = icon;
+  applyIcon(currentNode);
+  persistPage();
+  closePgPop();
+}
+
+/* ---------- anchored popover shared by both pickers ---------- */
+let pgPopEl = null;
+function closePgPop() {
+  if (!pgPopEl) return;
+  pgPopEl.remove();
+  pgPopEl = null;
+  document.removeEventListener('mousedown', onPgPopDown, true);
+}
+function onPgPopDown(e) { if (pgPopEl && !pgPopEl.contains(e.target)) closePgPop(); }
+function openPgPop(anchor, cls, build) {
+  closePgPop();
+  const pop = elh('div', 'pg-pop ' + cls);
+  pgPopEl = pop;
+  build(pop);
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8));
+  let top = r.bottom + 6;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - pop.offsetHeight - 6);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+  setTimeout(() => document.addEventListener('mousedown', onPgPopDown, true), 0);
+}
+
+// Build a tabbed popover. `tabs` = [{label, build(body)}]; `remove` = handler
+// for a right-aligned Remove action (omitted when null).
+function buildTabs(pop, tabs, remove) {
+  const head = elh('div', 'pg-pop-tabs');
+  const body = elh('div', 'pg-pop-body');
+  const btns = [];
+  const activate = (i) => {
+    btns.forEach((b, k) => b.classList.toggle('active', k === i));
+    body.innerHTML = '';
+    tabs[i].build(body);
+  };
+  tabs.forEach((t, i) => {
+    const b = elh('button', 'pg-tab', t.label);
+    b.addEventListener('click', () => activate(i));
+    btns.push(b); head.appendChild(b);
+  });
+  if (remove) {
+    const rm = elh('button', 'pg-tab pg-tab-remove', 'Remove');
+    rm.addEventListener('click', remove);
+    head.appendChild(rm);
+  }
+  pop.append(head, body);
+  activate(0);
+}
+
+function openCoverPicker(anchor) {
+  openPgPop(anchor, 'pg-pop-cover', (pop) => {
+    buildTabs(pop, [
+      { label: 'Gallery', build: (body) => {
+        const grid = elh('div', 'pg-cover-grid');
+        COVER_PRESETS.forEach((p) => {
+          const sw = elh('button', 'pg-cover-sw');
+          sw.style.background = p.css;
+          sw.title = p.label;
+          if (currentNode.cover && currentNode.cover.value === p.id) sw.classList.add('active');
+          sw.addEventListener('click', () => setCover({ type: p.type, value: p.id }));
+          grid.appendChild(sw);
+        });
+        body.appendChild(grid);
+      } },
+      { label: 'Link', build: (body) => {
+        const wrap = elh('div', 'pg-link-wrap');
+        const inp = elh('input', 'pg-link-input');
+        inp.type = 'text';
+        inp.placeholder = 'Paste an image URL…';
+        const btn = elh('button', 'pg-link-btn', 'Add');
+        const submit = () => { const v = inp.value.trim(); if (v) setCover({ type: 'link', value: v }); };
+        btn.addEventListener('click', submit);
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+        wrap.append(inp, btn);
+        body.appendChild(wrap);
+        inp.focus();
+      } },
+    ], () => setCover(null));
+  });
+}
+
+function openIconPicker(anchor) {
+  openPgPop(anchor, 'pg-pop-icon', (pop) => {
+    buildTabs(pop, [
+      { label: 'Emoji', build: buildEmojiTab },
+      { label: 'Icons', build: buildIconsTab },
+      { label: 'Upload', build: buildUploadTab },
+    ], () => setIcon(null));
+  });
+}
+
+function buildEmojiTab(body) {
+  const search = elh('input', 'pg-emoji-search');
+  search.type = 'text';
+  search.placeholder = 'Filter…';
+  const grid = elh('div', 'pg-emoji-grid');
+  const render = (q) => {
+    grid.innerHTML = '';
+    EMOJI.filter((e) => !q || e.name.includes(q)).forEach((e) => {
+      const b = elh('button', 'pg-emoji-btn', e.char);
+      b.title = e.name;
+      b.addEventListener('click', () => setIcon({ type: 'emoji', value: e.char }));
+      grid.appendChild(b);
+    });
+  };
+  search.addEventListener('input', () => render(search.value.trim().toLowerCase()));
+  body.append(search, grid);
+  render('');
+  search.focus();
+}
+
+function buildIconsTab(body) {
+  let color = (currentNode.icon && currentNode.icon.color) || ICON_COLORS[0];
+  const swatches = elh('div', 'pg-swatches');
+  const grid = elh('div', 'pg-icon-grid');
+  grid.style.color = color;
+  ICON_COLORS.forEach((c) => {
+    const s = elh('button', 'pg-swatch');
+    s.style.background = c;
+    if (c === color) s.classList.add('active');
+    s.addEventListener('click', () => {
+      color = c;
+      grid.style.color = color;
+      swatches.querySelectorAll('.pg-swatch').forEach((x) => x.classList.remove('active'));
+      s.classList.add('active');
+    });
+    swatches.appendChild(s);
+  });
+  ICON_SET.forEach((it) => {
+    const b = elh('button', 'pg-icon-btn', it.svg);
+    b.addEventListener('click', () => setIcon({ type: 'icon', value: it.id, color }));
+    grid.appendChild(b);
+  });
+  body.append(swatches, grid);
+}
+
+function buildUploadTab(body) {
+  const wrap = elh('div', 'pg-upload-wrap');
+  const label = elh('label', 'pg-upload-btn', 'Choose an image…');
+  const input = elh('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setIcon({ type: 'image', value: reader.result });
+    reader.readAsDataURL(file);
+  });
+  label.appendChild(input);
+  const note = elh('div', 'pg-upload-note', 'A small square image works best (stored locally in your browser).');
+  wrap.append(label, note);
+  body.appendChild(wrap);
 }
 
 const ICON = {
@@ -581,6 +819,8 @@ const ICON = {
   more: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
   collapse: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>',
   expand: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>',
+  face: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
+  picture: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
 };
 const elh = (tag, cls, html) => {
   const e = document.createElement(tag);
