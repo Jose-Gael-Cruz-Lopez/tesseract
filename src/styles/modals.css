@@ -47,7 +47,18 @@
 /* Hidden by default and revealed via `.is-visible` — the same contract
    Task 2's base.css establishes for `.toast-chip` — so visibility never
    depends on which stylesheet's base `.toast-chip` rule wins the cascade
-   once both files are loaded together. See toast() in popover.js. */
+   once both files are loaded together. See toast() in popover.js.
+
+   UNRESOLVED — flagged for the whole-branch integration review, not
+   fixable from this worktree (Task 2's base.css, branch sdd/task-2, isn't
+   in this branch's lineage): base.css defines its own `.toast-chip` base
+   rule with different background/color/border-radius/bottom/transition
+   values at identical specificity (0,1,0) to this one, so which file's
+   cosmetics win is presently determined by unspecified stylesheet load
+   order. Per the class-prefix guard in shared-context.md, `toast-` is
+   owned by this task, so this rule — not base.css's — should be the
+   canonical `.toast-chip` design at integration; base.css should drop its
+   copy (or defer to this one) rather than the reverse. */
 .toast-chip {
   position: fixed;
   left: 50%;
