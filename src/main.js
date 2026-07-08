@@ -551,7 +551,7 @@ function buildPageChrome() {
   };
   row('Copy link', { key: '⌘L', onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(location.href); pgMenu.classList.remove('show'); } });
   row('Duplicate', { key: '⌘D' });
-  row('Move to Trash', { onClick: () => { if (currentNode) localStorage.removeItem(pageKey(currentNode)); closePage(); } });
+  row('Move to Trash', { onClick: () => { pgMenu.classList.remove('show'); if (currentNode) deleteNode(currentNode.cluster, currentNode); } });
   pgMenu.appendChild(elh('div', 'pg-msep'));
   row('Small text', { toggle: (on) => pgDoc.classList.toggle('small', on) });
   row('Full width', { toggle: (on) => pgDoc.classList.toggle('wide', on) });
@@ -785,6 +785,71 @@ function addSubNode(cluster, title, opts = {}) {
   if (sbScroll) createNodeRow(cluster, node);
   setExpanded(cluster, true);
   return node;
+}
+
+// Rebuild a cluster's sidebar child rows from its current pnodes.
+function rebuildClusterRows(c) {
+  if (!c.childrenEl) return;
+  c.childrenEl.innerHTML = '';
+  c.subEls = [];
+  c.pnodes.forEach((n) => createNodeRow(c, n));
+  c.childrenEl.style.display = c.expandedState ? 'block' : 'none';
+  if (currentNode && currentNode.cluster === c && currentNode.subEl) {
+    currentNode.subEl.classList.add('active');
+    activeSub = currentNode.subEl;
+  }
+}
+
+// Delete a page/sub-node (and any branch children hanging off it) from the
+// globe, the sidebar, and storage.
+function deleteNode(c, node, opts = {}) {
+  const persist = opts.persist !== false;
+  const idx = c.pnodes.indexOf(node);
+  if (idx < 0) return;
+  const remove = new Set([idx]);
+  c.pnodes.forEach((n, k) => { if (n.parent === idx) remove.add(k); }); // branch children
+  if (currentNode && remove.has(c.pnodes.indexOf(currentNode))) closePage();
+  remove.forEach((k) => {
+    const n = c.pnodes[k];
+    try { localStorage.removeItem(pageKey(n)); } catch (e) { /* ignore */ }
+    if (persist && !n.userCreated) deletedNodes.add(n.url);
+  });
+  // Rebuild pnodes without the removed ones, remapping branch parent indices.
+  const oldToNew = new Map();
+  const kept = [];
+  c.pnodes.forEach((n, k) => { if (!remove.has(k)) { oldToNew.set(k, kept.length); kept.push(n); } });
+  kept.forEach((n) => { if (n.parent >= 0) n.parent = oldToNew.has(n.parent) ? oldToNew.get(n.parent) : -1; });
+  c.pnodes = kept;
+  c.nodeCount = kept.length;
+  c.maxOffset = kept.reduce((m, n) => Math.max(m, n.pos.clone().sub(c.group.position).length()), 0);
+
+  rebuildClusterGeometry(c);
+  rebuildClusterRows(c);
+  if (persist) saveUserGraph();
+}
+
+// Delete a whole cluster: its hub, every sub-node, its tether, its rows, texts.
+function deleteCluster(c, opts = {}) {
+  const persist = opts.persist !== false;
+  if (selected === c) select(c);                       // toggle focus off, restore camera
+  if (currentNode && currentNode.cluster === c) closePage();
+  c.pnodes.forEach((n) => { try { localStorage.removeItem(pageKey(n)); } catch (e) { /* ignore */ } });
+
+  universe.remove(c.group, c.major, c.minor, c.lineSeg);
+  c.major.geometry.dispose(); c.major.material.dispose();
+  c.minor.geometry.dispose(); c.minor.material.dispose();
+  c.lineSeg.geometry.dispose(); c.lineSeg.material.dispose();
+  c.hubMat.dispose();
+  const th = c.thread;
+  if (th) { universe.remove(th.line, th.pulse); th.line.geometry.dispose(); th.mat.dispose(); th.pulseMat.dispose(); }
+
+  const ci = clusters.indexOf(c); if (ci >= 0) clusters.splice(ci, 1);
+  const hi = hubs.indexOf(c.hub); if (hi >= 0) hubs.splice(hi, 1);
+  const ti = threads.indexOf(th); if (ti >= 0) threads.splice(ti, 1);
+  if (c.itemEl) c.itemEl.remove();
+  if (c.childrenEl) c.childrenEl.remove();
+
+  if (persist) { if (!c.userCreated) deletedClusters.add(c.name); saveUserGraph(); }
 }
 
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
