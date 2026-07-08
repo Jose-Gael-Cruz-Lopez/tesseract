@@ -18,12 +18,15 @@ function svg(viewBox, inner) {
 const character = svg(
   '0 0 120 220',
   `
-  <ellipse cx="58" cy="34" rx="17" ry="18" />
+  <path d="M58 16 Q74 15 76 33 Q78 51 59 53 Q41 55 40 35 Q39 17 58 16 Z" />
   <circle cx="52" cy="32" r="1.1" fill="currentColor" stroke="none" />
   <circle cx="64" cy="33" r="1.1" fill="currentColor" stroke="none" />
-  <path d="M51 41 Q58 45 65 40" />
-  <path d="M58 52 L57 60" />
-  <path d="M40 62 Q40 58 58 60 Q77 58 78 63 L80 132 Q60 138 38 132 Z" />
+  <path d="M51 42 Q59 46 65 39" />
+  <path d="M53 47 L57 49" />
+  <path d="M56 49 L60 51" />
+  <path d="M59 47 L63 49" />
+  <path d="M58 53 L57 60" />
+  <path d="M40 62 Q39 58 58 60 Q77 57 78 63 L80 132 Q60 139 38 131 Z" />
   <path d="M42 78 Q59 82 77 77" />
   <path d="M41 92 Q59 96 78 91" />
   <path d="M41 106 Q59 110 79 105" />
@@ -44,15 +47,18 @@ const character = svg(
 const team = svg(
   '0 0 150 150',
   `
-  <ellipse cx="42" cy="38" rx="14" ry="15" />
+  <path d="M42 23 Q55 22 57 37 Q58 53 43 55 Q27 56 27 39 Q26 24 42 23 Z" />
   <path d="M42 53 L41 60" />
-  <path d="M25 100 Q26 68 42 62 Q59 68 60 100" />
+  <path d="M25 100 Q27 68 42 62 Q58 67 60 100" />
   <path d="M45 70 Q60 80 70 88" />
   <path d="M69 87 L79 90" />
   <path d="M69 87 L74 96" />
-  <ellipse cx="108" cy="40" rx="14" ry="15" />
+  <path d="M72 81 L76 85" />
+  <path d="M74 85 L78 89" />
+  <path d="M76 89 L80 93" />
+  <path d="M108 25 Q121 24 123 39 Q124 55 109 57 Q93 58 93 41 Q92 26 108 25 Z" />
   <path d="M108 55 L109 62" />
-  <path d="M126 102 Q125 70 108 64 Q92 70 91 102" />
+  <path d="M126 102 Q124 70 108 64 Q93 69 91 102" />
   <path d="M105 72 Q90 82 80 89" />
   <path d="M81 88 L71 91" />
   <path d="M81 88 L76 97" />
@@ -66,9 +72,12 @@ const team = svg(
 const personal = svg(
   '0 0 150 150',
   `
-  <ellipse cx="66" cy="36" rx="15" ry="16" />
-  <path d="M66 52 L65 60" />
-  <path d="M40 118 Q40 66 66 62 Q92 66 93 116" />
+  <path d="M66 20 Q80 19 82 35 Q84 52 67 54 Q50 55 50 37 Q49 21 66 20 Z" />
+  <path d="M67 54 L65 60" />
+  <path d="M61 56 L65 58" />
+  <path d="M64 58 L68 60" />
+  <path d="M67 56 L71 58" />
+  <path d="M40 118 Q39 66 66 62 Q93 66 93 116" />
   <path d="M69 74 Q86 88 98 99" />
   <path d="M97 98 L107 100" />
   <path d="M40 118 L38 140" />
@@ -83,11 +92,11 @@ const personal = svg(
 
 // Standing figure carrying a stack of books.
 const school = svg(
-  '0 0 150 150',
+  '0 0 150 190',
   `
-  <ellipse cx="70" cy="34" rx="15" ry="16" />
-  <path d="M70 50 L69 58" />
-  <path d="M46 130 Q46 66 70 60 Q94 66 95 128" />
+  <path d="M70 18 Q84 17 86 33 Q88 50 71 52 Q54 53 54 35 Q53 19 70 18 Z" />
+  <path d="M70 52 L69 58" />
+  <path d="M46 130 Q45 66 70 60 Q95 66 95 128" />
   <path d="M57 71 Q49 74 43 79" />
   <path d="M95 76 Q107 88 111 100" />
   <path d="M50 132 L44 178" />
@@ -97,42 +106,53 @@ const school = svg(
   <path d="M4 94 L36 89 L37 102 L5 107 Z" />
   <path d="M7 85 L39 80 L40 93 L8 98 Z" />
   <path d="M10 76 L42 71 L43 84 L11 89 Z" />
+  <path d="M14 79 L17 88" />
+  <path d="M20 78 L23 87" />
+  <path d="M26 77 L29 86" />
   `);
 
 // Open, empty envelope.
 const inboxEmpty = svg(
   '0 0 150 120',
   `
-  <path d="M14 40 L75 8 L136 40 L136 100 L14 100 Z" />
-  <path d="M14 40 L75 68 L136 40" />
+  <path d="M14 40 L74 8 L136 40 L136 100 L14 100 Z" />
+  <path d="M14 40 L74 69 L136 40" />
   <path d="M14 100 L58 62" />
   <path d="M136 100 L92 62" />
+  <path d="M22 90 L28 84" />
+  <path d="M26 94 L32 88" />
+  <path d="M30 98 L36 92" />
   `);
 
 // Two empty speech bubbles.
 const commentsEmpty = svg(
   '0 0 150 100',
   `
-  <path d="M14 14 Q14 8 26 8 L82 8 Q94 8 94 20 L94 46 Q94 58 82 58 L36 58 L20 74 L23 57 Q14 55 14 42 Z" />
-  <path d="M64 34 Q64 27 77 27 L120 27 Q133 27 133 39 L133 58 Q133 70 120 70 L96 70 L96 87 L79 70 Q64 69 64 55 Z" />
+  <path d="M14 14 Q13 9 26 8 L82 8 Q95 8 94 21 L94 46 Q94 58 82 58 L36 58 L20 74 L23 57 Q14 55 14 42 Z" />
+  <path d="M18 62 L23 58" />
+  <path d="M21 66 L26 62" />
+  <path d="M24 70 L29 66" />
+  <path d="M64 34 Q63 26 78 27 L120 27 Q134 27 133 40 L133 58 Q133 71 120 70 L96 70 L96 87 L79 70 Q63 69 64 55 Z" />
   `);
 
 // Three round ink faces, evenly spaced (header avatar row).
 const trioAvatars = svg(
   '0 0 150 60',
   `
-  <circle cx="30" cy="30" r="19" />
+  <path d="M30 11 Q47 10 49 29 Q51 49 31 51 Q10 52 10 31 Q9 12 30 11 Z" />
   <circle cx="24" cy="26" r="1.1" fill="currentColor" stroke="none" />
   <circle cx="35" cy="26" r="1.1" fill="currentColor" stroke="none" />
-  <path d="M23 36 Q30 41 37 36" />
-  <circle cx="75" cy="30" r="19" />
+  <path d="M23 37 Q31 42 37 35" />
+  <path d="M75 11 Q92 10 94 29 Q96 49 76 51 Q55 52 55 31 Q54 12 75 11 Z" />
   <circle cx="69" cy="26" r="1.1" fill="currentColor" stroke="none" />
   <circle cx="80" cy="26" r="1.1" fill="currentColor" stroke="none" />
-  <path d="M68 36 Q75 41 82 36" />
-  <circle cx="120" cy="30" r="19" />
+  <path d="M68 35 Q76 41 82 37" />
+  <path d="M66 40 L69 44" />
+  <path d="M69 42 L72 46" />
+  <path d="M120 11 Q137 10 139 29 Q141 49 121 51 Q100 52 100 31 Q99 12 120 11 Z" />
   <circle cx="114" cy="26" r="1.1" fill="currentColor" stroke="none" />
   <circle cx="125" cy="26" r="1.1" fill="currentColor" stroke="none" />
-  <path d="M113 36 Q120 41 127 36" />
+  <path d="M113 36 Q119 40 127 36" />
   `);
 
 export const ART = {
