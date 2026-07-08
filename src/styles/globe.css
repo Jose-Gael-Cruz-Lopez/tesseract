@@ -1,0 +1,58 @@
+/*
+ * Globe chrome (`gl-` prefix): the canvas stage, vignette, hover tooltip and
+ * control hint — ported from the old fullscreen styles.css, now scoped to the
+ * container the globe renders into.
+ *
+ * globe.css is the sanctioned exception to the tokens-only color rule: these
+ * deep-space values belong to the scene, not to the UI theme.
+ */
+
+.gl-stage {
+  position: relative;
+  overflow: hidden;
+  background: #060310;
+  user-select: none;
+}
+
+.gl-stage canvas {
+  display: block;
+}
+
+.gl-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(2, 0, 8, 0.8) 100%);
+}
+
+.gl-tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 11px;
+  background: rgba(14, 8, 26, 0.85);
+  border: 1px solid rgba(255, 120, 150, 0.35);
+  border-radius: 6px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffd9e2;
+  display: none;
+  transform: translate(-50%, -170%);
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.gl-hint {
+  position: absolute;
+  z-index: 1;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #6d7290;
+  white-space: nowrap;
+  pointer-events: none;
+}

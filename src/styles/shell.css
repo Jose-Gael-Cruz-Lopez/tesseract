@@ -1,0 +1,110 @@
+/*
+ * App shell frame: sidebar rail + main column (topbar over content), with the
+ * globe filling the content area and the page panel sliding over it on
+ * `.show` (transition timing ported from the old styles.css). Surface styling
+ * (sidebar rows, topbar, editor…) lives in each surface's own CSS file; this
+ * file only lays out the frame. Colors only via tokens.
+ */
+
+.shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.shell-sidebar {
+  flex: 0 0 auto;
+  width: var(--sidebar-w);
+  min-width: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--divider);
+  overflow: hidden;
+}
+
+.shell-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-topbar {
+  flex: 0 0 auto;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.shell-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.shell-globe {
+  position: absolute;
+  inset: 0;
+}
+
+/* Page panel: hidden off-canvas right; `.show` slides it over the globe
+   (0.24s cubic-bezier from the old page/sidebar transition). */
+.shell-page {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--bg);
+  overflow-y: auto;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 0.24s;
+}
+
+.shell-page.show {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Comments panel: mounted by Task 11/21; nothing to show in the skeleton. */
+.shell-comments {
+  display: none;
+}
+
+/* Temporary chrome placeholders (removed in Task 21). */
+.shell-placeholder {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-topbar .shell-placeholder {
+  padding: 0 4px;
+}
+
+/* Boot fallback while the auth views don't exist yet (Task 21 replaces it). */
+.boot-auth-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  height: 100dvh;
+  font-size: 14px;
+  color: var(--text-2);
+  background: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-page,
+  .shell-page.show {
+    transition: none;
+  }
+}
