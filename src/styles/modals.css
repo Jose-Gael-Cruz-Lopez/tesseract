@@ -1,0 +1,81 @@
+/* Shared visual styles for the popover / modal / toast primitives in
+   src/ui/popover.js. Colors come exclusively from the tokens defined in
+   src/styles/tokens.css (Task 2) — no hex literals here. */
+
+/* ---------- anchored popover (.pop-root) ---------- */
+.pop-root {
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  border-radius: 6px;
+  position: fixed;
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+/* ---------- centered modal (.mod-scrim > .mod-box) ---------- */
+.mod-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+/* dim=false: keep the click-catching scrim, drop the darkening. */
+.mod-scrim.mod-scrim-clear {
+  background: transparent;
+}
+
+.mod-box {
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  border-radius: 8px;
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+/* ---------- toast (.toast-chip) ---------- */
+/* Hidden by default and revealed via `.is-visible` — the same contract
+   Task 2's base.css establishes for `.toast-chip` — so visibility never
+   depends on which stylesheet's base `.toast-chip` rule wins the cascade
+   once both files are loaded together. See toast() in popover.js.
+
+   UNRESOLVED — flagged for the whole-branch integration review, not
+   fixable from this worktree (Task 2's base.css, branch sdd/task-2, isn't
+   in this branch's lineage): base.css defines its own `.toast-chip` base
+   rule with different background/color/border-radius/bottom/transition
+   values at identical specificity (0,1,0) to this one, so which file's
+   cosmetics win is presently determined by unspecified stylesheet load
+   order. Per the class-prefix guard in shared-context.md, `toast-` is
+   owned by this task, so this rule — not base.css's — should be the
+   canonical `.toast-chip` design at integration; base.css should drop its
+   copy (or defer to this one) rather than the reverse. */
+.toast-chip {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--scrim);
+  color: var(--chip-gray);
+  box-shadow: var(--pop-shadow);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  z-index: 1200;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toast-chip.is-visible {
+  opacity: 1;
+}
