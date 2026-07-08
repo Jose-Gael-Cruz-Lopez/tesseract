@@ -700,6 +700,68 @@ function rebuildClusterGeometry(c) {
   c.lineMat.opacity = (c._lineOp ?? c.baseLineOp) * rv;
 }
 
+// Spawn a brand-new cluster (a hub tethered to the core), starting empty.
+function createCluster(name, opts = {}) {
+  const dir = opts.dir ? new THREE.Vector3().fromArray(opts.dir).normalize() : randDir();
+  const dist = opts.dist != null ? opts.dist : R * (0.4 + rand() * 0.3);
+  const scale = opts.scale != null ? opts.scale : 0.8 + rand() * 0.9;
+  const accentIdx = opts.accentIdx != null ? opts.accentIdx : clusters.length % paletteHex.length;
+
+  const g = new THREE.Group();
+  g.position.copy(dir).multiplyScalar(dist);
+  const hubMat = new THREE.SpriteMaterial({ map: dotTex, color: 0xfff3dd, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+  const hub = new THREE.Sprite(hubMat);
+  const hubBase = 0.85 * scale;
+  hub.scale.set(hubBase, hubBase, 1);
+  g.add(hub);
+  universe.add(g);
+
+  const major = makePoints([], [], 0.5, 0.95);
+  const minor = makePoints([], [], 0.26, 0.9);
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  const lineSeg = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0xd6dbf5, transparent: true, opacity: 0.34 }));
+  universe.add(major, minor, lineSeg);
+
+  const cluster = {
+    name, group: g, hub, hubMat, hubBase,
+    lineMat: lineSeg.material, majorMat: major.material, minorMat: minor.material,
+    major, minor, lineSeg, pnodes: [], majIdx: [], minIdx: [], majCol: [], minCol: [],
+    baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
+    nodeCount: 0, maxOffset: 0,
+    scale, dist, budget: R * 0.94 - dist,
+    accentIdx, accent: '#' + paletteHex[accentIdx].toString(16).padStart(6, '0'),
+    phase: rand() * Math.PI * 2,
+    userCreated: true,
+  };
+  hub.userData.cluster = cluster;
+  // Reveal/opacity state so the render loop shows it immediately (post-intro).
+  cluster._lineOp = cluster.baseLineOp; cluster._majOp = cluster.baseMajOp;
+  cluster._minOp = cluster.baseMinOp; cluster._hubOp = cluster.hubBaseOp;
+  cluster.revealFactor = 1;
+  clusters.push(cluster);
+  hubs.push(hub);
+
+  // Tether the hub to the core, matching the procedural clusters.
+  const jitterDir = randDir();
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3());
+  const tMat = new THREE.LineBasicMaterial({ color: 0xff6d8a, transparent: true, opacity: 0.26 });
+  const tLine = new THREE.Line(new THREE.BufferGeometry(), tMat);
+  universe.add(tLine);
+  const pulseMat = new THREE.SpriteMaterial({ map: dotTex, color: 0xffc2cf, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
+  const pulse = new THREE.Sprite(pulseMat);
+  pulse.scale.set(0.34, 0.34, 1);
+  universe.add(pulse);
+  const thread = { curve, line: tLine, jitterDir, mat: tMat, baseOp: 0.26, pulse, pulseMat, t: rand(), speed: 0.1 + rand() * 0.16, cluster };
+  thread._op = thread.baseOp;
+  cluster.thread = thread;
+  threads.push(thread);
+  retetherThread(thread);
+
+  if (sbScroll) createClusterRow(cluster);
+  return cluster;
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
