@@ -604,6 +604,55 @@ function setSidebarCollapsed(collapsed) {
   try { localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
 }
 
+/* ---------- live-create: new clusters (hubs) + sub-files (nodes) ---------- */
+let sbScroll = null; // the scrollable cluster list; set in buildSidebar()
+
+// Build one sidebar row for a page node under its cluster.
+function createNodeRow(c, node) {
+  const sub = elh('div', 'sb-sub');
+  const moreBtn = elh('button', 'sb-more', ICON.more);
+  moreBtn.setAttribute('aria-label', 'Page options');
+  moreBtn.title = 'Delete this page';
+  sub.append(elh('span', 'sb-icon', ICON.page), labelSpan(node.title), moreBtn);
+  sub.title = node.title;
+  sub.addEventListener('click', (e) => { e.stopPropagation(); openNode(node); });
+  moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openNodeMenu(moreBtn, c, node); });
+  c.childrenEl.appendChild(sub);
+  c.subEls.push(sub);
+  node.subEl = sub;
+  return sub;
+}
+
+// Build one sidebar row for a cluster (with a hover ＋ to add sub-pages) and
+// rows for any pages it already has.
+function createClusterRow(c) {
+  const item = elh('div', 'sb-item');
+  const tw = elh('span', 'sb-twisty', ICON.chevron);
+  const addBtn = elh('button', 'sb-add', ICON.plus);
+  addBtn.setAttribute('aria-label', 'Add a sub-page');
+  addBtn.title = 'Add a sub-page';
+  const moreBtn = elh('button', 'sb-more', ICON.more);
+  moreBtn.setAttribute('aria-label', 'Cluster options');
+  moreBtn.title = 'Delete this cluster';
+  item.append(tw, elh('span', 'sb-icon', ICON.page), labelSpan(c.name), addBtn, moreBtn);
+  tw.addEventListener('click', (e) => { e.stopPropagation(); setExpanded(c, !c.expandedState); });
+  addBtn.addEventListener('click', (e) => { e.stopPropagation(); promptNewSub(c); });
+  moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openClusterMenu(moreBtn, c); });
+  item.addEventListener('click', () => select(c));
+
+  const children = elh('div', 'sb-children');
+  children.style.display = 'none';
+
+  c.itemEl = item;
+  c.childrenEl = children;
+  c.subEls = [];
+  c.expandedState = false;
+
+  sbScroll.append(item, children);
+  c.pnodes.forEach((node) => createNodeRow(c, node));
+  return item;
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
