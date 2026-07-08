@@ -1,9 +1,9 @@
 /* Updates inbox popover (src/ui/updates.js). Colors come exclusively from
    the tokens in src/styles/tokens.css — no hex literals here. */
 
-.upd-pop {
+.pop-root.upd-pop {
   width: 420px;
-  max-width: calc(100vw - 16px);
+  max-width: min(420px, calc(100vw - 16px));
 }
 
 .upd-header {
