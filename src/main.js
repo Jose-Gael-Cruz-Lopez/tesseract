@@ -852,6 +852,60 @@ function deleteCluster(c, opts = {}) {
   if (persist) { if (!c.userCreated) deletedClusters.add(c.name); saveUserGraph(); }
 }
 
+/* ---------- small delete menu anchored to a sidebar row ---------- */
+let rowMenuEl = null;
+function closeRowMenu() {
+  if (!rowMenuEl) return;
+  rowMenuEl.remove();
+  rowMenuEl = null;
+  document.removeEventListener('mousedown', onDocDownForMenu, true);
+}
+function onDocDownForMenu(e) { if (rowMenuEl && !rowMenuEl.contains(e.target)) closeRowMenu(); }
+function menuButton(label, danger, onClick) {
+  const b = elh('button', 'sb-menu-item' + (danger ? ' danger' : ''), label);
+  b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return b;
+}
+function openRowMenu(anchor, build) {
+  closeRowMenu();
+  const menu = elh('div', 'sb-menu');
+  rowMenuEl = menu;
+  build(menu, closeRowMenu);
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8));
+  let top = r.bottom + 4;
+  if (top + menu.offsetHeight > window.innerHeight - 8) top = r.top - menu.offsetHeight - 4;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  setTimeout(() => document.addEventListener('mousedown', onDocDownForMenu, true), 0);
+}
+// Single-page delete is instant; a whole cluster asks for one inline confirm.
+function openNodeMenu(anchor, c, node) {
+  openRowMenu(anchor, (menu, close) => {
+    menu.appendChild(menuButton('Delete', true, () => { close(); deleteNode(c, node); }));
+  });
+}
+function openClusterMenu(anchor, c) {
+  openRowMenu(anchor, (menu, close) => {
+    menu.appendChild(menuButton('Delete cluster', true, () => {
+      menu.innerHTML = '';
+      const n = c.pnodes.length;
+      const note = n ? `Delete “${c.name}” and its ${n} page${n > 1 ? 's' : ''}?` : `Delete “${c.name}”?`;
+      menu.appendChild(elh('div', 'sb-menu-note', note));
+      const rowBtns = elh('div', 'sb-menu-actions');
+      rowBtns.appendChild(menuButton('Cancel', false, () => close()));
+      rowBtns.appendChild(menuButton('Delete', true, () => { close(); deleteCluster(c); }));
+      menu.appendChild(rowBtns);
+      // reposition in case the menu grew taller
+      const r = anchor.getBoundingClientRect();
+      let top = r.bottom + 4;
+      if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+      menu.style.top = top + 'px';
+    }));
+  });
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
