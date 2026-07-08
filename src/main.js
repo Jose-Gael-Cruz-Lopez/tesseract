@@ -762,6 +762,31 @@ function createCluster(name, opts = {}) {
   return cluster;
 }
 
+// Add a spring sub-node (a new sub-file) to a cluster, connected to its hub.
+function addSubNode(cluster, title, opts = {}) {
+  const budget = cluster.budget != null ? cluster.budget : Math.max(0.5, R * 0.94 - cluster.group.position.length());
+  const scale = cluster.scale != null ? cluster.scale : 1;
+  const rest = opts.rest ? new THREE.Vector3().fromArray(opts.rest)
+    : randDir().multiplyScalar(Math.min(budget, (0.7 + rand() * 1.8) * scale));
+  if (rest.length() > budget) rest.setLength(budget);
+  const col = opts.col ? new THREE.Color().fromArray(opts.col) : new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
+
+  const node = {
+    pos: cluster.group.position.clone().add(rest), vel: new THREE.Vector3(),
+    rest: rest.clone(), parent: -1, title, cluster,
+    col: [col.r, col.g, col.b], major: false, userCreated: true,
+  };
+  node.url = uniqueUrl(cluster, title);
+  cluster.pnodes.push(node);
+  cluster.nodeCount = cluster.pnodes.length;
+  cluster.maxOffset = Math.max(cluster.maxOffset || 0, rest.length());
+
+  rebuildClusterGeometry(cluster);
+  if (sbScroll) createNodeRow(cluster, node);
+  setExpanded(cluster, true);
+  return node;
+}
+
 // Notion-style sidebar: workspace header, nav + search, cluster list, footer.
 function buildSidebar() {
   const header = elh('div', 'sb-header', '<div class="sb-avatar">M</div><div class="sb-space">Mnemosphere</div>');
