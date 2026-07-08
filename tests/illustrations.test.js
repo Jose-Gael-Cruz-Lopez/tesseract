@@ -75,7 +75,18 @@ test('trioAvatars draws three distinct round faces', () => {
 });
 
 test('commentsEmpty draws two speech bubbles', () => {
-  // two bubble bodies means at least two closed <path> outlines
-  const paths = (ART.commentsEmpty.match(/<path[ >]/g) || []).length;
-  expect(paths).toBeGreaterThanOrEqual(2);
+  // Each speech bubble's body is a single closed <path>: it starts with a
+  // Q curve for the rounded corner and ends in "Z", built from several
+  // quadratic-bezier and line segments that outline the bubble and its
+  // tail. The hatch-tick <path> marks decorating the first bubble are
+  // open (no "Z") single-segment paths, so they don't match this pattern
+  // — matching the closed bubble-outline paths directly (rather than
+  // counting every <path>) means a missing/malformed bubble actually
+  // fails the test.
+  const bubblePaths = (
+    ART.commentsEmpty.match(
+      /<path d="M[\d.-]+ [\d.-]+(?: (?:Q[\d.-]+ [\d.-]+ [\d.-]+ [\d.-]+|L[\d.-]+ [\d.-]+)){4,} Z" \/>/g,
+    ) || []
+  ).length;
+  expect(bubblePaths).toBe(2);
 });
