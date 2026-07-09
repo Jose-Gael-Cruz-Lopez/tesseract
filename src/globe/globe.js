@@ -20,7 +20,7 @@ export { buildGraphFromPages };
  * @param {{onOpenPage?(pageId), onHubFocus?(pageId|null)}} hooks
  * @returns {{focusPage(id), clearFocus(), setVisible(bool), dispose()}}
  */
-export function initGlobe(container, hooks = {}) {
+export function initGlobe(container, hooks = {}, provider = null) {
   const onOpenPage = hooks.onOpenPage || (() => {});
   const onHubFocus = hooks.onHubFocus || (() => {});
 
@@ -359,31 +359,50 @@ export function initGlobe(container, hooks = {}) {
     }
   }
 
-  // Tear down every cluster and rebuild the whole graph from the store.
+  // Where the graph comes from. Default (knowledge globe) is the page store —
+  // synchronous, so timing is identical to before. A developer provider returns
+  // a Promise (a canopy fetch); `withGraph` handles both without making the
+  // knowledge path async.
+  const getGraph = provider && provider.getGraph
+    ? () => provider.getGraph()
+    : () => buildGraphFromPages(getPages());
+
+  function withGraph(fn) {
+    const g = getGraph();
+    if (g && typeof g.then === 'function') g.then((graph) => { if (!disposed) fn(graph); });
+    else fn(g);
+  }
+
+  // Tear down every cluster and rebuild the whole graph from the provider.
   function rebuildAll() {
     const focusedId = selected ? selected.page.id : null;
     for (const c of clusters) { cacheCluster(c); disposeCluster(c); }
     clusters.length = 0;
     hubSprites.length = 0;
-    for (const spec of buildGraphFromPages(getPages()).hubs) makeCluster(spec);
-    if (focusedId) {
-      const again = clusters.find((c) => c.page.id === focusedId);
-      if (again) selected = again;
-      else { selected = null; camDist = preFocusDist; onHubFocus(null); }
-    }
-    hoverNode = null; hoverCluster = null;
+    withGraph((graph) => {
+      for (const spec of graph.hubs) makeCluster(spec);
+      if (focusedId) {
+        const again = clusters.find((c) => c.page.id === focusedId);
+        if (again) selected = again;
+        else { selected = null; camDist = preFocusDist; onHubFocus(null); }
+      }
+      hoverNode = null; hoverCluster = null;
+    });
   }
 
-  // Rebuild just one hub's nodes (children/grandchildren changed).
+  // Rebuild just one hub's nodes (children/grandchildren changed). Store-only
+  // (the developer provider never calls this — it has no per-hub events).
   function rebuildHub(cluster) {
-    const spec = buildGraphFromPages(getPages()).hubs.find((h) => h.page.id === cluster.page.id);
-    if (!spec) { rebuildAll(); return; }
-    cacheCluster(cluster);
-    const { pnodes, maxOff } = buildNodes(spec, cluster.group.position);
-    cluster.pnodes = pnodes;
-    cluster.maxOffset = maxOff;
-    rebuildClusterGeometry(cluster);
-    if (hoverNode && hoverNode.cluster === cluster) hoverNode = null;
+    withGraph((graph) => {
+      const spec = graph.hubs.find((h) => h.page.id === cluster.page.id);
+      if (!spec) { rebuildAll(); return; }
+      cacheCluster(cluster);
+      const { pnodes, maxOff } = buildNodes(spec, cluster.group.position);
+      cluster.pnodes = pnodes;
+      cluster.maxOffset = maxOff;
+      rebuildClusterGeometry(cluster);
+      if (hoverNode && hoverNode.cluster === cluster) hoverNode = null;
+    });
   }
 
   // Walk parentId links up to the top-level ancestor (the hub page).
@@ -425,7 +444,13 @@ export function initGlobe(container, hooks = {}) {
     if (cluster) rebuildHub(cluster);
     else rebuildAll();
   }
-  onStore('pages', onPagesEvent);
+  // Only the store-backed (knowledge) globe subscribes to page events; the
+  // developer globe refreshes on demand via the returned handle's refresh().
+  let unsubscribeStore = null;
+  if (!provider) {
+    onStore('pages', onPagesEvent);
+    unsubscribeStore = () => offStore('pages', onPagesEvent);
+  }
 
   /* ---------- warm dotted streams along arcs ---------- */
   const streamMats = [];
@@ -526,9 +551,9 @@ export function initGlobe(container, hooks = {}) {
   let introElapsed = 0;
   let introDone = prefersReduced;
 
-  // Build the initial graph from the store (after introDone exists — cluster
-  // reveal state depends on it).
-  for (const spec of buildGraphFromPages(getPages()).hubs) makeCluster(spec);
+  // Build the initial graph from the provider (after introDone exists — cluster
+  // reveal state depends on it). Synchronous for the store; deferred for canopy.
+  withGraph((graph) => { for (const spec of graph.hubs) makeCluster(spec); });
 
   if (!introDone) {
     revealStatics.forEach((s) => { s.mat.opacity = 0; });
@@ -917,7 +942,7 @@ export function initGlobe(container, hooks = {}) {
     if (disposed) return;
     disposed = true;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-    offStore('pages', onPagesEvent);
+    if (unsubscribeStore) unsubscribeStore();
     document.removeEventListener('mnemosphere:themechange', onThemeChange);
     if (ro) ro.disconnect();
     window.removeEventListener('resize', resize);
@@ -943,6 +968,7 @@ export function initGlobe(container, hooks = {}) {
     grabbed: () => draggedHub && title(draggedHub.page),
     select: (name) => select(clusters.find((c) => c.page.id === name || title(c.page) === name)),
     rebuild: rebuildAll,
+    refresh: rebuildAll,   // developer globe: re-fetch + rebuild from the provider
     // Scrub the intro reveal to an absolute time (seconds), freeze it there,
     // and render one frame (so the running loop won't advance past it).
     scrub: (tt) => { introElapsed = tt; applyReveal(tt); introDone = true; renderer.render(scene, camera); },
@@ -974,5 +1000,5 @@ export function initGlobe(container, hooks = {}) {
   };
   window.__SBG__ = devHandle;
 
-  return { focusPage, clearFocus, setVisible, dispose };
+  return { focusPage, clearFocus, setVisible, dispose, refresh: rebuildAll };
 }
