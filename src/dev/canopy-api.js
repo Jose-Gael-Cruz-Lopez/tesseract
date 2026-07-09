@@ -4,29 +4,31 @@
 // { ok, status, data } / { ok:false, status, error } — the client never throws
 // on an HTTP status, so the UI can render "unauthorized" / "offline" states.
 
-import { getDevConfig } from '../data/store.js';
+import { getDevConfig, isDevAvailable } from '../data/store.js';
 
 export function isConfigured() {
-  // A token is required; the URL is optional. Blank URL = read same-origin
-  // (the fused single-Worker deploy). A set URL targets a remote/local canopy
-  // (split-dev). See getDevConfig.
+  // Developer reads work when EITHER a token is set (split-dev / remote canopy) OR a
+  // same-origin GitHub session is available (the fused deploy — reads use the cookie).
+  // isDevAvailable() is the synchronous runtime flag set at boot, never a fetch.
   const { token } = getDevConfig();
-  return !!token;
+  return !!token || isDevAvailable();
 }
 
 // fetchImpl is injectable for tests; defaults to the global fetch.
 export function makeCanopyApi(fetchImpl = globalThis.fetch) {
   async function get(path) {
     const { url, token } = getDevConfig();
-    if (!token) return { ok: false, status: 0, error: 'not-configured' };
+    if (!token && !isDevAvailable()) return { ok: false, status: 0, error: 'not-configured' };
     // Blank url → relative path → same-origin (fused deploy). Otherwise the
     // configured origin (split-dev / remote canopy).
     const base = (url || '').replace(/\/$/, '');
+    // A token authorizes via bearer (split-dev / remote); otherwise the same-origin
+    // GitHub session cookie authorizes (fused deploy) — credentials:'include'.
+    const init = { method: 'GET', headers: {} };
+    if (token) init.headers.Authorization = 'Bearer ' + token;
+    else init.credentials = 'include';
     try {
-      const res = await fetchImpl(base + path, {
-        method: 'GET',
-        headers: { Authorization: 'Bearer ' + token },
-      });
+      const res = await fetchImpl(base + path, init);
       if (!res.ok) return { ok: false, status: res.status, error: 'http ' + res.status };
       const data = await res.json();
       return { ok: true, status: res.status, data };
