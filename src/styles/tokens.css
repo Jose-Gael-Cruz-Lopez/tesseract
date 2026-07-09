@@ -26,6 +26,7 @@
 
   --blue: #2383e2;
   --blue-hover: #0077d4;
+  --blue-text: #ffffff;   /* foreground on --blue / --blue-hover fills (same in both themes) */
 
   --cta-red-bg: #fdecec;
   --cta-red-text: #eb5757;
