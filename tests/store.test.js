@@ -242,3 +242,19 @@ test('stays functional in memory when localStorage throws', () => {
     expect(store.getPage(p.id).parentId).toBe(null);
   });
 });
+
+test('mode defaults to knowledge and round-trips to developer', () => {
+  expect(store.getMode()).toBe('knowledge');
+  store.setMode('developer');
+  expect(store.getMode()).toBe('developer');
+  store.setMode('knowledge');
+  expect(store.getMode()).toBe('knowledge');
+});
+
+test('dev canopy config round-trips (url + token)', () => {
+  expect(store.getDevConfig()).toEqual({ url: '', token: '' });
+  store.setDevConfig({ url: 'http://localhost:8787', token: 'canopy_mcp_abc' });
+  expect(store.getDevConfig()).toEqual({ url: 'http://localhost:8787', token: 'canopy_mcp_abc' });
+  store.setDevConfig({ token: 'canopy_mcp_xyz' }); // partial update keeps url
+  expect(store.getDevConfig()).toEqual({ url: 'http://localhost:8787', token: 'canopy_mcp_xyz' });
+});
