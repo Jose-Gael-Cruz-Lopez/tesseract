@@ -1,8 +1,18 @@
 SECOND BRAIN GLOBE · DESIGN SPEC
 
-NOTE (current implementation): the app is now a single self-contained three.js
-scene in src/main.js (glowing additive sprite/point clusters, curved bezier
-tethers, custom drag/zoom controls) with the tesseract nucleus in src/nodes.js.
+NOTE (2026-07-08): the app is now the Mnemosphere Notion-style workspace; the
+globe is its Home view. The UI chrome (auth flow, sidebar, page editor, and
+every modal) is specced in
+docs/superpowers/specs/2026-07-08-notion-ui-redesign-design.md. The globe scene
+now lives in src/globe/globe.js (extracted from the old src/main.js) and is
+driven by the page store rather than procedural data. The sections below still
+describe the globe's *look* faithfully and remain the reference for it; file
+paths that mention src/main.js or src/nodes.js are historical (the scene moved
+to src/globe/globe.js and src/globe/nodes.js).
+
+NOTE (earlier): the app is a single self-contained three.js
+scene (glowing additive sprite/point clusters, curved bezier
+tethers, custom drag/zoom controls) with the tesseract nucleus in nodes.js.
 It no longer uses 3d-force-graph, force simulation, a { nodes, links } data
 model, bloom, or the R = 300 world below. The globe radius is R = 11 and the
 background is #060310. The WORLD/PALETTE/TESSERACT/RINGS/ENVIRONMENT sections

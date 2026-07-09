@@ -1,21 +1,42 @@
-# Second Brain Globe
+# Mnemosphere
 
-An interactive 3D knowledge globe. Every cluster of thought, tethered to a single core.
+A Notion-style knowledge workspace with a twist: the Home view is an
+interactive 3D knowledge globe. Every top-level page is a glowing hub on the
+globe; its sub-pages orbit as dots. Write in a full document editor, organize in
+a sidebar, and watch your notes take shape in space — every cluster of thought,
+tethered to a single core.
 
-![Second Brain Globe hero](docs/hero.png)
+![Mnemosphere hero](docs/hero.png)
 
-![Demo](docs/demo.gif)
+## Architecture
 
-A dark wireframe globe holds twelve glowing clusters of knowledge. At the center, a nested-cube tesseract nucleus convolves, feeding energy along curved tethers to every cluster. A self-contained `three.js` scene, built with Vite.
+The app is a dependency-free Vite + vanilla-JS single page app. A small
+**data store** (`src/data/store.js`) holds one page tree in `localStorage` and
+emits change events; every surface subscribes to it, so the sidebar, editor, and
+globe stay in sync from one source of truth. A **mock auth module**
+(`src/auth/auth.js`, Supabase-shaped) gates first use behind a sign-up /
+onboarding flow. The **app shell** (`src/app.js`) builds a single `ctx` object
+and mounts each surface — sidebar, top bar, page editor, comments, and the
+modals (search, settings, share, templates, import, teamspace, updates). The
+**globe** (`src/globe/globe.js`) is a self-contained `three.js` scene that reads
+hubs/leaves from the store and rebuilds live as pages change. Design tokens
+(`src/styles/tokens.css`) drive a light/dark theme.
 
 ## Features
 
-- **Tesseract nucleus.** A solid lit red cube inside counter-rotating wire cubes and frosted shells. The whole cluster spins about the globe's center. The power source of the network.
-- **Dandelion clusters.** Twelve glowing hubs on a fibonacci sphere, each fanning out 16 to 30 leaves as soft additive dots with the occasional two-hop branch.
-- **Energy pulses.** A bright pulse continuously travels from the core outward along every curved tether.
-- **Click-to-focus.** Click a hub and everything outside that cluster dims to near-black while a panel shows its details. Click empty space (or Esc) to release.
-- **Additive glow.** Hubs, leaves, streams and dust are soft additive sprites over a dark globe, no post-processing needed.
-- **Seeded reproducible layout.** One seed, one layout, generated from a tiny mulberry32 PRNG.
+- **Notion-fidelity chrome.** Sign-up & onboarding flow, a 240px sidebar with a
+  page tree, favorites, trash, and teamspaces, a document editor with covers,
+  icons, slash-style blocks, and databases (table / gallery views).
+- **Globe as Home.** Top-level pages become glowing hubs on a fibonacci sphere;
+  sub-pages fan out as additive dots with the occasional two-hop branch, all
+  tethered to a spinning tesseract nucleus at the core.
+- **Live sync.** Create, rename, or delete a page in the sidebar and the globe
+  updates immediately — same data, two views.
+- **Light + dark themes.** Settings → Appearance switches Light / Dark / Use
+  system; all colors flow from CSS custom properties.
+- **AI writing, search, and more.** A mock streaming AI writer, ⌘K search,
+  updates inbox, share popover, template gallery, and file import (Markdown /
+  CSV / HTML).
 
 ## Quickstart
 
@@ -23,62 +44,41 @@ A dark wireframe globe holds twelve glowing clusters of knowledge. At the center
 git clone https://github.com/Jose-Gael-Cruz-Lopez/second-brain-globe.git
 cd second-brain-globe
 npm install
-npm run dev
+npm run dev        # http://localhost:5173
+npm test           # vitest
+npm run build      # production bundle in dist/
 ```
+
+On first load you'll land on the sign-up flow (any email works; any code is
+accepted — auth is mocked until Supabase is wired in). After onboarding, a
+starter workspace is seeded and the globe appears as Home.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| Drag | Rotate the globe |
-| Scroll | Zoom in and out |
-| Hover a hub | Preview its cluster name |
-| Click a hub | Focus that cluster (dims the rest, shows a panel) |
-| Click empty space / Esc | Release focus |
-
-## Data
-
-The whole scene is generated procedurally in `src/main.js` from a seeded mulberry32 PRNG (seed `42`), so every load produces the same layout. The twelve clusters, their hubs, leaves, branches and tethers are built directly as `three.js` objects rather than from a data file.
-
-To drive it from your own knowledge base (Obsidian, Notion, a Supabase table), replace the `clusterNames` array and the per-cluster leaf loop in `src/main.js`: give each cluster a name and a set of leaves, and the fibonacci placement, tethers and glow are applied automatically. The tesseract nucleus lives in `src/nodes.js`.
+| Drag the globe | Rotate |
+| Scroll | Zoom |
+| Click a hub / dot | Focus that cluster / open that page |
+| ⌘K or `/` | Search pages |
+| ⌘\\ | Collapse / expand the sidebar |
+| Esc | Return from an open page to the globe |
 
 ## Deploy
 
-**Vercel** works zero-config for Vite: import the repo and deploy, no settings needed.
-
-**GitHub Pages** needs the base path set in `vite.config.js`:
-
-```js
-export default defineConfig({
-  base: '/second-brain-globe/',
-  resolve: { dedupe: ['three'] },
-});
-```
-
-Then build and publish the `dist/` folder:
-
-```bash
-npm run build
-git subtree push --prefix dist origin gh-pages
-# or: npx gh-pages -d dist
-```
-
-Enable Pages for the `gh-pages` branch in the repo settings.
-
-## Roadmap
-
-- **Real data adapters.** First-class importers for Obsidian vaults, Notion exports and Supabase tables.
-- **Search beam.** Type a query and a light path traces from the core to the matching node.
-- **Time scrubber.** The floating year label becomes a control that filters the graph by time.
-- **Cluster dive.** Expand a hub into its own sub-globe and navigate down the hierarchy.
+**Vercel** works zero-config for Vite. **GitHub Pages** needs the base path set
+in `vite.config.js` (`base: '/second-brain-globe/'`), then publish `dist/`.
 
 ## Stack and credits
 
-- [three.js](https://threejs.org/) (a single self-contained scene; no scene-graph framework)
-- [Vite](https://vite.dev/)
-- The dandelion-on-a-globe look is inspired by [3d-force-graph](https://github.com/vasturiano/3d-force-graph) by [vasturiano](https://github.com/vasturiano)
+- [three.js](https://threejs.org/) — the self-contained globe scene
+- [Vite](https://vite.dev/) — build & dev server
+- [vitest](https://vitest.dev/) + happy-dom — tests
+- The dandelion-on-a-globe look is inspired by [3d-force-graph](https://github.com/vasturiano/3d-force-graph).
 
-Design notes live in [DESIGN_SPEC.md](DESIGN_SPEC.md).
+UI chrome is specced in
+[docs/superpowers/specs/2026-07-08-notion-ui-redesign-design.md](docs/superpowers/specs/2026-07-08-notion-ui-redesign-design.md);
+older globe design notes live in [DESIGN_SPEC.md](DESIGN_SPEC.md).
 
 ## License
 
