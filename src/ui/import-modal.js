@@ -97,9 +97,13 @@ function parseCsv(text) {
   return { type: 'database', columns, rows, views: [view], activeView: view.id };
 }
 
-// Strip <script>...</script> blocks; keep the rest of the markup as-is.
+// Strip <script>...</script> blocks, then neutralize any remaining bare or
+// unclosed <script ...> / </script> tag (a malformed or truncated file can
+// carry an unmatched opener the paired-strip misses); keep the rest as-is.
 function sanitizeHtml(text) {
-  return String(text).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  return String(text)
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?script\b[^>]*>?/gi, '');
 }
 
 function readFileAsText(file, onText) {

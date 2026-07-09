@@ -207,4 +207,19 @@ describe('HTML import', () => {
     expect(page.blocks).not.toContain('<script');
     expect(ctx.toast).toHaveBeenCalledWith('Imported');
   });
+
+  test('importing an .html file neutralizes an unclosed/malformed <script> tag', async () => {
+    const ctx = makeCtx();
+    openImport(ctx);
+    const input = document.querySelector('.imp-input-html');
+    // Truncated file: an opener with no matching </script> that the paired
+    // strip would miss.
+    const file = makeFile('<p>ok</p><script>alert(1)', 'trunc.html', 'text/html');
+    fireInputChange(input, file);
+
+    await vi.waitFor(() => expect(ctx.openPage).toHaveBeenCalled());
+    const page = store.getPage(ctx.openPage.mock.calls[0][0]);
+    expect(page.blocks).toContain('<p>ok</p>');
+    expect(page.blocks).not.toContain('<script');
+  });
 });

@@ -236,7 +236,8 @@
   background: var(--bg-hover);
 }
 
-.sb-tree-row.is-active {
+.sb-tree-row.is-active,
+.sb-row.is-active {
   background: var(--bg-active);
   color: var(--text);
 }
@@ -476,7 +477,7 @@
   padding: 0 12px;
   border-radius: 4px;
   background: var(--blue);
-  color: var(--bg);
+  color: var(--text-on-blue);
   font-size: 14px;
   font-weight: 500;
 }

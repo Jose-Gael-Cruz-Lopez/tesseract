@@ -14,7 +14,9 @@
 
 import { el, openPopover } from './popover.js';
 import { ICONS } from './icons.js';
-import { openTrash } from './trash.js';
+// Trash opens through ctx.openTrash (the app shell binds it to trash.js's
+// openTrash) — the same channel the topbar's "Show deleted pages" uses — so
+// the sidebar imports no sibling surface directly.
 import {
   getWorkspace,
   topLevelPages,
@@ -345,7 +347,7 @@ export function mountSidebar(container, ctx) {
     group.appendChild(groupRow('teamspace', 'Create a teamspace', 'teamspace', () => ctx.openTeamspace()));
     group.appendChild(groupRow('templates', 'Templates', 'templates', () => ctx.openTemplates()));
     group.appendChild(groupRow('import', 'Import', 'import', () => ctx.openImport()));
-    const trashRow = groupRow('trash', 'Trash', 'trash', () => openTrash(trashRow, ctx));
+    const trashRow = groupRow('trash', 'Trash', 'trash', () => ctx.openTrash(trashRow));
     group.appendChild(trashRow);
     scroll.appendChild(group);
 
