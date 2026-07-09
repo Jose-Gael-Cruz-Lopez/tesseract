@@ -7,16 +7,21 @@
 import { getDevConfig } from '../data/store.js';
 
 export function isConfigured() {
-  const { url, token } = getDevConfig();
-  return !!(url && token);
+  // A token is required; the URL is optional. Blank URL = read same-origin
+  // (the fused single-Worker deploy). A set URL targets a remote/local canopy
+  // (split-dev). See getDevConfig.
+  const { token } = getDevConfig();
+  return !!token;
 }
 
 // fetchImpl is injectable for tests; defaults to the global fetch.
 export function makeCanopyApi(fetchImpl = globalThis.fetch) {
   async function get(path) {
     const { url, token } = getDevConfig();
-    if (!url || !token) return { ok: false, status: 0, error: 'not-configured' };
-    const base = url.replace(/\/$/, '');
+    if (!token) return { ok: false, status: 0, error: 'not-configured' };
+    // Blank url → relative path → same-origin (fused deploy). Otherwise the
+    // configured origin (split-dev / remote canopy).
+    const base = (url || '').replace(/\/$/, '');
     try {
       const res = await fetchImpl(base + path, {
         method: 'GET',
