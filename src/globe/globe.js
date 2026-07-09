@@ -56,9 +56,29 @@ export function initGlobe(container, hooks = {}) {
   camera.position.copy(camDir).multiplyScalar(curDist);
   camera.lookAt(0, 0, 0);
 
+  // Theme-aware palette. The globe isn't styled by CSS tokens, so it repaints
+  // itself in sync with the app theme: light mode gets a light background,
+  // normal-blended dots (additive glow is invisible on light) and darker
+  // structure lines; dark mode keeps the original deep-space look.
+  const GLOBE_THEMES = {
+    dark: {
+      clear: 0x060310, blending: THREE.AdditiveBlending,
+      thin: 0xa9b0d6, thinOp: 0.14, equator: 0xdfe4ff, equatorOp: 0.5,
+      fan: 0x9aa0c8, fanOp: 0.06, clusterLine: 0xd6dbf5, hub: 0xfff3dd,
+    },
+    light: {
+      clear: 0xedeef5, blending: THREE.NormalBlending,
+      thin: 0x8087b0, thinOp: 0.55, equator: 0x515da6, equatorOp: 0.6,
+      fan: 0x8087b0, fanOp: 0.2, clusterLine: 0x8e95c6, hub: 0x474459,
+    },
+  };
+  let currentTheme = (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
+  const palette = () => GLOBE_THEMES[currentTheme];
+  container.classList.toggle('gl-light', currentTheme === 'light');
+
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // raw output, like r128
-  renderer.setClearColor(0x060310, 1);
+  renderer.setClearColor(palette().clear, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(width(), height());
   container.appendChild(renderer.domElement);
@@ -94,13 +114,13 @@ export function initGlobe(container, hooks = {}) {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     const mat = new THREE.PointsMaterial({
       size, map: dotTex, vertexColors: true, transparent: true, opacity,
-      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+      depthWrite: false, blending: palette().blending, sizeAttenuation: true,
     });
     return new THREE.Points(geo, mat);
   }
 
   /* ---------- globe wireframe ---------- */
-  const thinLine = new THREE.LineBasicMaterial({ color: 0xa9b0d6, transparent: true, opacity: 0.14 });
+  const thinLine = new THREE.LineBasicMaterial({ color: palette().thin, transparent: true, opacity: palette().thinOp });
 
   function latCircleGeo(radius, y, segments) {
     const pts = [];
@@ -128,7 +148,7 @@ export function initGlobe(container, hooks = {}) {
     universe.add(m);
   }
   /* bright equator ring */
-  const equatorMat = new THREE.LineBasicMaterial({ color: 0xdfe4ff, transparent: true, opacity: 0.5 });
+  const equatorMat = new THREE.LineBasicMaterial({ color: palette().equator, transparent: true, opacity: palette().equatorOp });
   universe.add(new THREE.LineLoop(latCircleGeo(R, 0, 160), equatorMat));
   /* dense radial fan disc at the equator plane */
   const fanPts = [];
@@ -139,7 +159,7 @@ export function initGlobe(container, hooks = {}) {
       new THREE.Vector3(Math.cos(r) * R, 0, Math.sin(r) * R)
     );
   }
-  const fanMat = new THREE.LineBasicMaterial({ color: 0x9aa0c8, transparent: true, opacity: 0.06 });
+  const fanMat = new THREE.LineBasicMaterial({ color: palette().fan, transparent: true, opacity: palette().fanOp });
   universe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fanPts), fanMat));
 
   /* ---------- tesseract core ---------- */
@@ -236,7 +256,7 @@ export function initGlobe(container, hooks = {}) {
     });
     const lineGeo = new THREE.BufferGeometry();
     lineGeo.setAttribute('position', new THREE.BufferAttribute(linePts, 3));
-    const lineSeg = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0xd6dbf5, transparent: true, opacity: c.baseLineOp }));
+    const lineSeg = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: palette().clusterLine, transparent: true, opacity: c.baseLineOp }));
     universe.add(major, minor, lineSeg);
     // Back-links so a Points raycast hit can be mapped to a page.
     major.userData = { cluster: c, kind: 'maj' };
@@ -259,8 +279,8 @@ export function initGlobe(container, hooks = {}) {
     else g.position.set(spec.dir[0], spec.dir[1], spec.dir[2]).multiplyScalar(spec.dist);
 
     const hubMat = new THREE.SpriteMaterial({
-      map: dotTex, color: 0xfff3dd, transparent: true, opacity: 0.95,
-      depthWrite: false, blending: THREE.AdditiveBlending,
+      map: dotTex, color: palette().hub, transparent: true, opacity: 0.95,
+      depthWrite: false, blending: palette().blending,
     });
     const hub = new THREE.Sprite(hubMat);
     const hubBase = 0.85 * spec.scale;
@@ -301,7 +321,7 @@ export function initGlobe(container, hooks = {}) {
 
     const pulseMat = new THREE.SpriteMaterial({
       map: dotTex, color: 0xffc2cf, transparent: true, opacity: 0.9,
-      depthWrite: false, blending: THREE.AdditiveBlending,
+      depthWrite: false, blending: palette().blending,
     });
     const pulse = new THREE.Sprite(pulseMat);
     pulse.scale.set(0.34, 0.34, 1);
@@ -843,6 +863,36 @@ export function initGlobe(container, hooks = {}) {
   }
   window.addEventListener('resize', resize);
 
+  /* ---------- theme sync ---------- */
+  // Repaint the whole scene when the app theme changes: background, structure
+  // lines, glow blending, and hub tint. New objects built afterwards read the
+  // updated `currentTheme` via palette().
+  function applyGlobeTheme(theme) {
+    currentTheme = theme === 'dark' ? 'dark' : 'light';
+    const P = palette();
+    renderer.setClearColor(P.clear, 1);
+    thinLine.color.setHex(P.thin); thinLine.opacity = P.thinOp;
+    equatorMat.color.setHex(P.equator); equatorMat.opacity = P.equatorOp;
+    fanMat.color.setHex(P.fan); fanMat.opacity = P.fanOp;
+    scene.traverse((o) => {
+      const m = o.material;
+      if (!m) return;
+      if (o.isPoints) { m.blending = P.blending; m.needsUpdate = true; }
+      else if (o.isSprite) {
+        m.blending = P.blending; m.needsUpdate = true;
+        if (o.userData.cluster) m.color.setHex(P.hub); // hub sprites (not pulses / label)
+      } else if (o.isLineSegments && m !== fanMat) {
+        m.color.setHex(P.clusterLine); // per-cluster connector lines
+      }
+    });
+    container.classList.toggle('gl-light', currentTheme === 'light');
+    if (!rafId) renderer.render(scene, camera); // repaint even if the loop is paused
+  }
+  function onThemeChange(e) {
+    applyGlobeTheme(e.detail && e.detail.theme ? e.detail.theme : (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
+  }
+  document.addEventListener('mnemosphere:themechange', onThemeChange);
+
   /* ---------- public handle ---------- */
   function focusPage(id) {
     const c = findClusterForPage(id);
@@ -868,6 +918,7 @@ export function initGlobe(container, hooks = {}) {
     disposed = true;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
     offStore('pages', onPagesEvent);
+    document.removeEventListener('mnemosphere:themechange', onThemeChange);
     if (ro) ro.disconnect();
     window.removeEventListener('resize', resize);
     window.removeEventListener('mousemove', onWinMove);
