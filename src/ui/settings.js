@@ -297,13 +297,14 @@ function devField(label, input) {
 function renderDeveloperPanel(ctx) {
   const panel = el('div', 'set-panel-inner');
   panel.appendChild(el('h2', 'set-h', 'Developer'));
-  panel.appendChild(el('div', 'set-row-sub', 'Connect the developer sphere to a canopy instance (read-only). Mint a token in canopy; see canopy/SETUP.md.'));
+  panel.appendChild(el('div', 'set-row-sub', 'Connect the developer sphere to a canopy instance (read-only). Mint a token at /admin on your canopy; see canopy/SETUP.md.'));
 
   const cfg = ctx.store.getDevConfig();
   const urlInput = el('input', 'set-input');
   urlInput.type = 'text';
   urlInput.placeholder = 'https://canopy.you.workers.dev';
   urlInput.value = cfg.url;
+  const urlHint = el('div', 'set-field-hint', 'Leave blank when this app is served by canopy itself (one fused deploy) — reads use the current site.');
   const tokenInput = el('input', 'set-input');
   tokenInput.type = 'password';
   tokenInput.placeholder = 'canopy_mcp_…';
@@ -328,7 +329,7 @@ function renderDeveloperPanel(ctx) {
         : 'Could not reach canopy — check the URL and that CORS_ORIGINS allows this app.';
   });
 
-  panel.append(devField('Canopy URL', urlInput), devField('Access token', tokenInput), test, status);
+  panel.append(devField('Canopy URL', urlInput), urlHint, devField('Access token', tokenInput), test, status);
   return panel;
 }
 
