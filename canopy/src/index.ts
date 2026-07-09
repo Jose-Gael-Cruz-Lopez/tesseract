@@ -3,11 +3,15 @@ import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
 import { resolveBearerPrincipal } from "./auth/principal";
 import { recomputeAllProgress } from "./tools/progress";
+import { corsHeaders, handlePreflight } from "./cors";
 import type { Env } from "./env";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    // CORS preflight for the read routes (browsers only; allowed origins only).
+    const pre = handlePreflight(request, env);
+    if (pre) return pre;
     // Static assets are served by the assets binding before this handler runs.
     if (url.pathname === "/mcp") {
       // Bearer ONLY. On missing/invalid credentials: bare 401, NO WWW-Authenticate,
@@ -26,7 +30,14 @@ export default {
     if (url.pathname === "/webhook/github" && request.method === "POST") {
       return handleGithubWebhook(request, env);
     }
-    return app.fetch(request, env, ctx);
+    // The Hono app (read routes etc.). Add CORS for allowed origins so the
+    // Mnemosphere dev sphere can read cross-origin.
+    const res = await app.fetch(request, env, ctx);
+    const ch = corsHeaders(request.headers.get("origin"), env);
+    if (Object.keys(ch).length === 0) return res;
+    const headers = new Headers(res.headers);
+    for (const [k, v] of Object.entries(ch)) headers.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 
   // Backstop: recompute per-milestone progress from GitHub on a schedule with the
