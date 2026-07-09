@@ -57,7 +57,7 @@ authApp.get("/callback", async (c) => {
 
   const ghUser = await getUser(token);
   if (!ghUser) return c.json({ error: "identity_failed" }, 401);
-  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect("/?denied=1", 302);
+  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect("/admin/?denied=1", 302);
 
   await run(c.env.DB,
     `INSERT INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, ?, ?)
@@ -66,7 +66,7 @@ authApp.get("/callback", async (c) => {
 
   const { id } = await createSession(c.env.DB, ghUser.login);
   await setSessionCookie(c, id, c.env.COOKIE_SECRET);
-  return c.redirect("/", 302);
+  return c.redirect("/admin/", 302);
 });
 
 // GATED (by sessionGate in src/routes.ts): return the principal's profile.
