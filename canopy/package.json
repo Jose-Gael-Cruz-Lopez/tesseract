@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "build:web": "vite build --config web/vite.config.ts",
-    "dev": "npm run build:web && wrangler dev",
-    "deploy": "npm run build:web && wrangler deploy",
+    "build:app": "node scripts/build-app.mjs",
+    "dev": "npm run build:app && wrangler dev",
+    "deploy": "npm run build:app && wrangler deploy",
     "pretest": "mkdir -p web/dist",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.worker.json && tsc -p tsconfig.web.json",
