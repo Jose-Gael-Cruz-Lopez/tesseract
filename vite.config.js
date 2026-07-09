@@ -9,6 +9,10 @@ export default defineConfig({
   // Vitest reads the `test` key from this same config (no separate
   // vitest.config.js).
   test: {
+    // Only run the Mnemosphere suite. The canopy/ sub-app is a separate
+    // Cloudflare Worker project with its own vitest (@cloudflare/vitest-pool-
+    // workers + cloudflare:test) — run it with `cd canopy && npm test`.
+    include: ['tests/**/*.{test,spec}.{js,mjs,ts}'],
     // Node 22+ ships an experimental global `localStorage` that shadows the
     // one happy-dom/jsdom would otherwise install for DOM tests, and Node's
     // stub throws on every call unless `--localstorage-file` is set. Disable
