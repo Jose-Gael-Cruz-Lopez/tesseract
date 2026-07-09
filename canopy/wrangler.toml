@@ -1,0 +1,32 @@
+name = "canopy"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static Assets: served before the Worker fetch handler. Matched files (e.g. "/")
+# are returned directly; unmatched paths (/ingest, /feed, /mcp) fall through to src/index.ts.
+[assets]
+directory = "./web/dist"
+binding = "ASSETS"
+
+# D1. For local dev and tests the id is a placeholder (Miniflare uses a local sqlite).
+# Run `npm run db:create` to provision the real database and paste its id here before deploy.
+[[d1_databases]]
+binding = "DB"
+database_name = "canopy"
+database_id = "80386dc4-deef-461d-932a-0670d22ddf83"
+
+[vars]
+GITHUB_REPO = "SaplingLearn/sapling"
+# Comma-separated GitHub logins allowed to run admin actions (e.g. the server-side backfill).
+ADMIN_LOGINS = "AndresL230"
+
+[observability]
+enabled = true
+
+# Capture-time PR/issue summaries come from Google Gemini over REST (GEMINI_API_KEY
+# secret) — a plain fetch(), not a Cloudflare binding, so no [ai] block is needed.
+
+# Scheduled backstop for the milestone progress cache (event-derived writes are primary).
+[triggers]
+crons = ["0 */6 * * *"]
