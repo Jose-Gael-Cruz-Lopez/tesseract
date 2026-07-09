@@ -14,7 +14,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "canopy"
-database_id = ""   # set to YOUR D1 id from `npm run db:create` (see SETUP.md)
+database_id = "00000000-0000-0000-0000-000000000000"   # PLACEHOLDER — replace with YOUR D1 id from `npm run db:create` before deploying (see SETUP.md). Local `wrangler dev` works with this placeholder; remote deploy needs your real id.
 
 [vars]
 # "owner/repo" the roadmap/progress read from. Set to your repo.
