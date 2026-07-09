@@ -9,6 +9,7 @@ import './styles/auth.css';
 import './styles/sidebar.css';
 import './styles/topbar.css';
 import './styles/editor.css';
+import './styles/database.css';
 import './styles/ai.css';
 import './styles/search.css';
 import './styles/updates.css';

@@ -275,13 +275,17 @@ test('Start writing with AI mounts the AI bar (ai.js integrated)', async () => {
 
 // ---------- database delegation ----------
 
-test('a database page renders the "Database view" placeholder when database.js is missing', async () => {
+test('a database page renders through database.js (database.js integrated)', async () => {
   openTitled('Reading List');
-  await tick();
-  await tick();
-  const fallback = container.querySelector('.ed-db-fallback');
-  expect(fallback).not.toBeNull();
-  expect(fallback.textContent).toBe('Database view');
+  // database.js is present post-integration, so the dynamic import resolves
+  // and renderDatabase fills the .ed-db host (the "Database view" fallback is
+  // now dead code, exercised only if database.js ever fails to load). The
+  // dynamic import() takes a few microtask hops, so wait for the table.
+  await vi.waitFor(() => {
+    expect(container.querySelector('.ed-db .db-table')).not.toBeNull();
+  });
+  expect(container.querySelector('.ed-db-fallback')).toBeNull();
+  expect(container.textContent).toContain('Brave New World');
   // no contenteditable doc body for database pages
   expect(container.querySelector('.ed-body')).toBeNull();
 });

@@ -1,0 +1,675 @@
+/* Databases-lite (src/ui/database.js): 19.png To-dos table, 20.png Design
+   System gallery, 23.png view options panel, 24.png Reading List table.
+   Colors come exclusively from the tokens in src/styles/tokens.css. */
+
+.db {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* Seeded intro copy above the chrome (24.png paragraphs) */
+.db-intro {
+  margin-bottom: 8px;
+}
+
+.db-intro p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+/* ---------- chrome: view tabs + right cluster ---------- */
+
+.db-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.db-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.db-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 8px 8px;
+  font-size: 14px;
+  color: var(--text-2);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  border-radius: 4px 4px 0 0;
+}
+
+.db-tab:hover {
+  background: var(--bg-hover);
+}
+
+.db-tab-active {
+  color: var(--text);
+  font-weight: 500;
+  border-bottom-color: var(--text);
+}
+
+.db-tab-ic {
+  display: inline-flex;
+  align-items: center;
+}
+
+.db-tab-ic svg {
+  width: 14px;
+  height: 14px;
+}
+
+.db-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--text-2);
+}
+
+.db-tab-add:hover {
+  background: var(--bg-hover);
+}
+
+.db-ctas {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding-bottom: 4px;
+}
+
+.db-txtbtn {
+  padding: 3px 6px;
+  font-size: 14px;
+  color: var(--text-2);
+  border-radius: 4px;
+}
+
+.db-txtbtn:hover,
+.db-icbtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.db-icbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  color: var(--text-2);
+}
+
+.db-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-on-blue);
+  background: var(--blue);
+  border-radius: 6px;
+}
+
+.db-new:hover {
+  background: var(--blue-hover);
+}
+
+.db-new-caret {
+  font-size: 11px;
+  opacity: .85;
+}
+
+/* ---------- chip bar ---------- */
+
+.db-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.db-chip-filter {
+  padding: 3px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+  background: var(--bg-hover);
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.db-chip-filter:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.db-addfilter {
+  padding: 3px 6px;
+  font-size: 13px;
+  color: var(--text-3);
+  border-radius: 999px;
+}
+
+.db-addfilter:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+/* ---------- table ---------- */
+
+.db-table {
+  width: 100%;
+}
+
+.db-hrow,
+.db-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--divider);
+}
+
+.db-hrow {
+  height: 33px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.db-hcell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.db-kind {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.db-row {
+  height: 33px;
+}
+
+.db-row:hover {
+  background: var(--bg-hover);
+}
+
+.db-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* column widths (shared by header + body cells) */
+.db-cell-title { flex: 2 1 220px; min-width: 0; }
+.db-cell-checkbox { flex: 0 0 32px; justify-content: center; padding: 0; }
+.db-cell-text,
+.db-cell-date,
+.db-cell-url,
+.db-cell-person,
+.db-cell-select,
+.db-cell-stars { flex: 1 1 120px; min-width: 0; }
+
+.db-cell-title {
+  position: relative;
+  font-weight: 500;
+}
+
+.db-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  outline: none;
+}
+
+.db-open {
+  display: none;
+  flex: none;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px var(--divider);
+}
+
+.db-row:hover .db-open {
+  display: inline-flex;
+}
+
+.db-open:hover {
+  background: var(--bg-hover);
+}
+
+.db-check {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.db-cell-select {
+  cursor: pointer;
+}
+
+.db-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-chip-gray { background: var(--chip-gray); }
+.db-chip-blue { background: var(--chip-blue); }
+.db-chip-green { background: var(--chip-green); }
+.db-chip-yellow { background: var(--chip-yellow); }
+.db-chip-red { background: var(--chip-red); }
+
+.db-stars {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.db-stars-set {
+  background: var(--chip-yellow);
+}
+
+.db-star {
+  padding: 0 1px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1;
+}
+
+.db-star-on {
+  color: var(--text);
+}
+
+.db-edit {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  outline: none;
+  color: var(--text-2);
+}
+
+.db-cell-url .db-edit {
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+
+.db-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-active);
+  border-radius: 50%;
+}
+
+/* grouped sections */
+
+.db-group {
+  margin-top: 16px;
+}
+
+.db-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.db-group-count {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.db-group-none {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* footer */
+
+.db-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 33px;
+}
+
+.db-newrow {
+  flex: 1;
+  height: 100%;
+  padding: 0 8px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-3);
+  border-radius: 4px;
+}
+
+.db-newrow:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.db-calc {
+  flex: none;
+  padding: 0 8px;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.db-calc:hover {
+  color: var(--text-2);
+}
+
+/* ---------- gallery ---------- */
+
+.db-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.db-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+  transition: box-shadow .1s ease;
+}
+
+.db-card:hover {
+  box-shadow: 0 2px 8px var(--divider), 0 0 0 1px var(--divider);
+}
+
+.db-card-cover {
+  height: 110px;
+  background: var(--bg-cream);
+  border-bottom: 1px solid var(--divider);
+}
+
+.db-card-glyphs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.db-card-glyph {
+  display: inline-flex;
+  color: var(--text);
+}
+
+.db-card-glyph svg {
+  width: 20px;
+  height: 20px;
+}
+
+.db-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.db-card-title {
+  padding: 8px 10px 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.db-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 10px 10px;
+  min-height: 18px;
+}
+
+.db-card-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  font-size: 14px;
+  color: var(--text-3);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+}
+
+.db-card-new:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+/* ---------- board ---------- */
+
+.db-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  overflow-x: auto;
+}
+
+.db-bcol {
+  flex: 0 0 220px;
+}
+
+.db-bcol-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 8px;
+}
+
+.db-bcard {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--bg);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px var(--divider);
+}
+
+/* ---------- timeline / calendar stub ---------- */
+
+.db-stub {
+  padding: 24px 0;
+}
+
+.db-stub-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 12px;
+}
+
+.db-stub-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 140px;
+  font-size: 14px;
+  color: var(--text-3);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg-cream);
+}
+
+/* ---------- option popovers ---------- */
+
+.pop-root.db-opt-pop {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+}
+
+.db-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 14px;
+  text-align: left;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.db-opt:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- view options panel (23.png) ---------- */
+
+.pop-root.db-vopts {
+  display: flex;
+  flex-direction: column;
+  width: 290px;
+  padding: 8px 6px;
+}
+
+.db-vo-title {
+  padding: 2px 8px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.db-vo-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-3);
+}
+
+.db-vo-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.db-vo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+  border-radius: 4px;
+}
+
+.db-vo-row:hover {
+  background: var(--bg-hover);
+}
+
+.db-vo-ic {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-2);
+}
+
+.db-vo-ic svg {
+  width: 15px;
+  height: 15px;
+}
+
+.db-vo-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-vo-value {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.db-vo-chev {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-3);
+}
+
+.db-vo-chev svg {
+  width: 12px;
+  height: 12px;
+}
+
+.db-vo-div {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--divider);
+}
+
+.db-vo-danger,
+.db-vo-danger .db-vo-ic {
+  color: var(--cta-red-text);
+}
