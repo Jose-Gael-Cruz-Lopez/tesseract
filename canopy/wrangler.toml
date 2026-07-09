@@ -14,17 +14,17 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "canopy"
-database_id = "00000000-0000-0000-0000-000000000000"   # PLACEHOLDER — replace with YOUR D1 id from `npm run db:create` before deploying (see SETUP.md). Local `wrangler dev` works with this placeholder; remote deploy needs your real id.
+database_id = "53c1314d-2cb3-46b6-9d99-293a855524a4"
 
 [vars]
 # "owner/repo" the roadmap/progress read from. Set to your repo.
-GITHUB_REPO = ""
+GITHUB_REPO = "Jose-Gael-Cruz-Lopez/tesseract"
 # GitHub org whose ACTIVE members may log in. Leave empty for a personal repo —
 # then ADMIN_LOGINS gates login instead of org membership.
 AUTH_ORG = ""
 # Comma-separated GitHub logins allowed in (login gate when AUTH_ORG is empty)
 # and for admin actions. Set to your GitHub login to start.
-ADMIN_LOGINS = ""
+ADMIN_LOGINS = "Jose-Gael-Cruz-Lopez"
 
 [observability]
 enabled = true
