@@ -251,6 +251,14 @@ test('mode defaults to knowledge and round-trips to developer', () => {
   expect(store.getMode()).toBe('knowledge');
 });
 
+test('dev availability defaults false, toggles, and resets on resetStore', () => {
+  expect(store.isDevAvailable()).toBe(false);
+  store.setDevAvailable(true);
+  expect(store.isDevAvailable()).toBe(true);
+  store.resetStore();
+  expect(store.isDevAvailable()).toBe(false);
+});
+
 test('dev canopy config round-trips (url + token)', () => {
   expect(store.getDevConfig()).toEqual({ url: '', token: '' });
   store.setDevConfig({ url: 'http://localhost:8787', token: 'canopy_mcp_abc' });

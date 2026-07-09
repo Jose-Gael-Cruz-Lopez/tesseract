@@ -37,6 +37,28 @@ test('blank url + token reads same-origin (relative path) and is configured', as
   expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe('Bearer canopy_mcp_z');
 });
 
+test('no token but dev available → reads same-origin with credentials, no bearer', async () => {
+  store.setDevConfig({ url: '', token: '' });
+  store.setDevAvailable(true);
+  expect(isConfigured()).toBe(true);
+  const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ docs: [] }), { status: 200 }));
+  await makeCanopyApi(fetchImpl).getDocs();
+  const [u, init] = fetchImpl.mock.calls[0];
+  expect(u).toBe('/docs');
+  expect(init.credentials).toBe('include');
+  expect(init.headers.Authorization).toBeUndefined();
+});
+
+test('neither token nor dev available → not-configured, no fetch', async () => {
+  store.setDevConfig({ url: '', token: '' });
+  store.setDevAvailable(false);
+  expect(isConfigured()).toBe(false);
+  const fetchImpl = vi.fn();
+  const res = await makeCanopyApi(fetchImpl).getDocs();
+  expect(res).toEqual({ ok: false, status: 0, error: 'not-configured' });
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 test('getDocs GETs /docs with the bearer header and returns {ok, data}', async () => {
   const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ docs: [{ slug: 'x' }] }), { status: 200 }));
   const api = makeCanopyApi(fetchImpl);

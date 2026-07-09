@@ -10,6 +10,10 @@ const KEYS = { workspace: 'ms:workspace', pages: 'ms:pages', prefs: 'ms:prefs' }
 let _pages = [];
 let _workspace = null;
 let _prefs = {};
+// Runtime-only (never persisted): true when a canopy GitHub session is detected at
+// boot, meaning this user may use the developer side. Availability is per-session and
+// must not survive a logout, so it lives in memory, not localStorage.
+let _devAvailable = false;
 
 const _listeners = { pages: new Set(), workspace: new Set(), prefs: new Set() };
 
@@ -183,6 +187,7 @@ export function resetStore() {
   _pages = [];
   _workspace = null;
   _prefs = {};
+  _devAvailable = false;
   _listeners.pages.clear();
   _listeners.workspace.clear();
   _listeners.prefs.clear();
@@ -369,6 +374,16 @@ export function getMode() {
 }
 export function setMode(mode) {
   return setPref('mode', mode === 'developer' ? 'developer' : 'knowledge');
+}
+
+// Whether the developer side is available to this user (a canopy GitHub session was
+// detected at boot). Runtime-only; see _devAvailable.
+export function isDevAvailable() {
+  return _devAvailable;
+}
+export function setDevAvailable(available) {
+  _devAvailable = !!available;
+  return _devAvailable;
 }
 
 // Developer-mode connection to a canopy instance (URL + read token).
