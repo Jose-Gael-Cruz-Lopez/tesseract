@@ -362,3 +362,21 @@ export function setPref(key, value) {
   emit('prefs', { key, value });
   return value;
 }
+
+// App mode: the knowledge globe (default) vs the developer sphere (canopy).
+export function getMode() {
+  return _prefs.mode === 'developer' ? 'developer' : 'knowledge';
+}
+export function setMode(mode) {
+  return setPref('mode', mode === 'developer' ? 'developer' : 'knowledge');
+}
+
+// Developer-mode connection to a canopy instance (URL + read token).
+export function getDevConfig() {
+  return { url: _prefs['dev.canopyUrl'] || '', token: _prefs['dev.canopyToken'] || '' };
+}
+export function setDevConfig({ url, token } = {}) {
+  if (url !== undefined) setPref('dev.canopyUrl', url);
+  if (token !== undefined) setPref('dev.canopyToken', token);
+  return getDevConfig();
+}
