@@ -28,6 +28,15 @@ test('isConfigured reflects url + token presence', () => {
   expect(isConfigured()).toBe(false);
 });
 
+test('blank url + token reads same-origin (relative path) and is configured', async () => {
+  store.setDevConfig({ url: '', token: 'canopy_mcp_z' });
+  expect(isConfigured()).toBe(true);
+  const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ docs: [] }), { status: 200 }));
+  await makeCanopyApi(fetchImpl).getDocs();
+  expect(fetchImpl.mock.calls[0][0]).toBe('/docs');
+  expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe('Bearer canopy_mcp_z');
+});
+
 test('getDocs GETs /docs with the bearer header and returns {ok, data}', async () => {
   const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ docs: [{ slug: 'x' }] }), { status: 200 }));
   const api = makeCanopyApi(fetchImpl);
