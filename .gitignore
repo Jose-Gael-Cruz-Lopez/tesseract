@@ -35,3 +35,9 @@ pnpm-debug.log*
 # Local dev references (screenshots, not shipped)
 reference/
 .superpowers/
+
+# canopy (Cloudflare Worker sub-app — builds & deploys independently)
+canopy/node_modules/
+canopy/web/dist/
+canopy/.wrangler/
+canopy/.dev.vars

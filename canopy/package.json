@@ -1,0 +1,34 @@
+{
+  "name": "canopy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "vite build --config web/vite.config.ts",
+    "dev": "npm run build:web && wrangler dev",
+    "deploy": "npm run build:web && wrangler deploy",
+    "pretest": "mkdir -p web/dist",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.worker.json && tsc -p tsconfig.web.json",
+    "db:create": "wrangler d1 create canopy",
+    "db:migrate:local": "wrangler d1 migrations apply canopy --local",
+    "db:migrate:remote": "wrangler d1 migrations apply canopy --remote",
+    "seed": "node scripts/seed-dev.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "agents": "^0.16.2",
+    "dompurify": "^3.4.11",
+    "hono": "^4.12.0",
+    "marked": "^18.0.5",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.0",
+    "@cloudflare/workers-types": "^4.0.0",
+    "@types/node": "^26.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.84.0"
+  }
+}

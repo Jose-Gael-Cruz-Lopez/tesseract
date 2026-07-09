@@ -1,0 +1,370 @@
+import type { Env } from "../env";
+import type { PrSummaryRow, IssueSummaryRow } from "@shared/rows";
+import { first } from "../db";
+import { ingestEvent } from "../consumer";
+import { eventsFromDelivery } from "../webhook";
+import { type Summarizer, type PrSummary, type IssueSummary, geminiPrSummarizer, geminiIssueSummarizer, storePrSummary, storeIssueSummary } from "./summarize";
+import { applyEventProgress } from "./progress";
+
+// Admin-triggered server-side GitHub backfill. Unlike scripts/backfill-events.mjs
+// (which signs synthetic webhook deliveries with the webhook secret), this runs
+// INSIDE the Worker with GITHUB_SERVICE_TOKEN — the same token the scheduled()
+// progress recompute uses — so it fetches GitHub REST directly, no webhook secret.
+//
+// It reconstructs the SAME deliveries the webhook would have received, reuses the
+// PURE eventsFromDelivery() derivation (never duplicated here), post-maps each
+// event's provenance to "backfill", and writes through the ONE gate fn ingestEvent
+// — but with the ADMIN principal as the writer (an authenticated identity), not
+// the fixed "github-webhook" string. Downstream projections (PR summaries, issue
+// progress) mirror handleGithubWebhook, hung off newly-written events only.
+
+const GH_API = "application/vnd.github+json";
+const USER_AGENT = "canopy";
+
+// A long unbroken run of sequential AI calls has been observed to hit a hard
+// wall partway through (many successes, then every subsequent call fails
+// instantly) — a rate limit or per-request ceiling, not a code defect. Cap
+// how many summarizer calls one invocation makes, and pace them, so a single
+// Sync stays comfortably under whatever that limit is; a backlog beyond the
+// cap is picked up by the next Sync click (the model≠excerpt-and-structured
+// skip-check already makes that safe — nothing already summarized is redone).
+//
+// Kept small (5) so each /admin/backfill returns quickly and the browser sees
+// progress between batches rather than one long stall — the frontend auto-loops
+// up to MAX_BACKFILL_BATCHES (web/src/main.ts). Even in the pathological case
+// where every call times out (GEMINI_TIMEOUT_MS), a batch is bounded to
+// ~5 × timeout and still completes via the excerpt fallback.
+const SUMMARY_BATCH_LIMIT = 5;
+const SUMMARY_CALL_DELAY_MS = 500;
+
+export interface BackfillResult {
+  ok: boolean;
+  error?: string;
+  captured: number;
+  unchanged: number;
+  summarized: number;
+  summaryBudgetExhausted: boolean;
+  /** How many of `prs` already have a real (non-excerpt) summary — the "X of Y" the frontend shows. */
+  prSummarizedCount: number;
+  /** How many assigned issues already have a real (non-excerpt) summary. */
+  issueSummarizedCount: number;
+  prs: number;
+  issues: number;
+  /** Denominator: assigned issues found this run — the "X of Y" the frontend shows. */
+  issuesToSummarize: number;
+}
+
+// Minimal typed views over the GitHub REST list items — only the fields the
+// delivery synthesizers below read are modeled; everything else is ignored.
+interface GhUserLite {
+  login: string;
+}
+interface GhMilestoneLite {
+  number: number;
+  title?: string | null;
+  due_on?: string | null;
+  open_issues?: number;
+  closed_issues?: number;
+}
+interface GhPrListItem {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  merged_at: string | null;
+  closed_at: string | null;
+  updated_at: string;
+  user: GhUserLite;
+  milestone?: GhMilestoneLite | null;
+  base?: { ref: string } | null;
+}
+interface GhIssueListItem {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  state: string;
+  updated_at: string;
+  user: GhUserLite;
+  assignees?: GhUserLite[];
+  assignee?: GhUserLite | null;
+  labels?: (string | { name: string })[];
+  milestone?: GhMilestoneLite | null;
+  pull_request?: unknown; // present only when the "issue" is really a PR
+}
+
+// The `rel="next"` URL from a GitHub Link header, or null when there is no next page.
+function nextLink(res: Response): string | null {
+  const link = res.headers.get("link");
+  const next = link?.split(",").find((part) => part.includes('rel="next"'));
+  return next ? (next.match(/<([^>]+)>/)?.[1] ?? null) : null;
+}
+
+// Synthesize the delivery bodies eventsFromDelivery reads — SAME raw slice shapes
+// as scripts/backfill-events.mjs (test/fixtures/*.json). PR list items carry no
+// `merged` boolean (that's single-PR-fetch only), so derive it from merged_at.
+function prClosedDelivery(pr: GhPrListItem) {
+  return {
+    action: "closed",
+    number: pr.number,
+    pull_request: {
+      number: pr.number,
+      title: pr.title,
+      body: pr.body,
+      html_url: pr.html_url,
+      merged: pr.merged_at != null,
+      merged_at: pr.merged_at,
+      closed_at: pr.closed_at,
+      user: { login: pr.user.login },
+      base: pr.base ? { ref: pr.base.ref } : null,
+      milestone: pr.milestone
+        ? { number: pr.milestone.number, open_issues: pr.milestone.open_issues, closed_issues: pr.milestone.closed_issues }
+        : null,
+    },
+  };
+}
+
+function issueDelivery(issue: GhIssueListItem) {
+  const assignee = issue.assignees?.[0] ?? issue.assignee ?? null;
+  const action = assignee ? "assigned" : "opened";
+  return {
+    action,
+    ...(assignee ? { assignee: { login: assignee.login } } : {}),
+    issue: {
+      number: issue.number,
+      title: issue.title,
+      body: issue.body,
+      html_url: issue.html_url,
+      state: issue.state,
+      updated_at: issue.updated_at,
+      user: { login: issue.user.login },
+      assignees: (issue.assignees ?? []).map((a) => ({ login: a.login })),
+      labels: issue.labels ?? [],
+      milestone: issue.milestone
+        ? {
+            number: issue.milestone.number,
+            title: issue.milestone.title ?? null,
+            due_on: issue.milestone.due_on ?? null,
+            open_issues: issue.milestone.open_issues,
+            closed_issues: issue.milestone.closed_issues,
+          }
+        : null,
+    },
+  };
+}
+
+export async function runBackfill(
+  env: Env,
+  principalLogin: string,
+  opts?: {
+    fetchImpl?: typeof fetch;
+    summarizer?: Summarizer<PrSummary> | null;
+    issueSummarizer?: Summarizer<IssueSummary> | null;
+    summaryBatchLimit?: number;
+    summaryCallDelayMs?: number;
+  }
+): Promise<BackfillResult> {
+  // Nothing-ran failure envelope. The route turns this into a 503 whose error
+  // reaches the admin's toast — a Sync that can't reach GitHub must say so, not
+  // report zeros as if the repo were empty.
+  const failed = (error: string): BackfillResult => ({
+    ok: false,
+    error,
+    captured: 0,
+    unchanged: 0,
+    summarized: 0,
+    summaryBudgetExhausted: false,
+    prSummarizedCount: 0,
+    issueSummarizedCount: 0,
+    prs: 0,
+    issues: 0,
+    issuesToSummarize: 0,
+  });
+
+  const token = env.GITHUB_SERVICE_TOKEN;
+  const repo = env.GITHUB_REPO;
+  if (!token || !repo) return failed("service token or repo not configured");
+
+  const doFetch = opts?.fetchImpl ?? fetch;
+  const summarizer = opts?.summarizer ?? (env.GEMINI_API_KEY ? geminiPrSummarizer(env.GEMINI_API_KEY) : null);
+  const issueSummarizer = opts?.issueSummarizer ?? (env.GEMINI_API_KEY ? geminiIssueSummarizer(env.GEMINI_API_KEY) : null);
+  const summaryBatchLimit = opts?.summaryBatchLimit ?? SUMMARY_BATCH_LIMIT;
+  const summaryCallDelayMs = opts?.summaryCallDelayMs ?? SUMMARY_CALL_DELAY_MS;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: GH_API,
+    "user-agent": USER_AGENT,
+    "x-github-api-version": "2022-11-28",
+  };
+
+  // (a) All closed PRs, fully paginated — full history, not just recent
+  //     activity, so a Sync also surfaces PRs merged before this route existed.
+  const prList: GhPrListItem[] = [];
+  {
+    let url: string | null = `https://api.github.com/repos/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100`;
+    while (url) {
+      const res: Response = await doFetch(url, { headers });
+      // Fail the whole run, loud: a 401/403/404 here (dead or under-scoped
+      // GITHUB_SERVICE_TOKEN) would otherwise read as "0 PRs" — fake success.
+      // Both lists are fetched before any ingestion, so nothing is half-written.
+      if (!res.ok) return failed(`GitHub ${res.status} listing closed PRs (check GITHUB_SERVICE_TOKEN)`);
+      const page = (await res.json()) as GhPrListItem[];
+      prList.push(...page);
+      url = nextLink(res);
+    }
+  }
+
+  // (b) All open issues, paginated. The issues endpoint also returns PRs — those
+  //     carry a `pull_request` field and are not our surface, so skip them.
+  const issueList: GhIssueListItem[] = [];
+  {
+    let url: string | null = `https://api.github.com/repos/${repo}/issues?state=open&per_page=100`;
+    while (url) {
+      const res: Response = await doFetch(url, { headers });
+      if (!res.ok) return failed(`GitHub ${res.status} listing open issues (check GITHUB_SERVICE_TOKEN)`);
+      const page = (await res.json()) as GhIssueListItem[];
+      for (const issue of page) {
+        if (issue.pull_request) continue;
+        issueList.push(issue);
+      }
+      url = nextLink(res);
+    }
+  }
+
+  let captured = 0;
+  let unchanged = 0;
+  let summarized = 0;
+  let summaryBudgetExhausted = false;
+  // Running counts of PRs / issues that end this call with a real (non-excerpt,
+  // structured) summary — either already had one, or got one just now. Paired
+  // with prList.length / issuesToSummarize, these are the "X of Y" progress the
+  // frontend shows across a multi-batch sync.
+  let prSummarizedCount = 0;
+  let issueSummarizedCount = 0;
+  let issuesToSummarize = 0; // denominator: assigned issues found this run
+
+  // Issues are summarized BEFORE PRs. The AI-call budget is shared per invocation,
+  // so ordering is what decides who gets starved when there's a backlog: the To-do
+  // surface (open assigned issues) is the more time-sensitive glance, and — because
+  // issues are far fewer than PRs — it clears well before the sustained-load AI
+  // rate-limit wall the long PR run can hit. PRs (Previous activity) take whatever
+  // budget remains and finish across follow-up Sync batches (the frontend auto-loops).
+  for (const issue of issueList) {
+    const payload = issueDelivery(issue);
+    const isAssigned = payload.action === "assigned";
+    if (isAssigned) issuesToSummarize++;
+
+    for (const base of eventsFromDelivery("issues", payload)) {
+      const ev = { ...base, provenance: "backfill" as const };
+      const res = await ingestEvent(env.DB, ev, principalLogin);
+      if (res.outcome === "written") {
+        captured++;
+        // Mirror handleGithubWebhook's progress seam for newly-written issues.
+        await applyEventProgress(env.DB, payload);
+      } else {
+        unchanged++;
+      }
+
+      if (!isAssigned) continue; // unassigned issues never appear in anyone's to-do
+
+      const existing = await first<IssueSummaryRow>(
+        env.DB,
+        `SELECT model, title FROM issue_summaries WHERE issue_number = ?`,
+        issue.number
+      );
+      const alreadySummarized = existing !== null && existing.model !== "excerpt" && existing.title !== null;
+      if (alreadySummarized) {
+        issueSummarizedCount++;
+        continue;
+      }
+
+      // Shares the SAME summarized/summaryBatchLimit budget as the PR loop
+      // below — not a separate allowance. See Global Constraints.
+      if (summarized >= summaryBatchLimit) {
+        summaryBudgetExhausted = true;
+        continue;
+      }
+
+      const stored = await storeIssueSummary(env.DB, issueSummarizer, {
+        issue_number: issue.number,
+        title: issue.title,
+        body: issue.body ?? "",
+      });
+      summarized++;
+      // storeIssueSummary can still fall back to excerpt if the AI call failed —
+      // only count it toward "done" if it actually got a real, structured summary.
+      if (stored.model !== "excerpt" && stored.title !== null) issueSummarizedCount++;
+
+      if (summarized < summaryBatchLimit && summaryCallDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, summaryCallDelayMs));
+      }
+    }
+  }
+
+  for (const pr of prList) {
+    const payload = prClosedDelivery(pr);
+    for (const base of eventsFromDelivery("pull_request", payload)) {
+      const ev = { ...base, provenance: "backfill" as const };
+      const res = await ingestEvent(env.DB, ev, principalLogin);
+      if (res.outcome === "written") {
+        captured++;
+      } else {
+        unchanged++;
+      }
+
+      // (Re)summarize unless it already has a real summary — decoupled from the
+      // event-capture outcome so a Sync also migrates PRs that fell back to the
+      // excerpt summary, not just brand-new ones.
+      const existing = await first<PrSummaryRow>(
+        env.DB,
+        `SELECT model, title FROM pr_summaries WHERE semantic_key = ?`,
+        ev.semantic_key
+      );
+      // "Done" = a real (non-excerpt) summary that is ALSO structured — title
+      // doubles as the structured-generation marker (0018), so prose-era rows
+      // regenerate exactly once under the shared budget.
+      const alreadySummarized = existing !== null && existing.model !== "excerpt" && existing.title !== null;
+      if (alreadySummarized) {
+        prSummarizedCount++;
+        continue;
+      }
+
+      if (summarized >= summaryBatchLimit) {
+        summaryBudgetExhausted = true;
+        continue;
+      }
+
+      const parsed = JSON.parse(ev.raw) as { pr: { number: number; title: string; body: string | null } };
+      const stored = await storePrSummary(env.DB, summarizer, {
+        semantic_key: ev.semantic_key,
+        pr_number: parsed.pr.number,
+        title: parsed.pr.title,
+        body: parsed.pr.body ?? "",
+      });
+      summarized++;
+      // storePrSummary can still fall back to excerpt if the AI call failed —
+      // only count it toward "done" if it actually got a real, structured summary.
+      if (stored.model !== "excerpt" && stored.title !== null) prSummarizedCount++;
+
+      // Pace summarizer calls so one invocation doesn't burst past whatever
+      // limit caused the wall above — skip the trailing delay once the batch
+      // is done, nothing follows it.
+      if (summarized < summaryBatchLimit && summaryCallDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, summaryCallDelayMs));
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    captured,
+    unchanged,
+    summarized,
+    summaryBudgetExhausted,
+    prSummarizedCount,
+    issueSummarizedCount,
+    prs: prList.length,
+    issues: issueList.length,
+    issuesToSummarize,
+  };
+}

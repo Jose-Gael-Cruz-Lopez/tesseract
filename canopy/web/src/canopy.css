@@ -1,0 +1,166 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Canopy design system — ported VERBATIM from Canopy.dc.html (the <style> block
+   in <helmet>). The file is the spec; do not retune these values.
+
+   Below the verbatim block is a small hover/focus utility layer that reproduces
+   the dc-runtime's `style-hover` / `style-active` / `style-focus` pseudo-props
+   as real CSS (the canvas runtime applied those inline; plain CSS needs rules).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── verbatim from Canopy.dc.html ──────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select { font-family: inherit; }
+::selection { background: var(--accent, #2BFF88); color: var(--accent-fg, #000); }
+.cnpy-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.cnpy-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+.cnpy-scroll::-webkit-scrollbar-track { background: transparent; }
+@keyframes cnpy-spin { to { transform: rotate(360deg); } }
+@keyframes cnpy-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes cnpy-pop { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+
+[data-cnpy-theme="dark"] { --bg:#1c1a16; --fg:#ede9e2; --fg-70:rgba(237,233,226,0.72); --fg-55:rgba(237,233,226,0.55); --fg-40:rgba(237,233,226,0.40); --border:rgba(237,233,226,0.11); --border-strong:rgba(237,233,226,0.20); --hover:rgba(237,233,226,0.07); --accent:#9aab65; --accent-fg:#131a07; --accent-soft:rgba(154,171,101,0.14); --green:#5ab86c; --amber:#d98a52; --blue:#6aa8c4; --red:#cc6262; --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace; }
+[data-cnpy-theme="light"] { --bg:#faf8f3; --fg:#1a1814; --fg-70:rgba(26,24,20,0.72); --fg-55:rgba(26,24,20,0.55); --fg-40:rgba(26,24,20,0.40); --border:rgba(42,39,31,0.10); --border-strong:rgba(42,39,31,0.18); --hover:rgba(42,39,31,0.06); --accent:#8a9a5b; --accent-fg:#ffffff; --accent-soft:rgba(138,154,91,0.12); --green:#1b6c42; --amber:#b4562c; --blue:#3e6f8a; --red:#a83a3a; --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace; }
+/* Midnight = the original high-contrast black + neon-green theme (pre-Sapling), kept as an option. */
+[data-cnpy-theme="midnight"] { --bg:#000000; --fg:#ffffff; --fg-70:rgba(255,255,255,0.70); --fg-55:rgba(255,255,255,0.55); --fg-40:rgba(255,255,255,0.40); --border:rgba(255,255,255,0.11); --border-strong:rgba(255,255,255,0.20); --hover:rgba(255,255,255,0.055); --accent:#2BFF88; --accent-fg:#00130a; --accent-soft:rgba(43,255,136,0.13); --green:#2BFF88; --amber:#FFB454; --blue:#74A9FF; --red:#FF6B6B; --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+.cnpy-aside { width:248px; flex:none; display:flex; flex-direction:column; border-right:1px solid var(--border); background:var(--bg); transition:width .18s ease; }
+[data-collapsed="1"] .cnpy-aside { width:64px; }
+.cnpy-nav { display:flex; align-items:center; gap:11px; width:100%; padding:9px 11px; border-radius:8px; font-size:13.5px; font-weight:500; position:relative; color:var(--fg-55); text-align:left; }
+.cnpy-nav:hover { color:var(--fg-70); background:var(--hover); }
+[data-collapsed="1"] .cnpy-nav { justify-content:center; padding:9px 0; }
+[data-screen="mywork"] .cnpy-nav.n-mywork, [data-screen="feed"] .cnpy-nav.n-feed, [data-screen="docs"] .cnpy-nav.n-docs, [data-screen="roadmap"] .cnpy-nav.n-roadmap, [data-screen="review"] .cnpy-nav.n-review, [data-screen="maintenance"] .cnpy-nav.n-maintenance, [data-screen="search"] .cnpy-nav.n-search { background:var(--accent-soft); color:var(--accent); }
+.cnpy-chip { display:flex; align-items:center; gap:10px; width:100%; padding:8px 9px; border-radius:9px; }
+.cnpy-chip:hover { background:var(--hover); }
+[data-collapsed="1"] .cnpy-chip { justify-content:center; padding:6px 0; }
+[data-screen="settings"] .cnpy-chip { background:var(--hover); }
+.cnpy-achip { padding:5px 11px; border-radius:7px; font-size:12.5px; font-weight:500; border:1px solid var(--border); color:var(--fg-55); background:transparent; transition:border-color .12s ease; white-space:nowrap; }
+.cnpy-achip:hover { border-color:var(--border-strong); }
+[data-author="all"] .cnpy-achip.a-all, [data-author="jose-a"] .cnpy-achip.a-jose-a, [data-author="meilin"] .cnpy-achip.a-meilin, [data-author="dev-raj"] .cnpy-achip.a-dev-raj, [data-author="sanaok"] .cnpy-achip.a-sanaok { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+.cnpy-titem { display:block; width:100%; text-align:left; padding:13px 15px; border-radius:11px; border:1px solid var(--border); background:transparent; margin-bottom:8px; position:relative; transition:all .12s ease; cursor:pointer; }
+.cnpy-titem:hover { border-color:var(--border-strong); }
+.cnpy-selbar { position:absolute; inset:0; border-radius:inherit; border:1px solid var(--border-strong); background:var(--hover); box-shadow:inset 2px 0 0 var(--accent); pointer-events:none; }
+/* Review list cards: selected state keeps the border + fill, no left accent bar. */
+.cnpy-titem .cnpy-selbar { box-shadow:none; }
+/* ── docs nav tree (static section labels · pages · per-page outline) ───────── */
+.cnpy-treesec { font-family:var(--mono); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--fg-40); padding:0 10px 7px 8px; }
+.cnpy-tree { display:flex; align-items:center; gap:5px; width:100%; text-align:left; padding:6px 10px 6px 6px; border-radius:7px; font-size:13px; font-weight:400; color:var(--fg-55); background:transparent; transition:background .12s ease, color .12s ease; }
+.cnpy-tree:hover { color:var(--fg); }
+.cnpy-tree.is-active { color:var(--accent); font-weight:500; }
+.cnpy-tree.is-active:hover { color:var(--accent); }
+.cnpy-treechev { flex:none; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:4px; color:var(--fg-40); transition:transform .16s ease, color .12s ease, background .12s ease; }
+.cnpy-treechev.is-open { transform:rotate(90deg); }
+.cnpy-treechev:hover { color:var(--fg-70); }
+.cnpy-tree.is-active .cnpy-treechev { color:var(--accent); }
+.cnpy-treechev.is-empty, .cnpy-treechev.is-empty:hover { background:transparent; pointer-events:none; }
+/* Grid-rows trick animates to the exact content height. Only one transition runs at
+   a time — the chevron is a single toggle, and the accordion collapses the previous
+   outline instantly (main.ts) — so two fr transitions never overlap (that wedges).
+   Vertical breathing room rides on the last item → a collapsed outline is a true 0px. */
+.cnpy-outline { display:grid; grid-template-rows:0fr; transition:grid-template-rows .22s cubic-bezier(.4,0,.2,1); }
+.cnpy-outline.is-open { grid-template-rows:1fr; }
+.cnpy-outline-inner { overflow:hidden; min-height:0; display:flex; flex-direction:column; gap:1px; padding-left:23px; }
+.cnpy-outline-inner > :last-child { margin-bottom:5px; }
+@media (prefers-reduced-motion: reduce) { .cnpy-outline { transition:none; } }
+.cnpy-outline-item { text-align:left; width:100%; padding:4px 8px 4px 11px; border-radius:6px; font-size:12px; color:var(--fg-40); background:transparent; transition:color .12s ease, background .12s ease; }
+.cnpy-outline-item:hover { color:var(--fg-70); }
+.cnpy-outline-item.is-current { color:var(--accent); font-weight:500; }
+.cnpy-outline-item.is-current:hover { color:var(--accent); }
+.cnpy-outline-item.lvl3 { padding-left:23px; font-size:11.5px; }
+.cnpy-outline-item > span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── hover / focus utility layer (reproduces dc-runtime style-* pseudo-props) ─ */
+.cnpy-select { appearance:none; -webkit-appearance:none; padding:5px 28px 5px 11px; border-radius:7px; font-size:12.5px; font-weight:500; border:1px solid var(--border); color:var(--fg-70); cursor:pointer; background:var(--bg) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23888' stroke-width='2'><path d='M2 4l4 4 4-4'/></svg>") no-repeat right 9px center; }
+.cnpy-card { transition:border-color .14s ease; }
+.cnpy-card:hover { border-color:var(--border-strong); }
+.cnpy-mw-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:1fr; gap:14px; align-items:stretch; }
+@media (max-width:760px) { .cnpy-mw-grid { grid-template-columns:1fr; } }
+.cnpy-accentbtn { transition:filter .12s ease, transform .12s ease; }
+.cnpy-accentbtn:hover { filter:brightness(1.06); }
+.cnpy-accentbtn:active { transform:translateY(1px); }
+.cnpy-outlinebtn { transition:all .12s ease; }
+.cnpy-outlinebtn:hover { background:var(--hover); color:var(--fg); }
+.cnpy-ghostbtn { transition:all .12s ease; }
+.cnpy-ghostbtn:hover { border-color:var(--border-strong); color:var(--fg); }
+.cnpy-iconbtn { transition:background .12s ease, color .12s ease; }
+.cnpy-iconbtn:hover { background:var(--hover); color:var(--fg-70); }
+.cnpy-link:hover { text-decoration:underline; }
+.cnpy-rejectbtn:hover { border-color:var(--red); color:var(--red); background:color-mix(in srgb, var(--red) 10%, transparent); }
+.cnpy-rejectbtn:active { transform:translateY(1px); }
+.cnpy-issuechip { transition:border-color .12s ease, color .12s ease; }
+.cnpy-issuechip:hover { border-color:var(--border-strong); color:var(--fg); }
+.cnpy-revoke { transition:all .12s ease; }
+.cnpy-revoke:hover { border-color:var(--red); background:color-mix(in srgb, var(--red) 10%, transparent); }
+.cnpy-xbtn:hover { background:color-mix(in srgb, var(--accent) 22%, transparent); }
+.cnpy-input:focus { border-color:var(--accent); }
+.cnpy-themecard { transition:all .12s ease; }
+.cnpy-mintbtn { transition:filter .12s ease; }
+.cnpy-mintbtn:hover { filter:brightness(1.05); }
+.cnpy-numpill { transition:filter .12s ease; }
+.cnpy-numpill:hover { filter:brightness(1.15); }
+.cnpy-copybtn { transition:filter .12s ease, transform .12s ease; }
+.cnpy-copybtn:hover { filter:brightness(1.06); }
+.cnpy-copybtn:active { transform:translateY(1px); }
+.cnpy-copybtn.is-copied { cursor:default; }
+.cnpy-copybtn.is-copied:hover { filter:none; }
+.cnpy-copybtn.is-copied:active { transform:none; }
+.cnpy-signout { transition:all .12s ease; }
+.cnpy-signout:hover { border-color:var(--red); color:var(--red); }
+.cnpy-mutelink:hover { color:var(--fg-70); }
+
+/* ── rendered markdown (docs reader) ───────────────────────────────────────── */
+/* A typeset technical document: comfortable measure, mono structural spine.
+   Every color derives from the theme vars so it holds in dark / light / midnight. */
+.cnpy-md { font-size:15px; line-height:1.75; color:color-mix(in srgb, var(--fg) 82%, transparent); }
+.cnpy-md > :first-child { margin-top:0 !important; }
+.cnpy-md > :last-child { margin-bottom:0; }
+
+.cnpy-md h1, .cnpy-md h2, .cnpy-md h3, .cnpy-md h4 { color:var(--fg); scroll-margin-top:24px; }
+.cnpy-md h1 { font-size:23px; font-weight:650; letter-spacing:-0.02em; line-height:1.2; margin:42px 0 15px; }
+.cnpy-md h2 { font-size:18.5px; font-weight:640; letter-spacing:-0.012em; line-height:1.25; margin:36px 0 14px; padding-bottom:7px; border-bottom:1px solid var(--border); }
+.cnpy-md h3 { font-size:16px; font-weight:640; letter-spacing:-0.006em; margin:28px 0 9px; }
+.cnpy-md h4 { font-family:var(--mono); font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--fg-55); margin:24px 0 9px; }
+
+.cnpy-md p { margin:0 0 15px; }
+.cnpy-md a { color:var(--accent); text-decoration:underline; text-decoration-color:color-mix(in srgb, var(--accent) 34%, transparent); text-underline-offset:2px; text-decoration-thickness:1px; }
+.cnpy-md a:hover { text-decoration-color:var(--accent); }
+.cnpy-md strong { color:var(--fg); font-weight:650; }
+.cnpy-md em { font-style:italic; }
+
+/* lists — accent-numbered ordered (sequence), quiet bulleted (items) */
+.cnpy-md ul, .cnpy-md ol { margin:0 0 15px; padding-left:24px; }
+.cnpy-md li { margin:6px 0; padding-left:3px; }
+.cnpy-md li::marker { color:var(--fg-40); }
+.cnpy-md ol > li::marker { font-family:var(--mono); font-size:.9em; font-weight:600; color:var(--accent); }
+.cnpy-md li > ul, .cnpy-md li > ol { margin:6px 0; }
+.cnpy-md li > p { margin:0 0 8px; }
+
+/* inline code — crisp mono chip */
+.cnpy-md code { font-family:var(--mono); font-size:.86em; color:var(--fg); background:color-mix(in srgb, var(--fg) 6%, transparent); border:1px solid var(--border); border-radius:5px; padding:1.5px 5px; }
+.cnpy-md a code { color:var(--accent); }
+
+/* code panel — a bordered card with an optional mono language tag (added in markdown.ts) */
+.cnpy-code { margin:0 0 18px; border:1px solid var(--border); border-radius:11px; overflow:hidden; background:color-mix(in srgb, var(--fg) 4%, var(--bg)); }
+.cnpy-code-lang { font-family:var(--mono); font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--fg-40); padding:8px 15px; border-bottom:1px solid var(--border); }
+.cnpy-md pre { background:color-mix(in srgb, var(--fg) 4%, var(--bg)); border:1px solid var(--border); border-radius:11px; padding:15px 16px; overflow-x:auto; margin:0 0 18px; }
+.cnpy-md .cnpy-code pre { margin:0; background:none; border:none; border-radius:0; }
+.cnpy-md pre code { font-family:var(--mono); font-size:12.5px; line-height:1.65; color:var(--fg); background:none; border:none; padding:0; white-space:pre; }
+
+/* blockquote — a note callout, not a whisper */
+.cnpy-md blockquote { border-left:2px solid var(--accent); background:var(--accent-soft); padding:12px 16px; margin:0 0 16px; border-radius:0 8px 8px 0; color:color-mix(in srgb, var(--fg) 78%, transparent); }
+.cnpy-md blockquote > :first-child { margin-top:0; }
+.cnpy-md blockquote > :last-child { margin-bottom:0; }
+
+.cnpy-md hr { border:none; border-top:1px solid var(--border); margin:30px 0; }
+.cnpy-md img { max-width:100%; border-radius:10px; border:1px solid var(--border); }
+
+/* tables — editorial ledger: rule-only borders, mono uppercase header */
+.cnpy-md-tablewrap { overflow-x:auto; margin:0 0 18px; }
+.cnpy-md table { border-collapse:collapse; width:100%; font-size:13.5px; }
+.cnpy-md-tablewrap > table { margin:0; }
+.cnpy-md th, .cnpy-md td { text-align:left; padding:9px 13px; vertical-align:top; }
+.cnpy-md th { font-family:var(--mono); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--fg-55); border-bottom:1.5px solid var(--border-strong); white-space:nowrap; }
+.cnpy-md td { border-bottom:1px solid var(--border); }
+.cnpy-md tbody tr:last-child td { border-bottom:none; }
+.cnpy-md th:first-child, .cnpy-md td:first-child { padding-left:2px; }
