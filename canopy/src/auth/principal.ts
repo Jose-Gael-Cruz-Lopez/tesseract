@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "../env";
 import { readSessionCookie, getSessionUser } from "./session";
 import { resolveToken } from "./tokens";
+import { isActiveOrgMember } from "./github";
 
 export interface Principal {
   login: string;
@@ -17,6 +18,17 @@ export type AppEnv = { Bindings: Env; Variables: { principal: Principal } };
 export function isAdmin(env: Env, login: string): boolean {
   const allow = (env.ADMIN_LOGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return allow.includes(login);
+}
+
+/**
+ * The login gate for the OAuth callback. When AUTH_ORG is set, only active
+ * members of that GitHub org may log in. When AUTH_ORG is empty (personal /
+ * multi-owner repos), fall back to the ADMIN_LOGINS allow-list. Fails closed.
+ */
+export async function isAllowed(env: Env, token: string, login: string): Promise<boolean> {
+  const org = (env.AUTH_ORG ?? "").trim();
+  if (org) return isActiveOrgMember(token, org);
+  return isAdmin(env, login);
 }
 
 // The only routes reachable without a session. Everything else is gated.

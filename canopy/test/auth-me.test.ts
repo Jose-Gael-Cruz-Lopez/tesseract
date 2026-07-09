@@ -17,11 +17,12 @@ describe("GET /auth/me", () => {
     const cookie = await authedCookie("andres");
     const res = await app.request("/auth/me", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
-    const body = await res.json() as { login: string; name: string | null; avatar_url: string | null; org: string };
+    const body = await res.json() as { login: string; name: string | null; avatar_url: string | null; org: string | null };
     expect(body.login).toBe("andres");
     expect(body.name).toBe("andres");
     expect(body.avatar_url).toBeNull();
-    expect(body.org).toBe("SaplingLearn");
+    // Allow-list mode (no AUTH_ORG configured in the test env) reports no org.
+    expect(body.org).toBeNull();
   });
 
   it("returns avatar_url when stored", async () => {
@@ -29,7 +30,7 @@ describe("GET /auth/me", () => {
     const cookie = await authedCookie("jose", url);
     const res = await app.request("/auth/me", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
-    const body = await res.json() as { login: string; name: string | null; avatar_url: string | null; org: string };
+    const body = await res.json() as { login: string; name: string | null; avatar_url: string | null; org: string | null };
     expect(body.login).toBe("jose");
     expect(body.avatar_url).toBe(url);
   });
