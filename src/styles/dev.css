@@ -143,3 +143,4 @@
   margin-top: 6px;
 }
 .set-dev-status { margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.set-field-hint { margin: -8px 0 4px; font-size: 12px; color: var(--text-3); max-width: 420px; }
