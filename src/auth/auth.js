@@ -64,6 +64,18 @@ export function getSession() {
   return read(KEY_SESSION);
 }
 
+// Patches the current session in place (e.g. settings' account panel editing
+// preferred name / avatar). No-op (returns null) if there is no session to
+// patch. Additive to the canonical interface in shared-context.md — every
+// signature documented there is unchanged.
+export function updateSession(patch = {}) {
+  const session = read(KEY_SESSION);
+  if (!session) return null;
+  const updated = { ...session, ...patch };
+  write(KEY_SESSION, updated);
+  return updated;
+}
+
 export function setOnboarded() {
   const session = read(KEY_SESSION);
   if (!session) return;
