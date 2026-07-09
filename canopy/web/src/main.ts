@@ -526,7 +526,7 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
     case "previewNonMember": state.authStep = "nonmember"; break;
     case "backToLogin":
       state.authStep = "login";
-      history.replaceState({}, "", "/");
+      history.replaceState({}, "", "/admin/");
       break;
     case "signOut":
       logout()
