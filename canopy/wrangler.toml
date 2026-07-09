@@ -14,12 +14,17 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "canopy"
-database_id = "80386dc4-deef-461d-932a-0670d22ddf83"
+database_id = ""   # set to YOUR D1 id from `npm run db:create` (see SETUP.md)
 
 [vars]
-GITHUB_REPO = "SaplingLearn/sapling"
-# Comma-separated GitHub logins allowed to run admin actions (e.g. the server-side backfill).
-ADMIN_LOGINS = "AndresL230"
+# "owner/repo" the roadmap/progress read from. Set to your repo.
+GITHUB_REPO = ""
+# GitHub org whose ACTIVE members may log in. Leave empty for a personal repo —
+# then ADMIN_LOGINS gates login instead of org membership.
+AUTH_ORG = ""
+# Comma-separated GitHub logins allowed in (login gate when AUTH_ORG is empty)
+# and for admin actions. Set to your GitHub login to start.
+ADMIN_LOGINS = ""
 
 [observability]
 enabled = true
