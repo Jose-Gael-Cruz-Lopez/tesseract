@@ -20,9 +20,10 @@ import './styles/templates.css';
 
 import { initTheme } from './ui/theme.js';
 import { getSession, setSession } from './auth/auth.js';
-import { initStore, seedWorkspace } from './data/store.js';
+import { initStore, seedWorkspace, setDevAvailable } from './data/store.js';
 import { mountApp } from './app.js';
 import { supabaseEnabled, getSupabaseSession, profileFromSession } from './data/supabase.js';
+import { getCanopySession, sessionFromGitHub } from './data/canopy-session.js';
 
 // Auth views load lazily (a separate chunk) so the auth code isn't paid for
 // once a returning, onboarded user is past the gate.
@@ -62,6 +63,26 @@ async function boot() {
       startApp(root);
       return;
     }
+  }
+
+  // A canopy GitHub session (same-origin, fused deploy) grants BOTH sides: derive a
+  // knowledge session from the GitHub identity and unlock the developer side.
+  const me = await getCanopySession();
+  if (me) {
+    setSession(sessionFromGitHub(me));
+    setDevAvailable(true);
+    history.replaceState(null, '', location.pathname); // drop ?denied / OAuth query
+    startApp(root);
+    return;
+  }
+  // A GitHub sign-in that was denied (not allow-listed yet) returns as ?denied=1 with
+  // no session — show the auth screen with a note to use Google for the Knowledge side.
+  if (new URLSearchParams(location.search).get('denied') === '1') {
+    history.replaceState(null, '', location.pathname);
+    showAuth(root);
+    const { toast } = await import('./ui/popover.js');
+    toast("Developer access isn't enabled for that GitHub account yet — use Google for the Knowledge side.");
+    return;
   }
 
   const session = getSession();

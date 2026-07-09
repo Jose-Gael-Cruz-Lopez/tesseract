@@ -128,14 +128,27 @@ export function mountSidebar(container, ctx) {
         if (ws.ownerEmail) root.appendChild(el('div', 'sb-ws-pop-email', ws.ownerEmail));
         root.appendChild(el('div', 'sb-menu-divider'));
 
-        // Mode switch: Knowledge (notes globe) ↔ Developer (canopy sphere).
+        // Mode switch: Knowledge (notes globe) ↔ Developer (canopy sphere). Developer
+        // appears only for GitHub-signed-in users; otherwise a GitHub-unlock action.
         root.appendChild(el('div', 'sb-menu-label', 'Switch mode'));
         const active = ctx.mode ? ctx.mode() : 'knowledge';
-        for (const [id, label] of [['knowledge', 'Knowledge'], ['developer', 'Developer']]) {
-          const item = el('button', 'sb-menu-item' + (active === id ? ' is-active' : ''), (active === id ? '✓ ' : '') + label);
-          item.type = 'button';
-          item.addEventListener('click', () => { close(); ctx.setMode && ctx.setMode(id); });
-          root.appendChild(item);
+        const devOk = ctx.devAvailable ? ctx.devAvailable() : false;
+
+        const know = el('button', 'sb-menu-item' + (active === 'knowledge' ? ' is-active' : ''), (active === 'knowledge' ? '✓ ' : '') + 'Knowledge');
+        know.type = 'button';
+        know.addEventListener('click', () => { close(); ctx.setMode && ctx.setMode('knowledge'); });
+        root.appendChild(know);
+
+        if (devOk) {
+          const dev = el('button', 'sb-menu-item' + (active === 'developer' ? ' is-active' : ''), (active === 'developer' ? '✓ ' : '') + 'Developer');
+          dev.type = 'button';
+          dev.addEventListener('click', () => { close(); ctx.setMode && ctx.setMode('developer'); });
+          root.appendChild(dev);
+        } else {
+          const unlock = el('button', 'sb-menu-item sb-menu-unlock', 'Continue with GitHub to unlock Developer');
+          unlock.type = 'button';
+          unlock.addEventListener('click', () => { close(); try { window.location.href = '/auth/login?return=/'; } catch { /* nav blocked */ } });
+          root.appendChild(unlock);
         }
         root.appendChild(el('div', 'sb-menu-divider'));
 

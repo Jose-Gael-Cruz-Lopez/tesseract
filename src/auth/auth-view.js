@@ -264,8 +264,15 @@ export function mountAuth(container, { onComplete } = {}) {
   function buildOAuth() {
     const group = node('div', 'au-oauth-group');
     group.appendChild(oauthButton(ICONS.google, 'Continue with Google', 'au-oauth-google', onGoogle));
+    // GitHub sign-in grants the Developer side too — a full-page redirect through
+    // canopy's OAuth (same-origin), returning to the app root signed in.
+    group.appendChild(oauthButton(ICONS.github, 'Continue with GitHub', 'au-oauth-github', onGitHub));
     group.appendChild(oauthButton(ICONS.apple, 'Continue with Apple', 'au-oauth-apple', () => toast('Coming soon')));
     return group;
+  }
+
+  function onGitHub() {
+    try { window.location.href = '/auth/login?return=/'; } catch { /* navigation blocked */ }
   }
 
   // Real Google OAuth when Supabase is configured; otherwise the placeholder.
