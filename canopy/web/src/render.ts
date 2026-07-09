@@ -249,13 +249,13 @@ function loginCard(): string {
       </div>
     </div>
     <div style="border:1px solid var(--border);border-radius:14px;padding:30px;display:flex;flex-direction:column;gap:20px;background:var(--bg)">
-      <div style="font-size:14px;color:var(--fg-70);text-align:center;line-height:1.55">Sign in to continue to the Sapling team workspace.</div>
+      <div style="font-size:14px;color:var(--fg-70);text-align:center;line-height:1.55">Sign in to continue to your team workspace.</div>
       <button data-act="signIn" class="cnpy-accentbtn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px 16px;border-radius:9px;background:var(--accent);color:var(--accent-fg);font-size:14px;font-weight:600">
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.38-1.34-1.75-1.34-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.23 1.84 1.23 1.07 1.83 2.81 1.3 3.49.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.32-5.47-5.87 0-1.3.47-2.36 1.23-3.19-.12-.3-.53-1.51.12-3.15 0 0 1.01-.32 3.3 1.22a11.5 11.5 0 0 1 6 0c2.29-1.54 3.3-1.22 3.3-1.22.65 1.64.24 2.85.12 3.15.77.83 1.23 1.89 1.23 3.19 0 4.56-2.81 5.57-5.49 5.86.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"></path></svg>
         Sign in with GitHub
       </button>
     </div>
-    <div style="text-align:center;margin-top:22px;font-size:12.5px;color:var(--fg-40);line-height:1.5">The shared source of truth for the Sapling team.</div>
+    <div style="text-align:center;margin-top:22px;font-size:12.5px;color:var(--fg-40);line-height:1.5">The shared source of truth for your team.</div>
     <div style="text-align:center;margin-top:18px"><button data-act="previewNonMember" class="cnpy-mutelink" style="font-size:11.5px;color:var(--fg-40);text-decoration:underline;text-underline-offset:3px">Preview the non-member screen</button></div>
   </div>`;
 }
@@ -267,8 +267,8 @@ function nonmemberCard(): string {
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
       </div>
       <div>
-        <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Canopy is limited to the Sapling team.</div>
-        <div style="font-size:13.5px;color:var(--fg-55);margin-top:8px;line-height:1.55">Your GitHub account isn't a member of the <span style="font-family:var(--mono);font-size:12.5px">SaplingLearn</span> organization, so there's nothing here for you yet.</div>
+        <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">You don't have access to this Canopy.</div>
+        <div style="font-size:13.5px;color:var(--fg-55);margin-top:8px;line-height:1.55">Your GitHub account isn't on the access list for this Canopy yet. Ask the owner to add you (org membership or the <span style="font-family:var(--mono);font-size:12.5px">ADMIN_LOGINS</span> allow-list).</div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:9px 14px 9px 9px;border:1px solid var(--border);border-radius:999px">
         <div style="width:26px;height:26px;border-radius:50%;${AVATAR};font-size:10px;font-weight:600;color:var(--fg-70)">OS</div>
@@ -287,7 +287,7 @@ function verifyingCard(): string {
     </div>
     <div style="display:flex;align-items:center;gap:11px;color:var(--fg-55);font-size:13px">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" style="animation:cnpy-spin .8s linear infinite"><path d="M12 3a9 9 0 1 0 9 9" stroke-linecap="round"></path></svg>
-      Verifying Sapling membership&hellip;
+      Verifying access&hellip;
     </div>
   </div>`;
 }
@@ -978,7 +978,7 @@ function guideView(s: AppState): string {
       <li>Open ${gStrong("Settings")} and, under ${gStrong("MCP access tokens")}, click ${gStrong("Mint new token")}. Copy it right away — it's shown only once.</li>
     </ol>
     <p style="${gP};margin-top:14px">${gStrong("Easiest — install the Canopy plugin.")} It bundles the three skills below ${gStrong("and")} the MCP connection, so there's nothing to wire by hand. In Claude Code:</p>
-    ${gPre(`/plugin marketplace add SaplingLearn/canopy
+    ${gPre(`/plugin marketplace add Jose-Gael-Cruz-Lopez/canopy
 /plugin install canopy@canopy`)}
     <p style="${gP};margin-top:12px">The plugin reads your token from an environment variable — export it in the shell that launches your agent (add it to your shell profile to make it stick), then restart:</p>
     ${gPre(`export CANOPY_MCP_TOKEN=canopy_mcp_…`)}
