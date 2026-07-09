@@ -4,9 +4,16 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/modals.css';
 import './styles/shell.css';
-import './styles/sidebar.css';
 import './styles/globe.css';
 import './styles/auth.css';
+import './styles/sidebar.css';
+import './styles/topbar.css';
+import './styles/editor.css';
+import './styles/ai.css';
+import './styles/search.css';
+import './styles/updates.css';
+import './styles/settings.css';
+import './styles/import.css';
 
 import { initTheme } from './ui/theme.js';
 import { getSession } from './auth/auth.js';
