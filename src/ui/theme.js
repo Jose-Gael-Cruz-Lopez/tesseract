@@ -44,8 +44,19 @@ function resolve(mode) {
   return systemPrefersDark() ? 'dark' : 'light';
 }
 
+// Set the resolved theme on <html> and notify listeners (e.g. the globe, which
+// isn't styled by CSS tokens and repaints itself on theme change).
+function setResolved(resolved) {
+  document.documentElement.dataset.theme = resolved;
+  try {
+    document.dispatchEvent(new CustomEvent('mnemosphere:themechange', { detail: { theme: resolved } }));
+  } catch {
+    // CustomEvent unavailable (bare node) — attribute is still set
+  }
+}
+
 function apply(mode) {
-  document.documentElement.dataset.theme = resolve(mode);
+  setResolved(resolve(mode));
 }
 
 function unwatchSystem() {
@@ -66,7 +77,7 @@ function watchSystem(mode) {
   try {
     mediaQuery = matchMedia('(prefers-color-scheme: dark)');
     mediaListener = (event) => {
-      document.documentElement.dataset.theme = event.matches ? 'dark' : 'light';
+      setResolved(event.matches ? 'dark' : 'light');
     };
     if (typeof mediaQuery.addEventListener === 'function') {
       mediaQuery.addEventListener('change', mediaListener);

@@ -56,3 +56,20 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* Light theme: the scene repaints light (see globe.js), so its chrome follows.
+   `.gl-light` is toggled on the stage container by initGlobe / applyGlobeTheme. */
+.gl-light.gl-stage {
+  background: #edeef5;
+}
+.gl-light .gl-vignette {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(206, 210, 226, 0.7) 100%);
+}
+.gl-light .gl-hint {
+  color: rgba(55, 53, 47, 0.5);
+}
+.gl-light .gl-tooltip {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(90, 100, 170, 0.4);
+  color: #3a4468;
+}
