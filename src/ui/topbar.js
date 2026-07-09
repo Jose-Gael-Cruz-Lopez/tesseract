@@ -102,6 +102,14 @@ export function mountTopbar(container, ctx) {
   function renderPage(page) {
     const left = el('div', 'tb-left');
 
+    // Workspace crumb doubles as "back to the globe" (the Home view).
+    const home = el('button', 'tb-crumb tb-workspace');
+    home.textContent = store.getWorkspace()?.name || 'Mnemosphere';
+    home.title = 'Back to the globe';
+    home.addEventListener('click', () => ctx.goHome());
+    left.appendChild(home);
+    left.appendChild(el('span', 'tb-sep', '/'));
+
     const parent = page.parentId ? store.getPage(page.parentId) : null;
     if (parent) {
       const pb = el('button', 'tb-crumb tb-parent');
