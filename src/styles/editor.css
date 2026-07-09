@@ -1,0 +1,644 @@
+/*
+ * Page editor styles (7.png doc / 8.png new-page state / 13.png pickers).
+ * Class prefix: ed-. Colors only via tokens — the only inline color values
+ * are data-driven (cover preset css, icon tint) set from decor-data.js.
+ */
+
+/* ------------------------------------------------------------- layout -- */
+
+.ed-scroll {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.ed-doc {
+  max-width: 708px;
+  margin: 0 auto;
+  padding: 72px 24px 30vh;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.ed-cover + .ed-doc {
+  padding-top: 0;
+}
+
+.ed-doc.ed-full {
+  max-width: calc(100% - 96px);
+}
+
+.ed-doc.ed-serif {
+  font-family: var(--font-serif);
+}
+
+.ed-doc.ed-mono {
+  font-family: var(--font-mono);
+}
+
+/* -------------------------------------------------------------- cover -- */
+
+.ed-cover {
+  position: relative;
+  height: 280px;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.ed-cover-btns {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: var(--pop-shadow);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.ed-cover:hover .ed-cover-btns,
+.ed-cover-btns:focus-within {
+  opacity: 1;
+}
+
+.ed-cover-btn {
+  background: var(--pop-bg);
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 4px 8px;
+  border: none;
+  border-right: 1px solid var(--divider);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ed-cover-btn:last-child {
+  border-right: none;
+}
+
+.ed-cover-btn:hover {
+  background: var(--bg-hover);
+}
+
+.ed-cover.ed-repositioning {
+  cursor: grab;
+}
+
+.ed-cover-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--scrim);
+  color: var(--chip-gray);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------- icon -- */
+
+.ed-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 66px;
+  line-height: 1;
+}
+
+.ed-icon:hover {
+  background: var(--bg-hover);
+}
+
+/* icon overlaps a 280px cover by half its height */
+.ed-icon.ed-icon-overlap {
+  margin-top: -39px;
+  position: relative;
+  z-index: 1;
+}
+
+.ed-icon-emoji {
+  display: block;
+}
+
+.ed-icon-line svg {
+  width: 68px;
+  height: 68px;
+}
+
+.ed-icon-img {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------- ghost row -- */
+
+.ed-ghost {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.ed-doc:hover .ed-ghost,
+.ed-ghost:focus-within {
+  opacity: 1;
+}
+
+.ed-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text-3);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ed-ghost-btn:hover {
+  background: var(--bg-hover);
+}
+
+.ed-ghost-btn svg {
+  flex: 0 0 auto;
+}
+
+/* ---------------------------------------------------------- lock chip -- */
+
+.ed-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 12px;
+  width: fit-content;
+}
+
+/* -------------------------------------------------------------- title -- */
+
+.ed-title {
+  margin-top: 6px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+  outline: none;
+  word-break: break-word;
+  caret-color: var(--text);
+}
+
+.ed-title:empty::before {
+  content: "Untitled";
+  color: var(--text-3);
+}
+
+/* --------------------------------------------------------------- body -- */
+
+.ed-body {
+  margin-top: 12px;
+  min-height: 120px;
+  font-size: 16px;
+  line-height: 1.5;
+  outline: none;
+  caret-color: var(--text);
+}
+
+.ed-doc.ed-small .ed-body {
+  font-size: 14px;
+}
+
+.ed-body:empty::before {
+  content: "Enter text or type '/' for commands";
+  color: var(--text-3);
+}
+
+.ed-body p {
+  margin: 4px 0;
+  padding: 3px 0;
+}
+
+.ed-body h1 {
+  margin: 26px 0 4px;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ed-body h2 {
+  margin: 18px 0 2px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ed-body ul {
+  margin: 2px 0;
+  padding-left: 24px;
+}
+
+.ed-body li {
+  padding: 3px 0;
+}
+
+.ed-body code {
+  font-family: var(--font-mono);
+  font-size: 85%;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--cta-red-text);
+}
+
+.ed-body details {
+  padding: 3px 0;
+}
+
+.ed-body summary {
+  cursor: pointer;
+  padding: 3px 2px;
+  border-radius: 4px;
+}
+
+.ed-body summary:hover {
+  background: var(--bg-hover);
+}
+
+.ed-body details > p {
+  margin-left: 24px;
+}
+
+/* to-do line: square checkbox left of the text (7.png) */
+.ed-todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.ed-todo input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 4px 0 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.ed-todo input[type="checkbox"][checked] + * {
+  color: var(--text-3);
+}
+
+/* callout block (7.png bottom): gray rounded strip */
+.ed-callout {
+  margin: 8px 0;
+  padding: 16px;
+  border-radius: 4px;
+  background: var(--bg-cream);
+}
+
+/* database host + placeholder fallback */
+.ed-db {
+  margin-top: 16px;
+}
+
+.ed-db-fallback {
+  padding: 24px 0;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+/* ------------------------------------------------- new-page menu (8.png) */
+
+.ed-new {
+  margin-top: 12px;
+}
+
+.ed-new-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ed-new-row:hover {
+  background: var(--bg-hover);
+}
+
+.ed-new-row.ed-new-hl {
+  background: var(--bg-active);
+}
+
+.ed-new-ic {
+  display: inline-flex;
+  color: var(--text-3);
+}
+
+.ed-new-label {
+  margin: 16px 0 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* -------------------------------------------------- pickers (13.png) -- */
+
+.pop-root.ed-icon-pop {
+  width: 408px;
+  max-width: min(408px, calc(100vw - 16px));
+}
+
+.pop-root.ed-cover-pop {
+  width: 408px;
+  max-width: min(408px, calc(100vw - 16px));
+}
+
+.ed-pick-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.ed-pick-tab {
+  padding: 8px 4px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ed-pick-tab.ed-pick-tab-on {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+
+.ed-pick-remove {
+  margin-left: auto;
+  padding: 8px 4px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ed-pick-remove:hover {
+  color: var(--text);
+}
+
+.ed-pick-body {
+  padding: 10px;
+}
+
+/* Emojis tab */
+
+.ed-emoji-search {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.ed-emoji-search:focus {
+  border-color: var(--blue);
+}
+
+.ed-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 28px);
+  gap: 2px;
+  justify-content: space-between;
+  margin-top: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ed-emoji-cell {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ed-emoji-cell:hover {
+  background: var(--bg-hover);
+}
+
+/* Icons tab */
+
+.ed-swatches {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 10px;
+}
+
+.ed-swatch {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ed-swatch.ed-swatch-on {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.ed-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 28px);
+  gap: 4px;
+  justify-content: space-between;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ed-icon-cell {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ed-icon-cell:hover {
+  background: var(--bg-hover);
+}
+
+.ed-icon-cell svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Custom tab / cover Link tab */
+
+.ed-custom-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ed-custom-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.ed-custom-input:focus {
+  border-color: var(--blue);
+}
+
+.ed-custom-submit {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--blue);
+  color: var(--bg);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ed-custom-submit:hover {
+  background: var(--blue-hover);
+}
+
+.ed-upload {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ed-upload:hover {
+  background: var(--bg-hover);
+}
+
+.ed-upload-input {
+  display: none;
+}
+
+.ed-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.ed-badge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--chip-yellow);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Cover gallery tab */
+
+.ed-gallery {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.ed-gallery-swatch {
+  display: block;
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  cursor: pointer;
+  background-size: cover;
+}
+
+.ed-gallery-swatch:hover {
+  box-shadow: var(--pop-shadow);
+}
+
+.ed-gallery-label {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ed-cover-btns,
+  .ed-ghost {
+    transition: none;
+  }
+}
