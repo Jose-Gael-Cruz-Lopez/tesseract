@@ -22,32 +22,35 @@ import { getSession } from './auth/auth.js';
 import { initStore, seedWorkspace } from './data/store.js';
 import { mountApp } from './app.js';
 
-// The auth views ship in Task 21; import.meta.glob resolves to {} until the
-// file exists, so the boot degrades to a plain pending screen instead of a
-// build error.
+// Auth views load lazily (a separate chunk) so the auth code isn't paid for
+// once a returning, onboarded user is past the gate.
 const authViews = import.meta.glob('./auth/auth-view.js');
 
+// Mount the app shell for a signed-in user, seeding a workspace on first run.
+// Logging out returns to the auth screens without a reload.
 function startApp(root) {
   const session = getSession();
   if (!initStore()) seedWorkspace({ name: session?.name || 'Me', email: session?.email || '' });
-  mountApp(root);
+  mountApp(root, { onLogOut: () => showAuth(root) });
 }
 
-async function boot() {
+// Render the sign-up / log-in / onboarding flow; on completion, boot the app.
+async function showAuth(root) {
+  const load = authViews['./auth/auth-view.js'];
+  if (load) {
+    const { mountAuth } = await load();
+    mountAuth(root, { onComplete: () => startApp(root) });
+  } else {
+    root.innerHTML = '<div class="boot-auth-pending">auth pending</div>';
+  }
+}
+
+function boot() {
   initTheme();
   const root = document.getElementById('root');
   const session = getSession();
-  if (!session || !session.onboarded) {
-    const load = authViews['./auth/auth-view.js'];
-    if (load) {
-      const { mountAuth } = await load();
-      mountAuth(root, { onComplete: () => startApp(root) });
-    } else {
-      root.innerHTML = '<div class="boot-auth-pending">auth pending</div>';
-    }
-    return;
-  }
-  startApp(root);
+  if (!session || !session.onboarded) showAuth(root);
+  else startApp(root);
 }
 
 boot();
