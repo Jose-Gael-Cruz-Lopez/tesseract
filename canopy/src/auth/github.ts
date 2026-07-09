@@ -1,6 +1,5 @@
 import type { Env } from "../env";
 
-export const SAPLING_ORG = "SaplingLearn";
 const USER_AGENT = "canopy";
 const GH_API = "application/vnd.github+json";
 
@@ -53,9 +52,9 @@ export async function getUser(token: string): Promise<{ login: string; name: str
   return data.login ? { login: data.login, name: data.name ?? null, avatar_url: data.avatar_url ?? null } : null;
 }
 
-/** True only if the token's owner is an ACTIVE member of SAPLING_ORG. */
-export async function isActiveOrgMember(token: string): Promise<boolean> {
-  const res = await fetch(`https://api.github.com/user/memberships/orgs/${SAPLING_ORG}`, {
+/** True only if the token's owner is an ACTIVE member of `org`. */
+export async function isActiveOrgMember(token: string, org: string): Promise<boolean> {
+  const res = await fetch(`https://api.github.com/user/memberships/orgs/${org}`, {
     headers: { authorization: `Bearer ${token}`, accept: GH_API, "user-agent": USER_AGENT },
   });
   if (!res.ok) return false; // 404 => not a member

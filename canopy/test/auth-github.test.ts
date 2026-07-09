@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAuthorizeUrl, SAPLING_ORG } from "../src/auth/github";
+import { buildAuthorizeUrl } from "../src/auth/github";
 
 describe("buildAuthorizeUrl", () => {
   it("targets GitHub authorize with client_id, redirect_uri, scope, state, and S256 challenge", () => {
@@ -15,7 +15,4 @@ describe("buildAuthorizeUrl", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
   });
 
-  it("pins the org constant", () => {
-    expect(SAPLING_ORG).toBe("SaplingLearn");
-  });
 });

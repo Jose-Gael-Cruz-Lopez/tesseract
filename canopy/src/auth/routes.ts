@@ -1,13 +1,12 @@
 import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { AppEnv } from "./principal";
-import { isAdmin } from "./principal";
+import { isAdmin, isAllowed } from "./principal";
 import { pkce, randomToken, hmacSeal, hmacUnseal } from "./crypto";
-import { buildAuthorizeUrl, exchangeCode, getUser, isActiveOrgMember } from "./github";
+import { buildAuthorizeUrl, exchangeCode, getUser } from "./github";
 import { createSession, setSessionCookie, readSessionCookie, deleteSession, clearSessionCookie } from "./session";
 import { mintToken } from "./tokens";
 import { first, run, nowIso } from "../db";
-import { SAPLING_ORG } from "./github";
 
 const OAUTH_TX_COOKIE = "oauth_tx";
 
@@ -58,7 +57,7 @@ authApp.get("/callback", async (c) => {
 
   const ghUser = await getUser(token);
   if (!ghUser) return c.json({ error: "identity_failed" }, 401);
-  if (!(await isActiveOrgMember(token))) return c.redirect("/?denied=1", 302);
+  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect("/?denied=1", 302);
 
   await run(c.env.DB,
     `INSERT INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, ?, ?)
@@ -74,7 +73,7 @@ authApp.get("/callback", async (c) => {
 authApp.get("/me", async (c) => {
   const login = c.get("principal").login;
   const row = await first<{ name: string | null; avatar_url: string | null }>(c.env.DB, `SELECT name, avatar_url FROM users WHERE github_login = ?`, login);
-  return c.json({ login, name: row?.name ?? null, avatar_url: row?.avatar_url ?? null, org: SAPLING_ORG, admin: isAdmin(c.env, login) });
+  return c.json({ login, name: row?.name ?? null, avatar_url: row?.avatar_url ?? null, org: (c.env.AUTH_ORG ?? "").trim() || null, admin: isAdmin(c.env, login) });
 });
 
 // GATED (by sessionGate in src/routes.ts): revoke this session.
