@@ -1,0 +1,90 @@
+/* Import modal (src/ui/import-modal.js), reference 21.png.
+   Colors come exclusively from src/styles/tokens.css — no hex literals.
+   Reuses .mod-scrim/.mod-box from popover.js's modals.css; this file only
+   adds the imp-modal width/padding and the `imp-` prefixed content styling. */
+
+.mod-box.imp-modal {
+  width: 690px;
+  max-width: calc(100vw - 32px);
+  padding: 20px 24px 24px;
+}
+
+.imp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.imp-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.imp-learn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.imp-learn:hover {
+  color: var(--text-2);
+}
+
+.imp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.imp-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.imp-card:hover {
+  background: var(--bg-hover);
+}
+
+.imp-card-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-2);
+}
+
+.imp-card-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.imp-card-note {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.imp-hidden-input {
+  display: none;
+}
