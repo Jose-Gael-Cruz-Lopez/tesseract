@@ -128,6 +128,29 @@ VITE_REPO_URL="https://github.com/Jose-Gael-Cruz-Lopez/your-repo" npm run build:
 ```
 (Absent, links fall back to `https://github.com`.)
 
+## 10. Connect the Mnemosphere developer sphere
+
+The Mnemosphere dev sphere reads canopy cross-origin. Two things enable it:
+
+1. **Allow its origin (CORS).** In `wrangler.toml` `[vars]` add the Mnemosphere
+   origin(s) — only `GET` is ever allowed cross-origin:
+   ```toml
+   CORS_ORIGINS = "http://localhost:5173"        # dev; add your prod origin comma-separated
+   ```
+   Redeploy (`npm run deploy`) or restart `npm run dev`.
+
+2. **Mint a read token.** Sign in to canopy, then generate a personal token
+   (`POST /auth/mcp-token` — the Settings screen's "Generate token"; shown once,
+   starts with `canopy_mcp_`). Locally you can mint one with a `DEV_LOGIN`
+   session:
+   ```bash
+   curl -s -XPOST http://localhost:8787/auth/mcp-token   # returns { "token": "canopy_mcp_…" }
+   ```
+
+Then in Mnemosphere → **Developer settings**, paste the **Canopy URL**
+(`http://localhost:8787` locally, or your Worker URL) and the **token**, and
+"Test connection". Switch to **Developer** mode to see the sphere.
+
 ## Commands reference
 
 | Command | What it does |
