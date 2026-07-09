@@ -259,13 +259,18 @@ test('picking Empty page dismisses the menu; typing in the title dismisses it to
   expect(container.querySelector('.ed-new')).toBeNull();
 });
 
-test('Start writing with AI falls back to a Coming soon toast when ai.js is missing', async () => {
+test('Start writing with AI mounts the AI bar (ai.js integrated)', async () => {
   const page = store.createPage({});
   editor.open(page.id);
   newMenuRow('Start writing with AI').click();
-  await tick();
-  await tick();
-  expect(ctx.toast).toHaveBeenCalledWith('Coming soon');
+  // ai.js is present post-integration, so the dynamic import resolves and the
+  // AI writing bar mounts into the editor body (the "Coming soon" fallback is
+  // now dead code, exercised only if ai.js ever fails to load). The dynamic
+  // import() takes a few microtask hops, so wait for the bar to appear.
+  await vi.waitFor(() => {
+    expect(container.querySelector('.ed-body .ai-bar')).not.toBeNull();
+  });
+  expect(ctx.toast).not.toHaveBeenCalledWith('Coming soon');
 });
 
 // ---------- database delegation ----------
