@@ -127,6 +127,18 @@ export function mountSidebar(container, ctx) {
         root.appendChild(el('div', 'sb-ws-pop-name', ws.name || 'Mnemosphere'));
         if (ws.ownerEmail) root.appendChild(el('div', 'sb-ws-pop-email', ws.ownerEmail));
         root.appendChild(el('div', 'sb-menu-divider'));
+
+        // Mode switch: Knowledge (notes globe) ↔ Developer (canopy sphere).
+        root.appendChild(el('div', 'sb-menu-label', 'Switch mode'));
+        const active = ctx.mode ? ctx.mode() : 'knowledge';
+        for (const [id, label] of [['knowledge', 'Knowledge'], ['developer', 'Developer']]) {
+          const item = el('button', 'sb-menu-item' + (active === id ? ' is-active' : ''), (active === id ? '✓ ' : '') + label);
+          item.type = 'button';
+          item.addEventListener('click', () => { close(); ctx.setMode && ctx.setMode(id); });
+          root.appendChild(item);
+        }
+        root.appendChild(el('div', 'sb-menu-divider'));
+
         const logout = el('button', 'sb-menu-item', 'Log out');
         logout.type = 'button';
         logout.addEventListener('click', () => {

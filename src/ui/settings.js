@@ -16,6 +16,7 @@ import { ICONS } from './icons.js';
 const PERSONAL_NAV = [
   { id: 'account', label: 'My account', icon: '👤' },
   { id: 'notifications', label: 'My notifications & settings', icon: '🔔' },
+  { id: 'developer', label: 'Developer', icon: '🧑‍💻' },
   { id: 'myConnections', label: 'My connections', icon: '⤴' },
   { id: 'language', label: 'Language & region', icon: '🌐' },
 ];
@@ -286,9 +287,55 @@ function renderStubPanel(label) {
   return panel;
 }
 
+function devField(label, input) {
+  const wrap = el('div', 'set-field');
+  wrap.appendChild(el('label', 'set-field-label', label));
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function renderDeveloperPanel(ctx) {
+  const panel = el('div', 'set-panel-inner');
+  panel.appendChild(el('h2', 'set-h', 'Developer'));
+  panel.appendChild(el('div', 'set-row-sub', 'Connect the developer sphere to a canopy instance (read-only). Mint a token in canopy; see canopy/SETUP.md.'));
+
+  const cfg = ctx.store.getDevConfig();
+  const urlInput = el('input', 'set-input');
+  urlInput.type = 'text';
+  urlInput.placeholder = 'https://canopy.you.workers.dev';
+  urlInput.value = cfg.url;
+  const tokenInput = el('input', 'set-input');
+  tokenInput.type = 'password';
+  tokenInput.placeholder = 'canopy_mcp_…';
+  tokenInput.value = cfg.token;
+
+  const persist = () => ctx.store.setDevConfig({ url: urlInput.value.trim(), token: tokenInput.value.trim() });
+  urlInput.addEventListener('change', persist);
+  tokenInput.addEventListener('change', persist);
+
+  const status = el('div', 'set-dev-status');
+  const test = el('button', 'set-dev-test', 'Test connection');
+  test.type = 'button';
+  test.addEventListener('click', async () => {
+    persist();
+    status.textContent = 'Testing…';
+    const { makeCanopyApi } = await import('../dev/canopy-api.js');
+    const res = await makeCanopyApi().getMe();
+    status.textContent = res.ok
+      ? `Connected as ${res.data.login || 'user'}.`
+      : res.status === 401
+        ? 'Unauthorized — check the token.'
+        : 'Could not reach canopy — check the URL and that CORS_ORIGINS allows this app.';
+  });
+
+  panel.append(devField('Canopy URL', urlInput), devField('Access token', tokenInput), test, status);
+  return panel;
+}
+
 function renderPanel(id, ctx) {
   if (id === 'account') return renderAccountPanel(ctx);
   if (id === 'notifications') return renderNotificationsPanel(ctx);
+  if (id === 'developer') return renderDeveloperPanel(ctx);
   return renderStubPanel(labelForId(id));
 }
 

@@ -29,6 +29,7 @@ function installMemoryLocalStorage() {
 const NAV_LABELS = [
   'My account',
   'My notifications & settings',
+  'Developer',
   'My connections',
   'Language & region',
   'Settings',
@@ -80,10 +81,10 @@ test('imports', async () => {
 });
 
 describe('nav', () => {
-  test('renders all 11 nav items in order', () => {
+  test('renders all 12 nav items in order', () => {
     openSettings(makeCtx());
     const rows = document.querySelectorAll('.set-nav-row');
-    expect(rows.length).toBe(11);
+    expect(rows.length).toBe(12);
     expect(Array.from(rows).map((r) => r.querySelector('.set-nav-label').textContent)).toEqual(NAV_LABELS);
   });
 
