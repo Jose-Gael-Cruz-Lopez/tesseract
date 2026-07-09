@@ -89,11 +89,11 @@ test("setTheme('system') follows a mocked matchMedia — light", () => {
   expect(getTheme()).toBe('system');
 });
 
-test('initTheme() defaults to system, which resolves to light when unset and matchMedia reports no preference', () => {
-  mockMatchMedia(false);
+test('initTheme() defaults to light when no preference is saved (matches the light reference design)', () => {
+  mockMatchMedia(true); // even on a dark-preferring OS, the unset default is light
   initTheme();
   expect(document.documentElement.dataset.theme).toBe('light');
-  expect(getTheme()).toBe('system');
+  expect(getTheme()).toBe('light');
 });
 
 test('setTheme persists under the ms:prefs key without clobbering sibling prefs', () => {

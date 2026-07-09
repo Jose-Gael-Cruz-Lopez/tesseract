@@ -6,7 +6,9 @@
 // private-mode / storage-disabled browser degrades to in-memory only.
 
 const PREFS_KEY = 'ms:prefs';
-const DEFAULT_MODE = 'system';
+// Default to light so a fresh workspace matches the (light) reference design;
+// users can switch to Dark or Use-system in Settings → Appearance.
+const DEFAULT_MODE = 'light';
 
 let mediaQuery = null;
 let mediaListener = null;
