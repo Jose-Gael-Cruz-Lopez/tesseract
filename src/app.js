@@ -1,13 +1,15 @@
-// App shell (Task 21). Builds the Notion-style frame — sidebar rail, topbar,
-// content area with the globe behind a slide-over page panel — mounts every
-// surface, and wires them together through one `ctx` object. The globe is the
-// Home view; opening a page slides a panel over it and focuses its hub behind.
+// App shell. Builds the Notion-style frame — sidebar rail, topbar, content area
+// with the globe behind a slide-over page panel — mounts every surface, and
+// wires them through one `ctx` object. Two modes share this shell: Knowledge
+// (the page store → notes globe) and Developer (canopy → dev sphere). The mode
+// is switched from the sidebar workspace menu; only the globe + sidebar + page
+// behavior differ, so the topbar/editor/comments chrome is mounted once.
 
 import { initGlobe } from './globe/globe.js';
 import * as store from './data/store.js';
 import * as auth from './auth/auth.js';
 import { supabaseSignOut } from './data/supabase.js';
-import { toast } from './ui/popover.js';
+import { toast, el } from './ui/popover.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountTopbar } from './ui/topbar.js';
 import { mountEditor } from './ui/editor.js';
@@ -19,6 +21,10 @@ import { openTemplates } from './ui/templates-modal.js';
 import { openImport } from './ui/import-modal.js';
 import { openTeamspace } from './ui/teamspace-modal.js';
 import { openTrash } from './ui/trash.js';
+import { isConfigured } from './dev/canopy-api.js';
+import { devProvider } from './dev/dev-provider.js';
+import { mountDevSidebar } from './dev/dev-sidebar.js';
+import { mountDevPage } from './dev/dev-page.js';
 
 const SHELL_HTML = `
   <div class="shell">
@@ -33,8 +39,6 @@ const SHELL_HTML = `
     </main>
   </div>`;
 
-// A page-editor keeps a live editable surface with unsaved keystrokes; we never
-// want a global shortcut to fire while the caret is in a field.
 function inEditableFocus() {
   const a = document.activeElement;
   if (!a) return false;
@@ -42,8 +46,6 @@ function inEditableFocus() {
   return tag === 'INPUT' || tag === 'TEXTAREA' || a.isContentEditable;
 }
 
-// An open modal/popover owns Escape and outside interaction; the shell should
-// stand down while one is up.
 function overlayOpen() {
   return !!document.querySelector('.pop-root, .mod-scrim');
 }
@@ -56,9 +58,10 @@ export function mountApp(root, { onLogOut } = {}) {
   const commentsEl = root.querySelector('#shell-comments');
   const globeEl = root.querySelector('#shell-globe');
 
-  let currentId = null;
+  let mode = store.getMode();
+  let currentId = null;      // knowledge: open page id
+  let devNodesById = null;   // developer: leaf-node lookup for globe dot-clicks
 
-  // Forward-declared so ctx can close over them before they're assigned.
   let sidebar;
   let topbar;
   let editor;
@@ -68,35 +71,59 @@ export function mountApp(root, { onLogOut } = {}) {
   const ctx = {
     store,
     auth,
+    mode: () => mode,
     currentPageId: () => currentId,
 
+    // ---- Knowledge mode page routing ----
     openPage(id) {
       const page = store.getPage(id);
       if (!page || page.deleted) return;
       currentId = id;
       editor.open(id);
       topbar.setPage(page);
-      sidebar.setActivePage(id);
+      sidebar.setActivePage && sidebar.setActivePage(id);
       globe.focusPage(id);
-      if (location.hash !== '#' + id) {
-        history.replaceState(null, '', '#' + id);
-      }
+      if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
     },
-
     closePage() {
       if (currentId == null) return;
       currentId = null;
       editor.close();
       comments.close();
       topbar.setPage(null);
-      sidebar.setActivePage(null);
+      sidebar.setActivePage && sidebar.setActivePage(null);
       globe.clearFocus();
       history.replaceState(null, '', location.pathname + location.search);
     },
 
-    goHome() {
-      ctx.closePage();
+    // ---- Developer mode item viewing (read-only) ----
+    openDevItem(node) {
+      if (node.devKind === 'category') { globe.focusPage(node.id); return; }
+      currentId = 'dev:' + node.id;
+      mountDevPage(pageEl, node);
+      globe.focusPage(node.id);
     },
+    closeDevPage() {
+      currentId = null;
+      pageEl.classList.remove('show');
+      pageEl.setAttribute('aria-hidden', 'true');
+      globe.clearFocus();
+    },
+
+    goHome() {
+      if (mode === 'developer') ctx.closeDevPage();
+      else ctx.closePage();
+    },
+
+    // ---- Mode switch ----
+    setMode(m) {
+      const next = m === 'developer' ? 'developer' : 'knowledge';
+      if (next === mode) return;
+      mode = next;
+      store.setMode(next);
+      remountMode();
+    },
+    refreshDev() { if (mode === 'developer') mountDeveloper(); },
 
     openSearch: () => openSearch(ctx),
     openSettings: (panel) => openSettings(ctx, panel),
@@ -110,7 +137,7 @@ export function mountApp(root, { onLogOut } = {}) {
 
     logOut() {
       auth.logOut();
-      supabaseSignOut(); // end the Supabase/Google session too (fire-and-forget)
+      supabaseSignOut();
       if (globe) globe.dispose();
       if (typeof onLogOut === 'function') onLogOut();
       else location.reload();
@@ -119,23 +146,73 @@ export function mountApp(root, { onLogOut } = {}) {
     toast,
   };
 
-  sidebar = mountSidebar(sidebarEl, ctx);
+  // Shared chrome (both modes).
   topbar = mountTopbar(topbarEl, ctx);
   editor = mountEditor(pageEl, ctx);
   comments = mountComments(commentsEl, ctx);
   topbar.setPage(null);
 
-  globe = initGlobe(globeEl, {
-    onOpenPage(pageId) { ctx.openPage(pageId); },
-    onHubFocus() { /* focus is reflected by the globe itself; no chrome change */ },
-  });
+  // ---- Mode mounting ----
+  function teardownMode() {
+    currentId = null;
+    if (globe) { globe.dispose(); globe = null; }
+    pageEl.classList.remove('show');
+    pageEl.setAttribute('aria-hidden', 'true');
+    sidebarEl.innerHTML = '';
+    globeEl.innerHTML = '';
+  }
 
-  // A deep link (#<pageId>) opens straight to that page.
-  const deepId = location.hash.slice(1);
-  if (deepId && store.getPage(deepId)) ctx.openPage(deepId);
+  function mountKnowledge() {
+    sidebar = mountSidebar(sidebarEl, ctx);
+    globe = initGlobe(globeEl, {
+      onOpenPage(pageId) { ctx.openPage(pageId); },
+      onHubFocus() {},
+    });
+    topbar.setPage(null);
+    const deepId = location.hash.slice(1);
+    if (deepId && store.getPage(deepId)) ctx.openPage(deepId);
+  }
 
-  // Global shortcuts. The sidebar owns ⌘\ (collapse); overlays own their own
-  // Escape. Here: ⌘K / "/" open search, Escape returns from an open page.
+  function mountDeveloper() {
+    sidebar = null;
+    if (!isConfigured()) { showConnectPrompt(); return; }
+    const provider = devProvider();
+    globe = initGlobe(globeEl, {
+      onOpenPage(id) { const node = devNodesById && devNodesById.get(id); if (node) ctx.openDevItem(node); },
+      onHubFocus() {},
+    }, provider);
+    // Build the sidebar + node lookup from the same graph the globe uses.
+    provider.getGraph().then((graph) => {
+      devNodesById = new Map();
+      for (const hub of graph.hubs) {
+        devNodesById.set(hub.page.id, hub.page);
+        for (const leaf of hub.leaves) devNodesById.set(leaf.page.id, leaf.page);
+      }
+      mountDevSidebar(sidebarEl, ctx, graph);
+    });
+    topbar.setPage(null);
+  }
+
+  function showConnectPrompt() {
+    const state = el('div', 'dev-state');
+    state.append(
+      el('h2', null, 'Connect to canopy'),
+      el('p', null, 'Developer mode reads a canopy instance. Add its URL and an access token to see the developer sphere.'),
+    );
+    const btn = el('button', null, 'Open Developer settings');
+    btn.addEventListener('click', () => ctx.openSettings('developer'));
+    state.appendChild(btn);
+    globeEl.appendChild(state);
+  }
+
+  function remountMode() {
+    teardownMode();
+    if (mode === 'developer') mountDeveloper();
+    else mountKnowledge();
+  }
+
+  remountMode();
+
   function onKeydown(e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
@@ -154,5 +231,5 @@ export function mountApp(root, { onLogOut } = {}) {
   }
   document.addEventListener('keydown', onKeydown);
 
-  return { ctx, sidebar, topbar, editor, comments, globe };
+  return { ctx, get sidebar() { return sidebar; }, topbar, editor, comments, get globe() { return globe; } };
 }

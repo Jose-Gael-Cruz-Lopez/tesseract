@@ -15,6 +15,7 @@ import './styles/search.css';
 import './styles/updates.css';
 import './styles/settings.css';
 import './styles/import.css';
+import './styles/dev.css';
 import './styles/templates.css';
 
 import { initTheme } from './ui/theme.js';
