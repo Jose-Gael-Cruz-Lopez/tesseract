@@ -1,0 +1,112 @@
+/* Developer-mode chrome (dev- prefix): the read-only canopy viewer, dev
+   sidebar, and connect/loading states. Colors via tokens so it themes with the
+   rest of the app. */
+
+.dev-doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px 40px 120px;
+}
+.dev-doc-kind {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.dev-doc-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+.dev-doc-open {
+  font-size: 13px;
+  color: var(--blue);
+  text-decoration: none;
+}
+.dev-doc-body {
+  margin-top: 22px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.dev-doc-body h1, .dev-doc-body h2, .dev-doc-body h3 { font-weight: 650; margin: 1.4em 0 0.5em; }
+.dev-doc-body pre {
+  background: var(--bg-hover);
+  padding: 12px 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.dev-doc-body code { font-family: var(--font-mono); font-size: 0.9em; }
+.dev-doc-body a { color: var(--blue); }
+.dev-doc-note { color: var(--text-2); }
+
+/* Dev sidebar */
+.dev-sb { padding: 6px 4px; }
+.dev-sb-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  padding: 6px 12px 10px;
+}
+.dev-sb-group { margin-bottom: 6px; }
+.dev-sb-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dev-sb-count { margin-left: auto; color: var(--text-3); font-weight: 400; }
+.dev-sb-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 12px 4px 30px;
+  font-size: 13.5px;
+  color: var(--text);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dev-sb-row:hover { background: var(--bg-hover); }
+
+/* Connect / loading / error states over the globe area */
+.dev-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px;
+  color: var(--text-2);
+  z-index: 3;
+}
+.dev-state h2 { font-size: 18px; font-weight: 650; color: var(--text); margin: 0; }
+.dev-state p { font-size: 14px; max-width: 340px; margin: 0; }
+.dev-state button {
+  margin-top: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--blue);
+  color: var(--text-on-blue);
+  border: 0;
+  font-size: 14px;
+  cursor: pointer;
+}
