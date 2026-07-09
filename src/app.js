@@ -58,7 +58,10 @@ export function mountApp(root, { onLogOut } = {}) {
   const commentsEl = root.querySelector('#shell-comments');
   const globeEl = root.querySelector('#shell-globe');
 
+  // Developer mode requires an available canopy session; a persisted 'developer' from a
+  // prior GitHub login must not strand a Google/knowledge-only user in a broken sphere.
   let mode = store.getMode();
+  if (mode === 'developer' && !store.isDevAvailable()) mode = 'knowledge';
   let currentId = null;      // knowledge: open page id
   let devNodesById = null;   // developer: leaf-node lookup for globe dot-clicks
 
@@ -72,6 +75,7 @@ export function mountApp(root, { onLogOut } = {}) {
     store,
     auth,
     mode: () => mode,
+    devAvailable: () => store.isDevAvailable(),
     currentPageId: () => currentId,
 
     // ---- Knowledge mode page routing ----
@@ -118,6 +122,12 @@ export function mountApp(root, { onLogOut } = {}) {
     // ---- Mode switch ----
     setMode(m) {
       const next = m === 'developer' ? 'developer' : 'knowledge';
+      // Can't enter developer mode without an available canopy session — send the user
+      // through GitHub sign-in instead (returns to the app with the developer side on).
+      if (next === 'developer' && !store.isDevAvailable()) {
+        try { window.location.href = '/auth/login?return=/'; } catch { /* nav blocked */ }
+        return;
+      }
       if (next === mode) return;
       mode = next;
       store.setMode(next);
