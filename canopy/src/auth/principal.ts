@@ -62,7 +62,9 @@ export const sessionGate: MiddlewareHandler<AppEnv> = async (c, next) => {
     c.set("principal", { login: c.env.DEV_LOGIN });
     return next();
   }
-  const principal = await resolveSessionPrincipal(c);
+  // Session cookie first (humans in canopy's own UI); then a bearer token so the
+  // cross-origin dev sphere can read with Authorization: Bearer canopy_mcp_…
+  const principal = (await resolveSessionPrincipal(c)) ?? (await resolveBearerPrincipal(c.req.raw, c.env));
   if (!principal) return c.json({ error: "unauthorized" }, 401);
   c.set("principal", principal);
   return next();
