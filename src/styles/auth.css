@@ -283,7 +283,7 @@
   font-size: 14px;
   font-weight: 500;
   background: var(--blue);
-  color: var(--blue-text);
+  color: var(--text-on-blue);
 }
 .au-blue-btn:hover { background: var(--blue-hover); }
 .au-blue-btn:disabled {
