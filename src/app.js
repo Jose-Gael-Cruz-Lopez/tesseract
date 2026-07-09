@@ -6,6 +6,7 @@
 import { initGlobe } from './globe/globe.js';
 import * as store from './data/store.js';
 import * as auth from './auth/auth.js';
+import { supabaseSignOut } from './data/supabase.js';
 import { toast } from './ui/popover.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountTopbar } from './ui/topbar.js';
@@ -109,6 +110,7 @@ export function mountApp(root, { onLogOut } = {}) {
 
     logOut() {
       auth.logOut();
+      supabaseSignOut(); // end the Supabase/Google session too (fire-and-forget)
       if (globe) globe.dispose();
       if (typeof onLogOut === 'function') onLogOut();
       else location.reload();

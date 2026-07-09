@@ -18,9 +18,10 @@ import './styles/import.css';
 import './styles/templates.css';
 
 import { initTheme } from './ui/theme.js';
-import { getSession } from './auth/auth.js';
+import { getSession, setSession } from './auth/auth.js';
 import { initStore, seedWorkspace } from './data/store.js';
 import { mountApp } from './app.js';
+import { supabaseEnabled, getSupabaseSession, profileFromSession } from './data/supabase.js';
 
 // Auth views load lazily (a separate chunk) so the auth code isn't paid for
 // once a returning, onboarded user is past the gate.
@@ -45,9 +46,23 @@ async function showAuth(root) {
   }
 }
 
-function boot() {
+async function boot() {
   initTheme();
   const root = document.getElementById('root');
+
+  // A real Supabase (Google) session takes precedence over the mock flow.
+  // getSupabaseSession() awaits URL detection, so it also resolves the session
+  // right after the OAuth redirect back from Google.
+  if (supabaseEnabled) {
+    const sbSession = await getSupabaseSession();
+    if (sbSession) {
+      setSession(profileFromSession(sbSession));
+      history.replaceState(null, '', location.pathname); // drop the OAuth token/code from the URL
+      startApp(root);
+      return;
+    }
+  }
+
   const session = getSession();
   if (!session || !session.onboarded) showAuth(root);
   else startApp(root);

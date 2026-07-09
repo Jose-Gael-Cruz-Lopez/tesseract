@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.2",
     "three": "0.185.1"
   },
   "devDependencies": {

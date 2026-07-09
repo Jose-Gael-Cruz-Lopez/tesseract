@@ -2,6 +2,14 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mountAuth } from '../src/auth/auth-view.js';
 import { signUp, completeProfile, setOnboarded } from '../src/auth/auth.js';
+import { signInWithGoogle } from '../src/data/supabase.js';
+
+// Treat Supabase as configured so the Google button exercises the real OAuth
+// path (kicking off signInWithGoogle) rather than the placeholder toast.
+vi.mock('../src/data/supabase.js', () => ({
+  supabaseEnabled: true,
+  signInWithGoogle: vi.fn(() => Promise.resolve()),
+}));
 
 // Node v25 ships a native localStorage global that happy-dom doesn't override
 // and that throws without --localstorage-file; auth.js touches it, so install a
@@ -69,12 +77,9 @@ describe('signup screen', () => {
     );
   });
 
-  test('the SAML, Google, and Apple controls toast "Coming soon"', () => {
+  test('SAML and Apple toast "Coming soon"; Google starts real OAuth', () => {
+    signInWithGoogle.mockClear();
     mountAuth(container, {});
-
-    container.querySelector('.au-oauth-google').click();
-    expect(document.querySelector('.toast-chip').textContent).toBe('Coming soon');
-    document.querySelector('.toast-chip').remove();
 
     container.querySelector('.au-oauth-apple').click();
     expect(document.querySelector('.toast-chip').textContent).toBe('Coming soon');
@@ -82,6 +87,12 @@ describe('signup screen', () => {
 
     container.querySelector('.au-saml .au-link').click();
     expect(document.querySelector('.toast-chip').textContent).toBe('Coming soon');
+    document.querySelector('.toast-chip').remove();
+
+    // With Supabase configured, Google kicks off OAuth instead of toasting.
+    container.querySelector('.au-oauth-google').click();
+    expect(signInWithGoogle).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.toast-chip')).toBeNull();
   });
 
   test('submitting the email swaps to the code step with the temporary-code copy', async () => {

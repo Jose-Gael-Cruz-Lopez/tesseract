@@ -12,6 +12,7 @@
 import { ICONS } from '../ui/icons.js';
 import { ART } from '../ui/illustrations.js';
 import { toast, openPopover } from '../ui/popover.js';
+import { supabaseEnabled, signInWithGoogle } from '../data/supabase.js';
 import {
   signUp,
   logIn,
@@ -262,17 +263,30 @@ export function mountAuth(container, { onComplete } = {}) {
 
   function buildOAuth() {
     const group = node('div', 'au-oauth-group');
-    group.appendChild(oauthButton(ICONS.google, 'Continue with Google', 'au-oauth-google'));
-    group.appendChild(oauthButton(ICONS.apple, 'Continue with Apple', 'au-oauth-apple'));
+    group.appendChild(oauthButton(ICONS.google, 'Continue with Google', 'au-oauth-google', onGoogle));
+    group.appendChild(oauthButton(ICONS.apple, 'Continue with Apple', 'au-oauth-apple', () => toast('Coming soon')));
     return group;
   }
 
-  function oauthButton(icon, label, cls) {
+  // Real Google OAuth when Supabase is configured; otherwise the placeholder.
+  function onGoogle(btn) {
+    if (!supabaseEnabled) {
+      toast('Coming soon');
+      return;
+    }
+    btn.disabled = true;
+    signInWithGoogle().catch(() => {
+      btn.disabled = false;
+      toast('Could not start Google sign-in');
+    });
+  }
+
+  function oauthButton(icon, label, cls, onClick) {
     const btn = node('button', `au-btn au-btn-oauth ${cls}`);
     btn.type = 'button';
     btn.appendChild(iconEl('span', 'au-oauth-icon', icon));
     btn.appendChild(textEl('span', 'au-oauth-label', label));
-    btn.addEventListener('click', () => toast('Coming soon'));
+    btn.addEventListener('click', () => (onClick ? onClick(btn) : toast('Coming soon')));
     return btn;
   }
 

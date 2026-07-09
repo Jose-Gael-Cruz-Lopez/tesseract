@@ -64,6 +64,12 @@ export function getSession() {
   return read(KEY_SESSION);
 }
 
+// Store a session created outside the mock flow (e.g. a real Supabase/Google
+// sign-in), so the rest of the app reads name/email/avatar the same way.
+export function setSession(session) {
+  write(KEY_SESSION, session);
+}
+
 // Patches the current session in place (e.g. settings' account panel editing
 // preferred name / avatar). No-op (returns null) if there is no session to
 // patch. Additive to the canonical interface in shared-context.md — every
