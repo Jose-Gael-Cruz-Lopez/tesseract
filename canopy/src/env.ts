@@ -7,6 +7,7 @@ export interface Env {
   GITHUB_WEBHOOK_SECRET?: string; // HMAC key for the /webhook/github third auth class; absent → the surface 401s
   GITHUB_REPO?: string;   // "owner/repo" for live roadmap progress; absent → milestones without progress
   AUTH_ORG?: string;      // GitHub org whose active members may log in. Empty/absent ⇒ allow-list mode (ADMIN_LOGINS gates login).
+  CORS_ORIGINS?: string;  // comma-separated origins allowed cross-origin (GET only) — e.g. the Mnemosphere dev sphere
   DEV_LOGIN?: string;     // LOCAL DEV ONLY (set in .dev.vars): bypass OAuth, act as this seeded user. Never set in prod.
   GEMINI_API_KEY?: string; // Google Gemini key for capture-time PR/issue summaries (REST generateContent); absent → excerpt fallback.
   GITHUB_SERVICE_TOKEN?: string; // app-level token for the scheduled progress-cache recompute backstop; absent → scheduled() no-ops
