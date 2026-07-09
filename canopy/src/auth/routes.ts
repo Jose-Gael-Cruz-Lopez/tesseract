@@ -9,6 +9,18 @@ import { mintToken } from "./tokens";
 import { first, run, nowIso } from "../db";
 
 const OAUTH_TX_COOKIE = "oauth_tx";
+const OAUTH_RETURN_COOKIE = "oauth_return";
+
+/**
+ * A safe same-origin post-login return path. Must be a relative path (starts with
+ * "/", not "//", and contains no scheme colon) so it can't be used as an
+ * open-redirect. Anything else falls back to the admin UI. Used to send app-initiated
+ * GitHub sign-ins back to "/" while admin sign-ins default to "/admin/".
+ */
+export function safeReturnPath(raw: string | undefined | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes(":")) return "/admin/";
+  return raw;
+}
 
 /**
  * The OAuth callback URL for this request. GitHub requires an https callback for public
@@ -33,6 +45,9 @@ authApp.get("/login", async (c) => {
   const { verifier, challenge } = await pkce();
   const sealed = await hmacSeal(`${state}.${verifier}`, c.env.COOKIE_SECRET);
   setCookie(c, OAUTH_TX_COOKIE, sealed, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
+  // Where to land after the round-trip: "/" for the app, "/admin/" for the admin UI.
+  const ret = safeReturnPath(c.req.query("return"));
+  setCookie(c, OAUTH_RETURN_COOKIE, ret, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
   return c.redirect(
     buildAuthorizeUrl({ clientId: c.env.GITHUB_CLIENT_ID, redirectUri: callbackUrl(c.req.url), state, challenge }),
     302
@@ -45,6 +60,8 @@ authApp.get("/callback", async (c) => {
   const state = c.req.query("state");
   const sealedTx = getCookie(c, OAUTH_TX_COOKIE);
   deleteCookie(c, OAUTH_TX_COOKIE, { path: "/" });
+  const ret = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE));
+  deleteCookie(c, OAUTH_RETURN_COOKIE, { path: "/" });
   if (!code || !state || !sealedTx) return c.json({ error: "invalid_request" }, 400);
 
   const tx = await hmacUnseal(sealedTx, c.env.COOKIE_SECRET);
@@ -57,7 +74,7 @@ authApp.get("/callback", async (c) => {
 
   const ghUser = await getUser(token);
   if (!ghUser) return c.json({ error: "identity_failed" }, 401);
-  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect("/admin/?denied=1", 302);
+  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect(`${ret}${ret.includes("?") ? "&" : "?"}denied=1`, 302);
 
   await run(c.env.DB,
     `INSERT INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, ?, ?)
@@ -66,7 +83,7 @@ authApp.get("/callback", async (c) => {
 
   const { id } = await createSession(c.env.DB, ghUser.login);
   await setSessionCookie(c, id, c.env.COOKIE_SECRET);
-  return c.redirect("/admin/", 302);
+  return c.redirect(ret, 302);
 });
 
 // GATED (by sessionGate in src/routes.ts): return the principal's profile.
