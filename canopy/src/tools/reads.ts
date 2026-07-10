@@ -3,25 +3,34 @@ import type { QueryRequest, QueryResult, QueryPrimary, QueryPointer, Authority }
 import { type DB, first, all } from "../db";
 import { getProgress } from "./progress";
 
+// Every read takes an OPTIONAL `repo`: omit it → no repo filter (single-repo-safe,
+// returns everything); pass one → scope to that repo. Production routes pass
+// defaultRepo(env); tests omit it and read across the sole (repo='') fixture.
 export async function get_doc(
   db: DB,
-  slug: string
+  slug: string,
+  repo?: string
 ): Promise<{ doc: DocRow; versions: DocVersionRow[] } | null> {
-  const doc = await first<DocRow>(db, `SELECT * FROM docs WHERE slug = ?`, slug);
+  const rc = repo !== undefined ? " AND repo = ?" : "";
+  const rp = repo !== undefined ? [repo] : [];
+  const doc = await first<DocRow>(db, `SELECT * FROM docs WHERE slug = ?${rc}`, slug, ...rp);
   if (!doc) return null;
   const versions = await all<DocVersionRow>(
     db,
-    `SELECT * FROM doc_versions WHERE slug = ? ORDER BY version ASC`,
-    slug
+    `SELECT * FROM doc_versions WHERE slug = ?${rc} ORDER BY version ASC`,
+    slug,
+    ...rp
   );
   return { doc, versions };
 }
 
-export async function list_docs(db: DB, section?: string): Promise<DocRow[]> {
-  if (section) {
-    return all<DocRow>(db, `SELECT * FROM docs WHERE section = ? ORDER BY slug ASC`, section);
-  }
-  return all<DocRow>(db, `SELECT * FROM docs ORDER BY slug ASC`);
+export async function list_docs(db: DB, section?: string, repo?: string): Promise<DocRow[]> {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  if (repo !== undefined) { clauses.push("repo = ?"); params.push(repo); }
+  if (section) { clauses.push("section = ?"); params.push(section); }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  return all<DocRow>(db, `SELECT * FROM docs ${where} ORDER BY slug ASC`, ...params);
 }
 
 export interface FeedFilter {
@@ -31,11 +40,15 @@ export interface FeedFilter {
   limit?: number;
 }
 
-export async function get_feed(db: DB, filter: FeedFilter = {}): Promise<FeedRow[]> {
+export async function get_feed(db: DB, filter: FeedFilter = {}, repo?: string): Promise<FeedRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
   let join = "";
 
+  if (repo !== undefined) {
+    clauses.push(`f.repo = ?`);
+    params.push(repo);
+  }
   if (filter.author) {
     clauses.push(`f.author = ?`);
     params.push(filter.author);
@@ -65,17 +78,21 @@ export async function get_feed(db: DB, filter: FeedFilter = {}): Promise<FeedRow
 // NOTE: the old flat-LIKE search_context was replaced by query() (below) — one
 // engine. /search and the MCP `query` tool both back onto it.
 
-export async function list_needs_triage(db: DB): Promise<NeedsTriageRow[]> {
-  return all<NeedsTriageRow>(db, `SELECT * FROM needs_triage WHERE resolved = 0 ORDER BY created_at DESC, id DESC`);
+export async function list_needs_triage(db: DB, repo?: string): Promise<NeedsTriageRow[]> {
+  const rc = repo !== undefined ? "repo = ? AND " : "";
+  const rp = repo !== undefined ? [repo] : [];
+  return all<NeedsTriageRow>(db, `SELECT * FROM needs_triage WHERE ${rc}resolved = 0 ORDER BY created_at DESC, id DESC`, ...rp);
 }
 
-export async function list_adrs(db: DB, status?: string): Promise<AdrRow[]> {
+export async function list_adrs(db: DB, status?: string, repo?: string): Promise<AdrRow[]> {
   // Decision reads exclude 'rejected' (Phase 3): a rejected draft leaves the queue.
   // With an explicit status filter the caller already constrains it (the UI asks
   // for 'draft' / 'ratified', never 'rejected').
+  const rc = repo !== undefined ? "repo = ? AND " : "";
+  const rp = repo !== undefined ? [repo] : [];
   return status
-    ? all<AdrRow>(db, `SELECT * FROM adrs WHERE status = ? ORDER BY created_at DESC, id DESC`, status)
-    : all<AdrRow>(db, `SELECT * FROM adrs WHERE status != 'rejected' ORDER BY created_at DESC, id DESC`);
+    ? all<AdrRow>(db, `SELECT * FROM adrs WHERE ${rc}status = ? ORDER BY created_at DESC, id DESC`, ...rp, status)
+    : all<AdrRow>(db, `SELECT * FROM adrs WHERE ${rc}status != 'rejected' ORDER BY created_at DESC, id DESC`, ...rp);
 }
 
 // The Proposals queue, server-joined (Phase 3, audit G9): every staged doc version
@@ -101,7 +118,9 @@ export interface ProposalRow {
   promotedBody: string;  // docs.body (the current live body)
 }
 
-export async function list_proposals(db: DB): Promise<ProposalRow[]> {
+export async function list_proposals(db: DB, repo?: string): Promise<ProposalRow[]> {
+  const rc = repo !== undefined ? "AND v.repo = ? " : "";
+  const rp = repo !== undefined ? [repo] : [];
   return all<ProposalRow>(
     db,
     `SELECT v.slug AS slug, v.version AS version, d.title AS title, d.section AS section, d.space AS space,
@@ -109,14 +128,17 @@ export async function list_proposals(db: DB): Promise<ProposalRow[]> {
             v.change_kind AS change_kind, v.low_confidence AS low_confidence, v.base_version AS base_version,
             d.current_version AS current_version, v.created_at AS created_at,
             v.body AS stagedBody, d.body AS promotedBody
-       FROM doc_versions v JOIN docs d ON d.slug = v.slug
-      WHERE v.status = 'staged' AND v.version > d.current_version
-      ORDER BY v.created_at DESC, v.id DESC`
+       FROM doc_versions v JOIN docs d ON d.slug = v.slug AND d.repo = v.repo
+      WHERE v.status = 'staged' AND v.version > d.current_version ${rc}
+      ORDER BY v.created_at DESC, v.id DESC`,
+    ...rp
   );
 }
 
-export async function list_milestone_proposals(db: DB): Promise<MilestoneProposalRow[]> {
-  return all<MilestoneProposalRow>(db, `SELECT * FROM milestone_proposals WHERE staged_status = 'staged' ORDER BY created_at DESC, id DESC`);
+export async function list_milestone_proposals(db: DB, repo?: string): Promise<MilestoneProposalRow[]> {
+  const rc = repo !== undefined ? "repo = ? AND " : "";
+  const rp = repo !== undefined ? [repo] : [];
+  return all<MilestoneProposalRow>(db, `SELECT * FROM milestone_proposals WHERE ${rc}staged_status = 'staged' ORDER BY created_at DESC, id DESC`, ...rp);
 }
 
 // ── Identity triage (Maintenance group) ───────────────────────────────────────

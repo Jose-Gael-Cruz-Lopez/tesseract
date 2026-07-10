@@ -3,6 +3,8 @@ import { env } from "cloudflare:test";
 import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
 import { repoFromDelivery } from "../src/webhook";
 import { ingestEvent, ingestFeedEntry } from "../src/consumer";
+import { route_triage } from "../src/tools/writes";
+import { list_needs_triage } from "../src/tools/reads";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
 // with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
@@ -85,5 +87,20 @@ describe("the ingest gate tags content by repo (2b)", () => {
     // its tag row is scoped to the same repo
     const tag = await env.DB.prepare(`SELECT repo FROM entry_tags WHERE entry_type = 'feed' AND tag = 'infra'`).first<{ repo: string }>();
     expect(tag?.repo).toBe("acme/app");
+  });
+});
+
+// Phase 2c (reads): reads take an optional repo — scoped when given, all when omitted.
+describe("reads scope by repo (2c)", () => {
+  it("list_needs_triage returns only the requested repo (and all when omitted)", async () => {
+    await route_triage(env.DB, { raw: "x", reason: "r1", repo: "acme/a" });
+    await route_triage(env.DB, { raw: "y", reason: "r2", repo: "acme/b" });
+
+    const both = await list_needs_triage(env.DB);            // no repo → both
+    expect(both.length).toBe(2);
+
+    const onlyA = await list_needs_triage(env.DB, "acme/a"); // scoped → one
+    expect(onlyA.length).toBe(1);
+    expect(onlyA[0].repo).toBe("acme/a");
   });
 });
