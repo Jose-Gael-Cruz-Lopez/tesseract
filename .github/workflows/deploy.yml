@@ -1,0 +1,39 @@
+name: Deploy fused app to Cloudflare
+
+# Every push to main builds the fused Worker (Mnemosphere UI at / + canopy at /admin
+# + the canopy API) and deploys it. Runtime secrets (GITHUB_CLIENT_ID/SECRET,
+# COOKIE_SECRET) are NOT set here — they live on the Worker and persist across deploys.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The build reaches across the monorepo: canopy's build:app builds the
+      # Mnemosphere UI from the repo root AND canopy's own web, so both dep sets install.
+      - name: Install UI deps (repo root)
+        run: npm ci
+
+      - name: Install canopy deps
+        run: npm ci
+        working-directory: canopy
+
+      # build:app (Mnemosphere UI + canopy admin) then wrangler deploy. The VITE_*
+      # values are read by the root Vite build so Google/Supabase login keeps working.
+      - name: Build and deploy
+        run: npm run deploy
+        working-directory: canopy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
