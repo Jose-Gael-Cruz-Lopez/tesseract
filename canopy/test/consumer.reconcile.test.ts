@@ -171,9 +171,9 @@ describe("reconciler — feed ledger guard at the gate", () => {
   it("a second call at the same (session, index) is dropped as unchanged", async () => {
     const entry = { summary: "s", body: "b", tags: ["infra"], artifacts: { prs: [], commits: [], issues: [] } };
     const ledger = { sessionId: "L1", itemIndex: 0 };
-    const r1 = await ingestFeedEntry(env.DB, entry, AUTHOR, ledger);
+    const r1 = await ingestFeedEntry(env.DB, entry, AUTHOR, "", ledger);
     expect(r1.outcome).toBe("written");
-    const r2 = await ingestFeedEntry(env.DB, entry, AUTHOR, ledger);
+    const r2 = await ingestFeedEntry(env.DB, entry, AUTHOR, "", ledger);
     expect(r2.outcome).toBe("unchanged");
     expect((await all<FeedRow>(env.DB, `SELECT * FROM feed`)).length).toBe(1);
   });

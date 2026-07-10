@@ -71,6 +71,7 @@ export interface EntryTagRow {
 }
 
 export interface NeedsTriageRow {
+  repo: string;            // owning repo, "owner/name" (0020)
   id: number;
   raw: string;
   reason: string;
