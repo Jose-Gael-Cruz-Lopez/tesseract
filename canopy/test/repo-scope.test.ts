@@ -115,3 +115,25 @@ describe("reads scope by repo (2c)", () => {
     expect(onlyA[0].repo).toBe("acme/a");
   });
 });
+
+// Phase 2 recreations (0021): per-repo event dedupe — the same PR/issue number
+// coexists across repos (before 0021 the second was dropped as a semantic_key dup).
+describe("per-repo event uniqueness (0021)", () => {
+  const pr42 = { semantic_key: "gh:pr:42:merged", event_type: "pr_merged" as const, ref_number: 42, subject_login: "octocat", raw: "{}", provenance: "webhook" as const };
+
+  it("the same PR #42 in two repos captures as two distinct events", async () => {
+    const a = await ingestEvent(env.DB, pr42, "wh", "acme/a");
+    const b = await ingestEvent(env.DB, pr42, "wh", "acme/b");
+    expect(a.outcome).toBe("written");
+    expect(b.outcome).toBe("written"); // NOT dropped as a dup — different repo
+
+    const rows = await env.DB.prepare(`SELECT repo FROM events WHERE semantic_key = 'gh:pr:42:merged' ORDER BY repo`).all<{ repo: string }>();
+    expect((rows.results ?? []).map((r) => r.repo)).toEqual(["acme/a", "acme/b"]);
+  });
+
+  it("a redelivery within the SAME repo still dedupes", async () => {
+    await ingestEvent(env.DB, pr42, "wh", "acme/a");
+    const again = await ingestEvent(env.DB, pr42, "wh", "acme/a");
+    expect(again.outcome).toBe("unchanged"); // same (repo, semantic_key) → dropped
+  });
+});
