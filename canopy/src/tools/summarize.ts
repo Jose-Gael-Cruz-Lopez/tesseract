@@ -220,7 +220,7 @@ export function excerptSummary(title: string, body: string): string {
 export async function storePrSummary(
   db: DB,
   summarizer: Summarizer<PrSummary> | null,
-  pr: { semantic_key: string; pr_number: number; title: string; body: string }
+  pr: { semantic_key: string; pr_number: number; title: string; body: string; repo?: string }
 ): Promise<PrSummaryRow> {
   let structured: PrSummary | null = null;
   let model = "excerpt";
@@ -235,8 +235,9 @@ export async function storePrSummary(
   const created_at = nowIso();
   await run(
     db,
-    `INSERT OR REPLACE INTO pr_summaries (semantic_key, pr_number, model, created_at, title, what, why, impact)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO pr_summaries (repo, semantic_key, pr_number, model, created_at, title, what, why, impact)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    pr.repo ?? "",
     pr.semantic_key,
     pr.pr_number,
     model,
@@ -247,6 +248,7 @@ export async function storePrSummary(
     structured?.impact ?? null
   );
   return {
+    repo: pr.repo ?? "",
     semantic_key: pr.semantic_key,
     pr_number: pr.pr_number,
     model,
@@ -266,7 +268,7 @@ export async function storePrSummary(
 export async function storeIssueSummary(
   db: DB,
   summarizer: Summarizer<IssueSummary> | null,
-  issue: { issue_number: number; title: string; body: string }
+  issue: { issue_number: number; title: string; body: string; repo?: string }
 ): Promise<IssueSummaryRow> {
   let structured: IssueSummary | null = null;
   let model = "excerpt";
@@ -282,8 +284,9 @@ export async function storeIssueSummary(
   const created_at = nowIso();
   await run(
     db,
-    `INSERT OR REPLACE INTO issue_summaries (issue_number, summary, model, created_at, title, next_step)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO issue_summaries (repo, issue_number, summary, model, created_at, title, next_step)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    issue.repo ?? "",
     issue.issue_number,
     summary,
     model,
@@ -292,6 +295,7 @@ export async function storeIssueSummary(
     structured?.next_step ?? null
   );
   return {
+    repo: issue.repo ?? "",
     issue_number: issue.issue_number,
     summary,
     model,

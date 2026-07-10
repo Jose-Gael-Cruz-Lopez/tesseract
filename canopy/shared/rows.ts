@@ -147,6 +147,7 @@ export interface ProcessedItemRow {
 
 // Captured GitHub event (0012). semantic_key is the dedupe identity.
 export interface EventRow {
+  repo: string;            // owning repo, "owner/name" (0020)
   id: number;
   semantic_key: string;
   event_type: "pr_merged" | "pr_closed" | "issue";
@@ -164,6 +165,7 @@ export interface EventRow {
 // Derived, regenerable, never truth. Structured fields are NULL on excerpt-
 // fallback rows (model='excerpt'), which carry no content and are retried by Sync.
 export interface PrSummaryRow {
+  repo: string;            // owning repo, "owner/name" (0020)
   semantic_key: string;
   pr_number: number;
   model: string | null;    // 'excerpt' = deterministic fallback
@@ -179,6 +181,7 @@ export interface PrSummaryRow {
 // semantic_key), since only the current summary matters across reassignments/
 // edits. Structured fields NULL on prose-era and excerpt-fallback rows.
 export interface IssueSummaryRow {
+  repo: string;            // owning repo, "owner/name" (0020)
   issue_number: number;
   summary: string;
   model: string | null;      // 'excerpt' = deterministic fallback

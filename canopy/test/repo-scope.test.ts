@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
+import { repoFromDelivery } from "../src/webhook";
+import { ingestEvent } from "../src/consumer";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
 // with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
@@ -44,5 +46,30 @@ describe("repos registry + repo column (0020)", () => {
     await bootstrapRepo(env, env.DB);
     const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM repos`).first<{ n: number }>();
     expect(n?.n).toBe(1);
+  });
+});
+
+// Phase 2b (events path): the webhook routes by the delivery's own repo, and
+// ingestEvent tags each event row with it.
+describe("events are tagged by repo (2b)", () => {
+  it("repoFromDelivery reads repository.full_name (or '' when absent)", () => {
+    expect(repoFromDelivery({ repository: { full_name: "acme/app" } })).toBe("acme/app");
+    expect(repoFromDelivery({ pull_request: {} })).toBe("");
+    expect(repoFromDelivery(null)).toBe("");
+  });
+
+  it("ingestEvent tags the event row with its repo", async () => {
+    await ingestEvent(
+      env.DB,
+      {
+        semantic_key: "gh:pr:7:merged", event_type: "pr_merged", ref_number: 7,
+        subject_login: "octocat", raw: "{}", provenance: "webhook",
+      },
+      "github-webhook",
+      "acme/app",
+    );
+    const row = await env.DB.prepare(`SELECT repo FROM events WHERE semantic_key = ?`)
+      .bind("gh:pr:7:merged").first<{ repo: string }>();
+    expect(row?.repo).toBe("acme/app");
   });
 });
