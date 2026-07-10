@@ -3,6 +3,7 @@
 // re-seeds the people identity map. When a migration adds a data table, add
 // its DELETE here.
 export const RESET_STATEMENTS = [
+  "DELETE FROM repos",
   "DELETE FROM processed_items",
   "DELETE FROM pr_summaries",
   "DELETE FROM issue_summaries",

@@ -1,4 +1,15 @@
 // One type per D1 table — the exact row shape returned by db helpers.
+
+// The repo registry (0020). Every per-repo table also carries a `repo TEXT` column
+// (backfilled by bootstrapRepo); that field is added to each row type as its read/write
+// paths get scoped in the write/read sub-phases.
+export interface RepoRow {
+  repo: string;               // "owner/name"
+  added_at: string;
+  added_by: string | null;
+  installation_id: number | null;   // reserved for the Phase 3 GitHub App
+}
+
 export interface SectionRow { name: string; description: string | null; }
 export interface TagRow { tag: string; description: string | null; }
 

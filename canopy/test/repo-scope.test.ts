@@ -1,0 +1,48 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { env } from "cloudflare:test";
+import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
+
+// Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
+// with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
+describe("repos registry + repo column (0020)", () => {
+  beforeEach(() => _resetBootstrapForTests());
+
+  it("every per-repo table has a `repo` column", async () => {
+    for (const t of REPO_TABLES) {
+      const { results } = await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<{ name: string }>();
+      const names = (results ?? []).map((r) => r.name);
+      expect(names, `${t} is missing the repo column`).toContain("repo");
+    }
+  });
+
+  it("the repos registry table exists and starts empty (reset truncates it)", async () => {
+    const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM repos`).first<{ n: number }>();
+    expect(r?.n).toBe(0);
+  });
+
+  it("bootstrapRepo registers GITHUB_REPO and backfills the repo='' sentinel", async () => {
+    const repo = defaultRepo(env);
+    expect(repo).toBeTruthy();
+
+    // A legacy row: inserted with no repo → gets the '' sentinel default.
+    await env.DB.prepare(`INSERT INTO feed (author, summary, created_at) VALUES (?, ?, ?)`)
+      .bind("octocat", "did a thing", "1970-01-01T00:00:00.000Z").run();
+    const before = await env.DB.prepare(`SELECT repo FROM feed WHERE author='octocat'`).first<{ repo: string }>();
+    expect(before?.repo).toBe("");
+
+    await bootstrapRepo(env, env.DB);
+
+    const reg = await env.DB.prepare(`SELECT repo FROM repos WHERE repo = ?`).bind(repo).first<{ repo: string }>();
+    expect(reg?.repo).toBe(repo);
+    const after = await env.DB.prepare(`SELECT repo FROM feed WHERE author='octocat'`).first<{ repo: string }>();
+    expect(after?.repo).toBe(repo);
+  });
+
+  it("bootstrapRepo is idempotent — a second run neither throws nor duplicates the registry row", async () => {
+    await bootstrapRepo(env, env.DB);
+    _resetBootstrapForTests();
+    await bootstrapRepo(env, env.DB);
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM repos`).first<{ n: number }>();
+    expect(n?.n).toBe(1);
+  });
+});
