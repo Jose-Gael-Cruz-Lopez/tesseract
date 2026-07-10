@@ -15,12 +15,14 @@ const humanizeSlug = (slug: string): string =>
 
 export async function append_feed(
   db: DB,
-  entry: { author: string; summary: string; body?: string; artifacts?: unknown; tags?: string[] }
+  entry: { author: string; summary: string; body?: string; artifacts?: unknown; tags?: string[]; repo?: string }
 ): Promise<number> {
   const created_at = nowIso();
+  const repo = entry.repo ?? "";
   const res = await run(
     db,
-    `INSERT INTO feed (author, summary, body, artifacts, created_at) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO feed (repo, author, summary, body, artifacts, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    repo,
     entry.author,
     entry.summary,
     entry.body ?? null,
@@ -31,7 +33,8 @@ export async function append_feed(
   for (const tag of entry.tags ?? []) {
     await run(
       db,
-      `INSERT OR IGNORE INTO entry_tags (tag, entry_type, entry_id) VALUES (?, 'feed', ?)`,
+      `INSERT OR IGNORE INTO entry_tags (repo, tag, entry_type, entry_id) VALUES (?, ?, 'feed', ?)`,
+      repo,
       tag,
       String(id)
     );
@@ -54,11 +57,13 @@ export async function propose_doc_update(
     base_version?: number | null;
     change_kind?: "new" | "edit" | "rewrite" | null;
     low_confidence?: boolean;
+    repo?: string;
   },
   author: string
 ): Promise<{ slug: string; version: number; status: "staged" }> {
   const created_at = nowIso();
-  const existing = await first<DocRow>(db, `SELECT * FROM docs WHERE slug = ?`, proposal.slug);
+  const repo = proposal.repo ?? "";
+  const existing = await first<DocRow>(db, `SELECT * FROM docs WHERE repo = ? AND slug = ?`, repo, proposal.slug);
 
   if (!existing) {
     // Title resolution on first creation only: proposal.title ?? humanizeSlug(slug).
@@ -67,8 +72,9 @@ export async function propose_doc_update(
     const title = proposal.title ?? humanizeSlug(proposal.slug);
     await run(
       db,
-      `INSERT INTO docs (slug, section, title, body, current_version, updated_at, updated_by, space)
-       VALUES (?, ?, ?, '', 0, ?, ?, ?)`,
+      `INSERT INTO docs (repo, slug, section, title, body, current_version, updated_at, updated_by, space)
+       VALUES (?, ?, ?, ?, '', 0, ?, ?, ?)`,
+      repo,
       proposal.slug,
       proposal.section,
       title,
@@ -80,7 +86,8 @@ export async function propose_doc_update(
 
   const max = await first<{ v: number | null }>(
     db,
-    `SELECT MAX(version) AS v FROM doc_versions WHERE slug = ?`,
+    `SELECT MAX(version) AS v FROM doc_versions WHERE repo = ? AND slug = ?`,
+    repo,
     proposal.slug
   );
   const version = (max?.v ?? 0) + 1;
@@ -88,9 +95,10 @@ export async function propose_doc_update(
   await run(
     db,
     `INSERT INTO doc_versions
-       (slug, version, body, summary, status, confidence, created_at, created_by,
+       (repo, slug, version, body, summary, status, confidence, created_at, created_by,
         content_hash, base_version, change_kind, low_confidence)
-     VALUES (?, ?, ?, ?, 'staged', ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, 'staged', ?, ?, ?, ?, ?, ?, ?)`,
+    repo,
     proposal.slug,
     version,
     proposal.body,
@@ -112,13 +120,15 @@ export async function stage_adr(
   db: DB,
   draft: { title: string; context: string; decision: string; rationale: string; confidence: "high" | "low" },
   author: string,
-  contentHash?: string | null
+  contentHash?: string | null,
+  repo = ""
 ): Promise<number> {
   const created_at = nowIso();
   const res = await run(
     db,
-    `INSERT INTO adrs (title, context, decision, rationale, status, confidence, created_at, created_by, content_hash)
-     VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+    `INSERT INTO adrs (repo, title, context, decision, rationale, status, confidence, created_at, created_by, content_hash)
+     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+    repo,
     draft.title,
     draft.context,
     draft.decision,
@@ -133,14 +143,15 @@ export async function stage_adr(
 
 export async function route_triage(
   db: DB,
-  item: { raw: unknown; reason: string; source_author?: string }
+  item: { raw: unknown; reason: string; source_author?: string; repo?: string }
 ): Promise<number> {
   const created_at = nowIso();
   const raw = typeof item.raw === "string" ? item.raw : JSON.stringify(item.raw);
   const res = await run(
     db,
-    `INSERT INTO needs_triage (raw, reason, source_author, resolved, created_at)
-     VALUES (?, ?, ?, 0, ?)`,
+    `INSERT INTO needs_triage (repo, raw, reason, source_author, resolved, created_at)
+     VALUES (?, ?, ?, ?, 0, ?)`,
+    item.repo ?? "",
     raw,
     item.reason,
     item.source_author ?? null,
@@ -255,13 +266,15 @@ export async function stage_milestone_proposal(
   db: DB,
   proposal: { title: string; target_date: string; status: string; github_ref?: number | number[]; change_summary: string; confidence: "high" | "low" },
   author: string,
-  contentHash?: string | null
+  contentHash?: string | null,
+  repo = ""
 ): Promise<number> {
   const github_ref = proposal.github_ref === undefined ? null : JSON.stringify(proposal.github_ref);
   const res = await run(
     db,
-    `INSERT INTO milestone_proposals (title, target_date, status, github_ref, change_summary, confidence, staged_status, created_at, created_by, content_hash)
-     VALUES (?, ?, ?, ?, ?, ?, 'staged', ?, ?, ?)`,
+    `INSERT INTO milestone_proposals (repo, title, target_date, status, github_ref, change_summary, confidence, staged_status, created_at, created_by, content_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, ?)`,
+    repo,
     proposal.title,
     proposal.target_date,
     proposal.status,
@@ -462,25 +475,25 @@ export async function assign_triage(
       confidence: "high",            // human-vouched on assign
       space: target.space ?? (raw.space as "sapling" | "canopy" | undefined),
     });
-    const r = await ingestDocProposal(db, proposal, by, ledger);
+    const r = await ingestDocProposal(db, proposal, by, row.repo, ledger);
     if (r.outcome === "triaged") throw new Error(`could not place doc: ${r.reason}`);
     assigned_ref = r.outcome === "written" ? `doc:${r.slug}@${r.version}` : `doc:${r.slug ?? proposal.slug}`;
   } else if (type === "adr") {
     const draft = AdrDraft.parse({ ...raw, confidence: "high" });
-    const r = await ingestAdrDraft(db, draft, by, ledger);
+    const r = await ingestAdrDraft(db, draft, by, row.repo, ledger);
     if (r.outcome === "triaged") throw new Error(`could not place decision: ${r.reason}`);
     assigned_ref = `adr:${r.id}`;
   } else if (type === "milestone") {
     if (raw.status === "done") throw new Error("completing a milestone is a separate action, not an assignment");
     const proposal = MilestoneProposal.parse({ ...raw, confidence: "high" });
-    const r = await ingestMilestoneProposal(db, proposal, by, ledger);
+    const r = await ingestMilestoneProposal(db, proposal, by, row.repo, ledger);
     if (r.outcome === "triaged") throw new Error(`could not place milestone: ${r.reason}`);
     assigned_ref = `milestone:${r.id}`;
   } else {
     const entry = FeedEntry.parse({ ...raw, tags: target.tags ?? (raw.tags as string[] | undefined) ?? [] });
     const unknown = entry.tags.filter((t) => !isTag(t));
     if (unknown.length > 0) throw new Error(`unknown tag: ${unknown.join(", ")} — pick valid tags to place this`);
-    const r = await ingestFeedEntry(db, entry, by, ledger);
+    const r = await ingestFeedEntry(db, entry, by, row.repo, ledger);
     if (r.outcome === "triaged") throw new Error(`could not place feed entry: ${r.reason}`);
     assigned_ref = r.outcome === "written" ? `feed:${r.id}` : "feed:unchanged";
   }
