@@ -93,13 +93,13 @@ async function ledgerRecord(
 
 /** Feed: append-only. Out-of-vocab tag → triage; the ledger is the only replay guard
  *  (content repeats are legal, which is exactly why feed needs the ledger). */
-export async function ingestFeedEntry(db: DB, entry: FeedEntry, author: string, ledger?: LedgerRef): Promise<FeedIngestResult> {
+export async function ingestFeedEntry(db: DB, entry: FeedEntry, author: string, repo = "", ledger?: LedgerRef): Promise<FeedIngestResult> {
   if (ledger && (await ledgerLookup(db, ledger))) return { outcome: "unchanged" };
 
   const unknown = entry.tags.filter((t) => !isTag(t));
   if (unknown.length > 0) {
     const reason = `unknown tag: ${unknown.join(", ")}`;
-    await route_triage(db, { raw: entry, reason, source_author: author });
+    await route_triage(db, { raw: entry, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "feed", "triaged", null);
     return { outcome: "triaged", reason };
   }
@@ -109,6 +109,7 @@ export async function ingestFeedEntry(db: DB, entry: FeedEntry, author: string, 
     body: entry.body,
     artifacts: entry.artifacts,
     tags: entry.tags,
+    repo,
   });
   if (ledger) await ledgerRecord(db, ledger, "feed", "written", String(id));
   return { outcome: "written", id };
@@ -116,24 +117,24 @@ export async function ingestFeedEntry(db: DB, entry: FeedEntry, author: string, 
 
 /** Docs: reconcile against the KB. Out-of-vocab section or low-confidence-new → triage;
  *  low-confidence-existing → stage-and-flag; unchanged body → drop; else stage a typed delta. */
-export async function ingestDocProposal(db: DB, proposal: DocProposal, author: string, ledger?: LedgerRef): Promise<DocIngestResult> {
+export async function ingestDocProposal(db: DB, proposal: DocProposal, author: string, repo = "", ledger?: LedgerRef): Promise<DocIngestResult> {
   if (ledger && (await ledgerLookup(db, ledger))) return { outcome: "unchanged" };
 
   if (!isSection(proposal.section)) {
     const reason = `out-of-vocab section: ${proposal.section}`;
-    await route_triage(db, { raw: proposal, reason, source_author: author });
+    await route_triage(db, { raw: proposal, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "doc", "triaged", null);
     return { outcome: "triaged", reason };
   }
 
-  const existing = await first<DocRow>(db, `SELECT * FROM docs WHERE slug = ?`, proposal.slug);
+  const existing = await first<DocRow>(db, `SELECT * FROM docs WHERE repo = ? AND slug = ?`, repo, proposal.slug);
   const lowConf = proposal.confidence === "low";
 
   // Low confidence: a NEW slug is too uncertain to even create — triage. An
   // EXISTING slug stages but is flagged for human scrutiny.
   if (lowConf && !existing) {
     const reason = "low confidence doc proposal";
-    await route_triage(db, { raw: proposal, reason, source_author: author });
+    await route_triage(db, { raw: proposal, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "doc", "triaged", null);
     return { outcome: "triaged", reason };
   }
@@ -147,7 +148,8 @@ export async function ingestDocProposal(db: DB, proposal: DocProposal, author: s
     const promotedHash = promotedBody !== null ? await contentHash(promotedBody) : null;
     const latestStaged = await first<DocVersionRow>(
       db,
-      `SELECT * FROM doc_versions WHERE slug = ? AND status = 'staged' ORDER BY version DESC LIMIT 1`,
+      `SELECT * FROM doc_versions WHERE repo = ? AND slug = ? AND status = 'staged' ORDER BY version DESC LIMIT 1`,
+      repo,
       proposal.slug
     );
     const latestStagedHash = latestStaged ? (latestStaged.content_hash ?? (await contentHash(latestStaged.body))) : null;
@@ -183,6 +185,7 @@ export async function ingestDocProposal(db: DB, proposal: DocProposal, author: s
       base_version,
       change_kind,
       low_confidence: lowConf, // true only for low-confidence on an EXISTING slug (new+low triaged above)
+      repo,
     },
     author
   );
@@ -192,12 +195,12 @@ export async function ingestDocProposal(db: DB, proposal: DocProposal, author: s
 
 /** ADRs: low confidence → triage; content-hash dedupe on title+context+decision+rationale →
  *  identical exists → drop; else stage a 'draft' carrying its content_hash. */
-export async function ingestAdrDraft(db: DB, draft: AdrDraft, author: string, ledger?: LedgerRef): Promise<AdrIngestResult> {
+export async function ingestAdrDraft(db: DB, draft: AdrDraft, author: string, repo = "", ledger?: LedgerRef): Promise<AdrIngestResult> {
   if (ledger && (await ledgerLookup(db, ledger))) return { outcome: "unchanged" };
 
   if (draft.confidence === "low") {
     const reason = "low confidence adr draft";
-    await route_triage(db, { raw: draft, reason, source_author: author });
+    await route_triage(db, { raw: draft, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "adr", "triaged", null);
     return { outcome: "triaged", reason };
   }
@@ -207,13 +210,13 @@ export async function ingestAdrDraft(db: DB, draft: AdrDraft, author: string, le
   // file isn't treated as binary by grep. Stored content_hash values (adrs,
   // milestone_proposals) were computed with this separator — do not change it.
   const hash = await contentHash([draft.title, draft.context, draft.decision, draft.rationale].join("\u0000"));
-  const dup = await first<AdrRow>(db, `SELECT * FROM adrs WHERE content_hash = ? AND status != 'rejected' LIMIT 1`, hash);
+  const dup = await first<AdrRow>(db, `SELECT * FROM adrs WHERE repo = ? AND content_hash = ? AND status != 'rejected' LIMIT 1`, repo, hash);
   if (dup) {
     if (ledger) await ledgerRecord(db, ledger, "adr", "unchanged", String(dup.id));
     return { outcome: "unchanged", id: dup.id };
   }
 
-  const id = await stage_adr(db, draft, author, hash);
+  const id = await stage_adr(db, draft, author, hash, repo);
   if (ledger) await ledgerRecord(db, ledger, "adr", "staged", String(id));
   return { outcome: "written", id };
 }
@@ -224,19 +227,20 @@ export async function ingestMilestoneProposal(
   db: DB,
   proposal: MilestoneProposal,
   author: string,
+  repo = "",
   ledger?: LedgerRef
 ): Promise<MilestoneIngestResult> {
   if (ledger && (await ledgerLookup(db, ledger))) return { outcome: "unchanged" };
 
   if (proposal.status === "done") {
     const reason = "milestone completion is a human action";
-    await route_triage(db, { raw: proposal, reason, source_author: author });
+    await route_triage(db, { raw: proposal, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "milestone", "triaged", null);
     return { outcome: "triaged", reason };
   }
   if (proposal.confidence === "low") {
     const reason = "low confidence milestone proposal";
-    await route_triage(db, { raw: proposal, reason, source_author: author });
+    await route_triage(db, { raw: proposal, reason, source_author: author, repo });
     if (ledger) await ledgerRecord(db, ledger, "milestone", "triaged", null);
     return { outcome: "triaged", reason };
   }
@@ -245,7 +249,8 @@ export async function ingestMilestoneProposal(
   const dup = await first<MilestoneProposalRow>(
     db,
     `SELECT * FROM milestone_proposals
-       WHERE staged_status = 'staged' AND (title = ? OR (github_ref IS NOT NULL AND github_ref = ?)) LIMIT 1`,
+       WHERE repo = ? AND staged_status = 'staged' AND (title = ? OR (github_ref IS NOT NULL AND github_ref = ?)) LIMIT 1`,
+    repo,
     proposal.title,
     github_ref
   );
@@ -258,7 +263,7 @@ export async function ingestMilestoneProposal(
   const hash = await contentHash(
     [proposal.title, proposal.target_date, proposal.status, github_ref ?? "", proposal.change_summary].join("\u0000")
   );
-  const id = await stage_milestone_proposal(db, proposal, author, hash);
+  const id = await stage_milestone_proposal(db, proposal, author, hash, repo);
   if (ledger) await ledgerRecord(db, ledger, "milestone", "staged", String(id));
   return { outcome: "written", id };
 }
@@ -300,7 +305,7 @@ export async function ingestEvent(db: DB, event: CapturedEvent, recordedBy: stri
  * only ever reach the gate via the HMAC-verified webhook calling ingestEvent
  * directly (src/webhook.ts), never through this bearer/cookie-authenticated path.
  */
-export async function consume(db: DB, payload: IngestPayload, principal: Principal): Promise<IngestResult> {
+export async function consume(db: DB, payload: IngestPayload, principal: Principal, repo = ""): Promise<IngestResult> {
   const author = principal.login; // authenticated principal; payload.session.author is advisory and ignored
   const sessionId = payload.session.id;
   const result: IngestResult = {
@@ -312,21 +317,21 @@ export async function consume(db: DB, payload: IngestPayload, principal: Princip
   let idx = 0;
 
   for (const entry of payload.feed_entries) {
-    const r = await ingestFeedEntry(db, entry, author, { sessionId, itemIndex: idx++ });
+    const r = await ingestFeedEntry(db, entry, author, repo, { sessionId, itemIndex: idx++ });
     if (r.outcome === "written") result.feed.written++;
     else if (r.outcome === "unchanged") result.feed.unchanged++;
     else result.feed.triaged++;
   }
 
   for (const proposal of payload.doc_proposals) {
-    const r = await ingestDocProposal(db, proposal, author, { sessionId, itemIndex: idx++ });
+    const r = await ingestDocProposal(db, proposal, author, repo, { sessionId, itemIndex: idx++ });
     if (r.outcome === "written") result.docs.staged++;
     else if (r.outcome === "unchanged") result.docs.unchanged++;
     else result.docs.triaged++;
   }
 
   for (const draft of payload.adr_drafts) {
-    const r = await ingestAdrDraft(db, draft, author, { sessionId, itemIndex: idx++ });
+    const r = await ingestAdrDraft(db, draft, author, repo, { sessionId, itemIndex: idx++ });
     if (r.outcome === "written") result.adrs.staged++;
     else if (r.outcome === "unchanged") result.adrs.unchanged++;
     else result.adrs.triaged++;
@@ -340,7 +345,7 @@ export async function consume(db: DB, payload: IngestPayload, principal: Princip
       result.triage.unchanged++;
       continue;
     }
-    await route_triage(db, { raw: item.raw, reason: item.reason, source_author: author });
+    await route_triage(db, { raw: item.raw, reason: item.reason, source_author: author, repo });
     await ledgerRecord(db, ledger, "triage", "triaged", null);
     result.triage.recorded++;
   }
