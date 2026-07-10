@@ -64,8 +64,10 @@ interface IssueSnapshotRow {
  * are never dropped). Any D1 failure degrades the whole projection to empty
  * with degraded:true rather than throwing.
  */
-export async function getMyWork(db: DB, login: string): Promise<MyWork> {
+export async function getMyWork(db: DB, login: string, repo?: string): Promise<MyWork> {
   try {
+    // Optional repo scope on the captured events (My Work reads events by subject).
+    const rp = repo !== undefined ? [repo] : [];
     const personRow = await first<PersonRow>(db, `SELECT * FROM people WHERE login = ?`, login);
     if (!personRow) return EMPTY(false);
 
@@ -75,10 +77,11 @@ export async function getMyWork(db: DB, login: string): Promise<MyWork> {
          FROM events e
          LEFT JOIN pr_summaries s ON s.semantic_key = e.semantic_key
         WHERE e.event_type IN ('pr_merged', 'pr_closed')
-          AND e.subject_login = ?
+          AND e.subject_login = ?${repo !== undefined ? " AND e.repo = ?" : ""}
         ORDER BY e.occurred_at DESC, e.id DESC
         LIMIT ${PR_LIMIT}`,
-      login
+      login,
+      ...rp
     );
     const previousActivity: MyWorkPr[] = prRows.map((row) => {
       const parsed = JSON.parse(row.raw) as RawPr;
@@ -103,11 +106,12 @@ export async function getMyWork(db: DB, login: string): Promise<MyWork> {
       `SELECT e.ref_number, e.raw, s.summary AS summary, s.title AS s_title, s.next_step AS s_next_step
        FROM (
          SELECT ref_number, raw, ROW_NUMBER() OVER (PARTITION BY ref_number ORDER BY occurred_at DESC, id DESC) rn
-         FROM events WHERE event_type = 'issue'
+         FROM events WHERE event_type = 'issue'${repo !== undefined ? " AND repo = ?" : ""}
        ) e
        LEFT JOIN issue_summaries s ON s.issue_number = e.ref_number
        WHERE e.rn = 1
-       ORDER BY e.ref_number ASC`
+       ORDER BY e.ref_number ASC`,
+      ...rp
     );
     const todo: MyWorkTodo[] = [];
     for (const row of issueRows) {
@@ -145,10 +149,15 @@ export async function getMyWork(db: DB, login: string): Promise<MyWork> {
  *  log behind My Work and roadmap progress. */
 export async function list_events(
   db: DB,
-  filter?: { type?: "pr_merged" | "pr_closed" | "issue"; subject?: string; limit?: number }
+  filter?: { type?: "pr_merged" | "pr_closed" | "issue"; subject?: string; limit?: number },
+  repo?: string
 ): Promise<EventRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
+  if (repo !== undefined) {
+    clauses.push(`repo = ?`);
+    params.push(repo);
+  }
   if (filter?.type) {
     clauses.push(`event_type = ?`);
     params.push(filter.type);

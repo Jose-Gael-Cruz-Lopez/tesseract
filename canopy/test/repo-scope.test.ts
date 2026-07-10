@@ -5,6 +5,7 @@ import { repoFromDelivery } from "../src/webhook";
 import { ingestEvent, ingestFeedEntry } from "../src/consumer";
 import { route_triage } from "../src/tools/writes";
 import { list_needs_triage } from "../src/tools/reads";
+import { list_events } from "../src/tools/mywork";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
 // with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
@@ -100,6 +101,16 @@ describe("reads scope by repo (2c)", () => {
     expect(both.length).toBe(2);
 
     const onlyA = await list_needs_triage(env.DB, "acme/a"); // scoped → one
+    expect(onlyA.length).toBe(1);
+    expect(onlyA[0].repo).toBe("acme/a");
+  });
+
+  it("list_events scopes captured events by repo", async () => {
+    await ingestEvent(env.DB, { semantic_key: "gh:pr:1:merged", event_type: "pr_merged", ref_number: 1, subject_login: "a", raw: "{}", provenance: "webhook" }, "wh", "acme/a");
+    await ingestEvent(env.DB, { semantic_key: "gh:pr:2:merged", event_type: "pr_merged", ref_number: 2, subject_login: "b", raw: "{}", provenance: "webhook" }, "wh", "acme/b");
+
+    expect((await list_events(env.DB)).length).toBe(2);
+    const onlyA = await list_events(env.DB, {}, "acme/a");
     expect(onlyA.length).toBe(1);
     expect(onlyA[0].repo).toBe("acme/a");
   });
