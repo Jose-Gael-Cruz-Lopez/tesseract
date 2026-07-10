@@ -219,6 +219,15 @@ export function eventsFromDelivery(eventName: string, payload: unknown): Capture
   return [];
 }
 
+// PURE: the repo a delivery is about — GitHub puts `repository.full_name`
+// ("owner/name") on every pull_request/issues delivery. "" if absent (older test
+// fixtures / malformed) so capture still lands (backfilled to the default repo).
+export function repoFromDelivery(payload: unknown): string {
+  if (payload === null || typeof payload !== "object") return "";
+  const full = (payload as { repository?: { full_name?: unknown } }).repository?.full_name;
+  return typeof full === "string" ? full : "";
+}
+
 // ---------------------------------------------------------------------------
 // PURE: the absolute progress this issue event implies for its milestone, or
 // null when the issue carries no milestone. total = open + closed (GitHub's own
@@ -249,13 +258,14 @@ export function progressFromIssueEvent(
 // store a capture-time summary. `summarizer` is already resolved by the
 // caller (opts?.summarizer ?? (env.GEMINI_API_KEY ? geminiPrSummarizer(env.GEMINI_API_KEY) : null));
 // storePrSummary itself never throws, so a summary failure never fails capture.
-async function summarizePrSeam(db: DB, summarizer: Summarizer<PrSummary> | null, event: CapturedEvent): Promise<void> {
+async function summarizePrSeam(db: DB, summarizer: Summarizer<PrSummary> | null, event: CapturedEvent, repo: string): Promise<void> {
   const parsed = JSON.parse(event.raw) as { pr: { number: number; title: string; body: string | null } };
   await storePrSummary(db, summarizer, {
     semantic_key: event.semantic_key,
     pr_number: parsed.pr.number,
     title: parsed.pr.title,
     body: parsed.pr.body ?? "",
+    repo,
   });
 }
 
@@ -264,13 +274,14 @@ async function summarizePrSeam(db: DB, summarizer: Summarizer<PrSummary> | null,
 // appear in anyone's to-do). Action isn't distinguishable from event_type
 // alone (every issue action is captured as event_type:"issue"), so it's read
 // back off the event's own raw JSON.
-async function summarizeIssueSeam(db: DB, summarizer: Summarizer<IssueSummary> | null, event: CapturedEvent): Promise<void> {
+async function summarizeIssueSeam(db: DB, summarizer: Summarizer<IssueSummary> | null, event: CapturedEvent, repo: string): Promise<void> {
   const parsed = JSON.parse(event.raw) as { action: string; issue: { number: number; title: string; body: string | null } };
   if (parsed.action !== "assigned") return;
   await storeIssueSummary(db, summarizer, {
     issue_number: parsed.issue.number,
     title: parsed.issue.title,
     body: parsed.issue.body ?? "",
+    repo,
   });
 }
 
@@ -311,20 +322,23 @@ export async function handleGithubWebhook(
     payload = null; // eventsFromDelivery treats a non-object payload as []
   }
 
+  // Route by the delivery's own repo ("owner/name"). Every event, summary, and
+  // progress write this delivery produces is scoped to it.
+  const repo = repoFromDelivery(payload);
   const events = eventsFromDelivery(eventName, payload);
   let captured = 0;
   let unchanged = 0;
   for (const ev of events) {
-    const res = await ingestEvent(env.DB, ev, "github-webhook");
+    const res = await ingestEvent(env.DB, ev, "github-webhook", repo);
     if (res.outcome === "written") {
       captured++;
       if (ev.event_type === "pr_merged" || ev.event_type === "pr_closed") {
         const summarizer = opts?.summarizer ?? (env.GEMINI_API_KEY ? geminiPrSummarizer(env.GEMINI_API_KEY) : null);
-        await summarizePrSeam(env.DB, summarizer, ev);
+        await summarizePrSeam(env.DB, summarizer, ev, repo);
       } else {
         await progressSeam(env.DB, payload);
         const issueSummarizer = opts?.issueSummarizer ?? (env.GEMINI_API_KEY ? geminiIssueSummarizer(env.GEMINI_API_KEY) : null);
-        await summarizeIssueSeam(env.DB, issueSummarizer, ev);
+        await summarizeIssueSeam(env.DB, issueSummarizer, ev, repo);
       }
     } else {
       unchanged++;

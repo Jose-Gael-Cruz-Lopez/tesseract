@@ -256,7 +256,7 @@ export async function runBackfill(
 
     for (const base of eventsFromDelivery("issues", payload)) {
       const ev = { ...base, provenance: "backfill" as const };
-      const res = await ingestEvent(env.DB, ev, principalLogin);
+      const res = await ingestEvent(env.DB, ev, principalLogin, repo);
       if (res.outcome === "written") {
         captured++;
         // Mirror handleGithubWebhook's progress seam for newly-written issues.
@@ -289,6 +289,7 @@ export async function runBackfill(
         issue_number: issue.number,
         title: issue.title,
         body: issue.body ?? "",
+        repo,
       });
       summarized++;
       // storeIssueSummary can still fall back to excerpt if the AI call failed —
@@ -305,7 +306,7 @@ export async function runBackfill(
     const payload = prClosedDelivery(pr);
     for (const base of eventsFromDelivery("pull_request", payload)) {
       const ev = { ...base, provenance: "backfill" as const };
-      const res = await ingestEvent(env.DB, ev, principalLogin);
+      const res = await ingestEvent(env.DB, ev, principalLogin, repo);
       if (res.outcome === "written") {
         captured++;
       } else {
@@ -340,6 +341,7 @@ export async function runBackfill(
         pr_number: parsed.pr.number,
         title: parsed.pr.title,
         body: parsed.pr.body ?? "",
+        repo,
       });
       summarized++;
       // storePrSummary can still fall back to excerpt if the AI call failed —
