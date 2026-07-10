@@ -267,13 +267,16 @@ export async function ingestMilestoneProposal(
  *  redelivery or backfill overlap drops as unchanged. No vocab/confidence checks:
  *  the event is external fact, captured verbatim. The writer is the authenticated
  *  principal; subject_login is the event's own identity (trusted post-HMAC). */
-export async function ingestEvent(db: DB, event: CapturedEvent, recordedBy: string, ledger?: LedgerRef): Promise<EventIngestResult> {
+export async function ingestEvent(db: DB, event: CapturedEvent, recordedBy: string, repo = "", ledger?: LedgerRef): Promise<EventIngestResult> {
   if (ledger && (await ledgerLookup(db, ledger))) return { outcome: "unchanged" };
+  // `repo` is the owning repo ("owner/name"). Dedupe is still the semantic_key
+  // UNIQUE (global) until the per-repo-uniqueness recreation lands; single-repo
+  // behavior is unchanged and the row is now tagged with its repo.
   const res = await run(
     db,
-    `INSERT OR IGNORE INTO events (semantic_key, event_type, ref_number, subject_login, raw, provenance, occurred_at, recorded_at, recorded_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    event.semantic_key, event.event_type, event.ref_number, event.subject_login,
+    `INSERT OR IGNORE INTO events (repo, semantic_key, event_type, ref_number, subject_login, raw, provenance, occurred_at, recorded_at, recorded_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    repo, event.semantic_key, event.event_type, event.ref_number, event.subject_login,
     event.raw, event.provenance, event.occurred_at ?? null, nowIso(), recordedBy
   );
   const written = (res.meta.changes ?? 0) > 0;
