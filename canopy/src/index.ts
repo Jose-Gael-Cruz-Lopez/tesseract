@@ -4,6 +4,7 @@ import { handleGithubWebhook } from "./webhook";
 import { resolveBearerPrincipal } from "./auth/principal";
 import { recomputeAllProgress } from "./tools/progress";
 import { corsHeaders, handlePreflight } from "./cors";
+import { bootstrapRepo } from "./db";
 import type { Env } from "./env";
 
 export default {
@@ -12,6 +13,9 @@ export default {
     // CORS preflight for the read routes (browsers only; allowed origins only).
     const pre = handlePreflight(request, env);
     if (pre) return pre;
+    // Complete migration 0020's backfill once per isolate (guarded + best-effort):
+    // register GITHUB_REPO and rewrite the transient repo='' sentinel on legacy rows.
+    await bootstrapRepo(env, env.DB);
     // Static assets are served by the assets binding before this handler runs.
     if (url.pathname === "/mcp") {
       // Bearer ONLY. On missing/invalid credentials: bare 401, NO WWW-Authenticate,
