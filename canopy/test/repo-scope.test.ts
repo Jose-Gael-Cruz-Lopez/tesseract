@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
 import { repoFromDelivery } from "../src/webhook";
-import { ingestEvent } from "../src/consumer";
+import { ingestEvent, ingestFeedEntry } from "../src/consumer";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
 // with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
@@ -71,5 +71,19 @@ describe("events are tagged by repo (2b)", () => {
     const row = await env.DB.prepare(`SELECT repo FROM events WHERE semantic_key = ?`)
       .bind("gh:pr:7:merged").first<{ repo: string }>();
     expect(row?.repo).toBe("acme/app");
+  });
+});
+
+// Phase 2b (gate): the ingest gate tags created content with its repo.
+describe("the ingest gate tags content by repo (2b)", () => {
+  it("a feed entry created via the gate carries its repo", async () => {
+    const entry = { summary: "shipped the thing", body: "", tags: ["infra"], artifacts: { prs: [], commits: [], issues: [] } };
+    const r = await ingestFeedEntry(env.DB, entry, "octocat", "acme/app");
+    expect(r.outcome).toBe("written");
+    const row = await env.DB.prepare(`SELECT repo FROM feed WHERE summary = 'shipped the thing'`).first<{ repo: string }>();
+    expect(row?.repo).toBe("acme/app");
+    // its tag row is scoped to the same repo
+    const tag = await env.DB.prepare(`SELECT repo FROM entry_tags WHERE entry_type = 'feed' AND tag = 'infra'`).first<{ repo: string }>();
+    expect(tag?.repo).toBe("acme/app");
   });
 });

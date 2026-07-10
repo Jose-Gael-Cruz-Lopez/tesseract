@@ -4,6 +4,7 @@ import type { AppEnv } from "./auth/principal";
 import { sessionGate, isAdmin } from "./auth/principal";
 import { authApp } from "./auth/routes";
 import { consume } from "./consumer";
+import { defaultRepo } from "./db";
 import { runBackfill } from "./tools/backfill";
 import { get_doc, list_docs, get_feed, query, list_needs_triage, list_adrs, list_milestone_proposals, list_proposals, list_identity_tasks } from "./tools/reads";
 import { promote_doc, ratify_adr, promote_milestone_proposal, reject_milestone_proposal, complete_milestone, reject_doc_version, reject_adr, resolve_triage, assign_triage, map_identity, type AssignType } from "./tools/writes";
@@ -27,7 +28,7 @@ app.post("/ingest", async (c) => {
     return c.json({ error: "invalid payload", issues: parsed.error.issues }, 400);
   }
   // SEAM: a Cloudflare Queue producer.send({ payload, principal }) would slot in here.
-  const result = await consume(c.env.DB, parsed.data, c.get("principal"));
+  const result = await consume(c.env.DB, parsed.data, c.get("principal"), defaultRepo(c.env));
   return c.json({ ok: true, result });
 });
 

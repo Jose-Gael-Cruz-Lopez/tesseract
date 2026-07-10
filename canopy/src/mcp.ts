@@ -7,6 +7,7 @@ import { isAdmin } from "./auth/principal";
 import { get_doc, list_docs, get_feed, query } from "./tools/reads";
 import { getMyWork, list_events } from "./tools/mywork";
 import { ingestFeedEntry, ingestDocProposal, consume } from "./consumer";
+import { defaultRepo } from "./db";
 import { feedEntryFromMcpArgs } from "./mcp-args";
 import { IngestPayload } from "@shared/contract";
 import { write_plan, get_plan, type PlanWrite } from "./tools/plan";
@@ -92,6 +93,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
           env.DB,
           feedEntryFromMcpArgs({ summary, body, tags, prs, commits, issues }),
           principal.login,
+          defaultRepo(env),
           ephemeralLedger()
         )
       )
@@ -111,7 +113,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
       base_version: z.number().optional(),
       force: z.boolean().optional(),
     },
-    async (proposal) => runTool(() => ingestDocProposal(env.DB, proposal, principal.login, ephemeralLedger()))
+    async (proposal) => runTool(() => ingestDocProposal(env.DB, proposal, principal.login, defaultRepo(env), ephemeralLedger()))
   );
 
   server.tool(
@@ -143,7 +145,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
     // consume() under the bearer principal already in scope. Re-parse with the contract
     // so defaults (empty arrays) are applied and the type is exactly IngestPayload —
     // the SDK already validated against IngestPayload.shape, so this never throws.
-    async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal)),
+    async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal, defaultRepo(env))),
   );
 
   // ADMIN-only: the plan write surface — non-admin principals don't even see the tool
