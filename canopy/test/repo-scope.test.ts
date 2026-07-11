@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
 import { repoFromDelivery } from "../src/webhook";
 import { ingestEvent, ingestFeedEntry } from "../src/consumer";
-import { route_triage, propose_doc_update } from "../src/tools/writes";
+import { route_triage, propose_doc_update, promote_doc, reject_doc_version, stage_milestone_proposal, promote_milestone_proposal } from "../src/tools/writes";
 import { list_needs_triage, get_doc, query } from "../src/tools/reads";
 import { list_events } from "../src/tools/mywork";
 import { write_plan, get_plan } from "../src/tools/plan";
@@ -256,5 +256,45 @@ describe("query() scopes by repo (2d)", () => {
 
     const mAll = await query(env.DB, { q: "Delta", types: ["milestone"] });
     expect([...mAll.primary, ...mAll.pointers].filter((r) => r.type === "milestone")).toHaveLength(2);
+  });
+});
+
+// Phase 2 (activation): the human-confirm writers are repo-scoped. Promoting or
+// rejecting a doc version touches ONLY its own repo (before this, WHERE slug=? would
+// clobber a same-slug doc in another repo), and a promoted milestone inherits its
+// proposal's repo instead of always landing in ''.
+describe("promote/reject writers scope by repo (2d)", () => {
+  it("promote_doc + reject_doc_version touch only their repo's same-slug version", async () => {
+    await propose_doc_update(env.DB, { slug: "shared", section: "reference", body: "A body", change_summary: "a", confidence: "high", repo: "acme/a" }, "author");
+    await propose_doc_update(env.DB, { slug: "shared", section: "reference", body: "B body", change_summary: "b", confidence: "high", repo: "acme/b" }, "author");
+
+    await promote_doc(env.DB, "shared", 1, "author", "acme/a");
+
+    // acme/a is live with A's body; acme/b is untouched (still unpromoted, empty live body).
+    const a = await env.DB.prepare(`SELECT body, current_version FROM docs WHERE repo='acme/a' AND slug='shared'`).first<{ body: string; current_version: number }>();
+    const b = await env.DB.prepare(`SELECT body, current_version FROM docs WHERE repo='acme/b' AND slug='shared'`).first<{ body: string; current_version: number }>();
+    expect(a).toEqual({ body: "A body", current_version: 1 });
+    expect(b).toEqual({ body: "", current_version: 0 }); // NOT clobbered by acme/a's promote
+
+    // reject is likewise scoped: rejecting acme/b's version leaves acme/a's promoted one alone.
+    await reject_doc_version(env.DB, "shared", 1, "acme/b");
+    const va = await env.DB.prepare(`SELECT status FROM doc_versions WHERE repo='acme/a' AND slug='shared'`).first<{ status: string }>();
+    const vb = await env.DB.prepare(`SELECT status FROM doc_versions WHERE repo='acme/b' AND slug='shared'`).first<{ status: string }>();
+    expect(va?.status).toBe("promoted");
+    expect(vb?.status).toBe("rejected");
+  });
+
+  it("promote_milestone_proposal carries the proposal's repo onto the live milestone", async () => {
+    const pid = await stage_milestone_proposal(
+      env.DB,
+      { title: "Scoped GA", target_date: "2026-08-01", status: "upcoming", change_summary: "s", confidence: "high" },
+      "author",
+      null,
+      "acme/a"
+    );
+    const m = await promote_milestone_proposal(env.DB, pid, "author");
+    expect(m.repo).toBe("acme/a");
+    const row = await env.DB.prepare(`SELECT repo FROM milestones WHERE id = ?`).bind(m.id).first<{ repo: string }>();
+    expect(row?.repo).toBe("acme/a");
   });
 });

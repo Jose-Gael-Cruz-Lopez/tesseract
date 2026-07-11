@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildCanopyMcpServer } from "../src/mcp";
 import { promote_doc } from "../src/tools/writes";
-import { all, first } from "../src/db";
+import { all, first, defaultRepo } from "../src/db";
 import type { DocRow, DocVersionRow, NeedsTriageRow } from "@shared/rows";
 
 const AUTHOR = "agent";
@@ -236,8 +236,10 @@ describe("registered MCP propose_doc_update tool — reconciler behaviors", () =
       change_summary: "v1",
       confidence: "high",
     });
-    // Promote it — a human action, never an MCP tool.
-    await promote_doc(env.DB, "base-version-doc", 1, "human");
+    // Promote it — a human action, never an MCP tool. The MCP tool writes at
+    // defaultRepo(env), so the promote is scoped to that same repo (promote_doc is
+    // repo-scoped since the writers sub-phase).
+    await promote_doc(env.DB, "base-version-doc", 1, "human", defaultRepo(env));
 
     // Now current_version = 1. Propose v2 and pass base_version: 1 through the tool.
     const result = await propose({
