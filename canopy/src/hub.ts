@@ -69,11 +69,14 @@ hubApp.get("/search", async (c) => {
     ? typesCsv.split(",").map((t) => t.trim()).filter((t): t is "doc" | "decision" | "feed" | "milestone" =>
         t === "doc" || t === "decision" || t === "feed" || t === "milestone")
     : undefined;
+  const spaceRaw = c.req.query("space");
+  const space = spaceRaw === "sapling" || spaceRaw === "canopy" ? spaceRaw : undefined;
   const limit = c.req.query("limit");
   const result = await query(c.env.DB, {
     q: c.req.query("q") ?? "",
     types: types && types.length ? types : undefined,
     section: c.req.query("section"),
+    space,
     include_staged: false,
     limit: limit ? Number(limit) : undefined,
   }, repoOf(c));
