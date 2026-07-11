@@ -4,7 +4,7 @@ import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from
 import { repoFromDelivery } from "../src/webhook";
 import { ingestEvent, ingestFeedEntry } from "../src/consumer";
 import { route_triage, propose_doc_update } from "../src/tools/writes";
-import { list_needs_triage, get_doc } from "../src/tools/reads";
+import { list_needs_triage, get_doc, query } from "../src/tools/reads";
 import { list_events } from "../src/tools/mywork";
 import { write_plan, get_plan } from "../src/tools/plan";
 
@@ -203,5 +203,58 @@ describe("per-repo plan (0023)", () => {
     expect(viewB.narrative).toBe("Plan B");
     expect(viewA.milestones.map((m) => m.title)).toEqual(["A1"]);
     expect(viewB.milestones.map((m) => m.title)).toEqual(["B1"]);
+  });
+});
+
+// Phase 2 (activation): query() takes an optional repo — scoped returns only that
+// repo's hits, unscoped returns all (single-repo-safe). The doc case also exercises
+// the 0022 cartesian fix: the SAME slug in two repos must return exactly one correct doc.
+describe("query() scopes by repo (2d)", () => {
+  const now = "2026-07-10T00:00:00.000Z";
+  // A live (promoted) doc inserted directly — the docs_fts trigger indexes its body,
+  // so FTS actually matches (a freshly-proposed doc keeps docs.body='' until promoted).
+  const liveDoc = (repo: string, body: string) =>
+    env.DB.prepare(
+      `INSERT INTO docs (repo, slug, section, title, body, current_version, updated_at, updated_by, space)
+       VALUES (?, 'arch', 'reference', 'Arch', ?, 1, ?, 'author', 'canopy')`
+    ).bind(repo, body, now).run();
+
+  it("doc search: same slug in two repos returns each repo's own doc (no cartesian fan-out)", async () => {
+    await liveDoc("acme/a", "widget alpha internals");
+    await liveDoc("acme/b", "widget beta internals");
+
+    const a = await query(env.DB, { q: "widget", types: ["doc"] }, "acme/a");
+    expect([...a.primary, ...a.pointers].filter((r) => r.type === "doc")).toHaveLength(1); // no cartesian fan-out
+    const docA = a.primary.find((r) => r.type === "doc")!; // only primary carries body
+    expect(docA.body).toContain("alpha");
+    expect(docA.body).not.toContain("beta");
+
+    const b = await query(env.DB, { q: "widget", types: ["doc"] }, "acme/b");
+    expect([...b.primary, ...b.pointers].filter((r) => r.type === "doc")).toHaveLength(1);
+    expect(b.primary.find((r) => r.type === "doc")!.body).toContain("beta");
+  });
+
+  it("feed + milestone search scope by repo, and unscoped sees all", async () => {
+    await ingestFeedEntry(env.DB, { summary: "gamma shipped", body: "", tags: ["infra"], artifacts: { prs: [], commits: [], issues: [] } }, "octo", "acme/a");
+    await ingestFeedEntry(env.DB, { summary: "gamma launched", body: "", tags: ["infra"], artifacts: { prs: [], commits: [], issues: [] } }, "octo", "acme/b");
+
+    const fa = await query(env.DB, { q: "gamma", types: ["feed"] }, "acme/a");
+    const feedA = [...fa.primary, ...fa.pointers].filter((r) => r.type === "feed");
+    expect(feedA).toHaveLength(1);
+    expect(feedA[0].title).toBe("gamma shipped");
+
+    const fAll = await query(env.DB, { q: "gamma", types: ["feed"] });
+    expect([...fAll.primary, ...fAll.pointers].filter((r) => r.type === "feed")).toHaveLength(2);
+
+    // roadmap_fts carries no repo, so a scoped query's milestone FTS hits are filtered
+    // in hydration — the out-of-repo milestone never enters the result.
+    await write_plan(env.DB, { narrative: "", milestones: [{ title: "Delta GA", target_date: "2026-08-01", status: "upcoming" }] }, "author", "acme/a");
+    await write_plan(env.DB, { narrative: "", milestones: [{ title: "Delta GA", target_date: "2026-09-01", status: "upcoming" }] }, "author", "acme/b");
+
+    const ma = await query(env.DB, { q: "Delta", types: ["milestone"] }, "acme/a");
+    expect([...ma.primary, ...ma.pointers].filter((r) => r.type === "milestone")).toHaveLength(1);
+
+    const mAll = await query(env.DB, { q: "Delta", types: ["milestone"] });
+    expect([...mAll.primary, ...mAll.pointers].filter((r) => r.type === "milestone")).toHaveLength(2);
   });
 });

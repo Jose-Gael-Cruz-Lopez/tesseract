@@ -276,7 +276,7 @@ function assembleMilestoneBody(m: MilestoneRow, progress: MilestoneProgressRow |
   return parts.join("\n");
 }
 
-export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
+export async function query(db: DB, req: QueryRequest, repo?: string): Promise<QueryResult> {
   const types: QueryType[] = req.types ?? ["doc", "decision", "feed", "milestone"];
   const limit = Math.trunc(Math.min(Math.max(req.limit ?? 6, 0), 50));
   const pointerLimit = Math.trunc(Math.min(Math.max(req.pointer_limit ?? 20, 0), 100));
@@ -287,6 +287,12 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
   // so those types drop out when either is set — mirroring the old engine.
   const docsOnly = section !== undefined || space !== undefined;
   const fetchCap = limit + pointerLimit;
+  // Optional repo scope: undefined = every repo (single-repo-safe default, like the
+  // list reads); given = only that repo's content. When scoped, each type filters on
+  // its base-table repo (the FTS tables carry no repo except docs_fts, so feed/adr
+  // join back to base). rp is spread into bind lists only when scoped.
+  const scoped = repo !== undefined;
+  const rp = scoped ? [repo] : [];
 
   const match = buildMatch(req.q ?? "");
 
@@ -300,11 +306,14 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
       const params: unknown[] = [match];
       if (section !== undefined) { clauses.push("docs.section = ?"); params.push(section); }
       if (space !== undefined) { clauses.push("docs.space = ?"); params.push(space); }
+      if (scoped) { clauses.push("docs.repo = ?"); params.push(repo); }
       const rows = await all<{ key: string; rank: number; snip: string }>(
         db,
+        // The JOIN matches repo too (docs.slug is per-repo since 0022): without it a
+        // slug shared by two repos fans out cartesian across docs_fts × docs.
         `SELECT docs_fts.slug AS key, bm25(docs_fts, 1.0, 5.0, 1.0, 1.0) AS rank,
                 snippet(docs_fts, -1, ${SNIPPET}) AS snip
-         FROM docs_fts JOIN docs ON docs.slug = docs_fts.slug
+         FROM docs_fts JOIN docs ON docs.slug = docs_fts.slug AND docs.repo = docs_fts.repo
          WHERE ${clauses.join(" AND ")} ORDER BY rank LIMIT ${fetchCap}`,
         ...params
       );
@@ -314,6 +323,7 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
       const params: unknown[] = [];
       if (section !== undefined) { clauses.push("section = ?"); params.push(section); }
       if (space !== undefined) { clauses.push("space = ?"); params.push(space); }
+      if (scoped) { clauses.push("repo = ?"); params.push(repo); }
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
       const rows = await all<{ key: string; ts: string | null }>(
         db,
@@ -327,18 +337,25 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
 
   if (types.includes("feed") && !docsOnly) {
     if (match) {
+      // feed_id is globally unique (feed.id, not recreated), so the repo scope is a
+      // join back to feed rather than a cartesian risk.
+      const join = scoped ? "JOIN feed ON feed.id = feed_fts.feed_id" : "";
+      const extra = scoped ? "AND feed.repo = ?" : "";
       const rows = await all<{ key: string; rank: number; snip: string }>(
         db,
         `SELECT feed_id AS key, bm25(feed_fts, 1.0, 5.0, 1.0) AS rank,
                 snippet(feed_fts, -1, ${SNIPPET}) AS snip
-         FROM feed_fts WHERE feed_fts MATCH ? ORDER BY rank LIMIT ${fetchCap}`,
-        match
+         FROM feed_fts ${join} WHERE feed_fts MATCH ? ${extra} ORDER BY rank LIMIT ${fetchCap}`,
+        match,
+        ...rp
       );
       for (const r of rows) candidates.push({ type: "feed", key: String(r.key), score: -r.rank, snippet: r.snip });
     } else {
+      const where = scoped ? "WHERE repo = ?" : "";
       const rows = await all<{ key: string }>(
         db,
-        `SELECT id AS key FROM feed ORDER BY created_at DESC, id DESC LIMIT ${fetchCap}`
+        `SELECT id AS key FROM feed ${where} ORDER BY created_at DESC, id DESC LIMIT ${fetchCap}`,
+        ...rp
       );
       for (const r of rows) candidates.push({ type: "feed", key: String(r.key), score: 0, snippet: "" });
     }
@@ -346,18 +363,24 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
 
   if (types.includes("decision") && !docsOnly) {
     if (match) {
+      // adr_id is globally unique (adrs.id, not recreated) — repo scope is a join.
+      const join = scoped ? "JOIN adrs ON adrs.id = adrs_fts.adr_id" : "";
+      const extra = scoped ? "AND adrs.repo = ?" : "";
       const rows = await all<{ key: string; rank: number; snip: string }>(
         db,
         `SELECT adr_id AS key, bm25(adrs_fts, 1.0, 5.0, 1.0, 1.0, 1.0) AS rank,
                 snippet(adrs_fts, -1, ${SNIPPET}) AS snip
-         FROM adrs_fts WHERE adrs_fts MATCH ? ORDER BY rank LIMIT ${fetchCap}`,
-        match
+         FROM adrs_fts ${join} WHERE adrs_fts MATCH ? ${extra} ORDER BY rank LIMIT ${fetchCap}`,
+        match,
+        ...rp
       );
       for (const r of rows) candidates.push({ type: "decision", key: String(r.key), score: -r.rank, snippet: r.snip });
     } else {
+      const where = scoped ? "WHERE repo = ?" : "";
       const rows = await all<{ key: string }>(
         db,
-        `SELECT id AS key FROM adrs ORDER BY created_at DESC, id DESC LIMIT ${fetchCap}`
+        `SELECT id AS key FROM adrs ${where} ORDER BY created_at DESC, id DESC LIMIT ${fetchCap}`,
+        ...rp
       );
       for (const r of rows) candidates.push({ type: "decision", key: String(r.key), score: 0, snippet: "" });
     }
@@ -377,17 +400,19 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
       for (const r of rows) candidates.push({ type: "milestone", key: String(r.key), score: -r.rank, snippet: r.snip });
     } else {
       // Browse: the plan row first (only when it carries a narrative), then
-      // milestones by recency (updated_at, then created_at). query() is not yet
-      // repo-scoped (a follow-on sub-phase); in single-repo mode the one non-empty
-      // plan row IS "the plan" — per-repo plan search lands with that phase.
-      const planRow = await first<PlanRow>(db, `SELECT * FROM plan WHERE narrative != '' LIMIT 1`);
+      // milestones by recency (updated_at, then created_at). Both scope by repo when
+      // given; unscoped, the one non-empty plan row IS "the plan" (single-repo-safe).
+      const planWhere = scoped ? "repo = ? AND narrative != ''" : "narrative != ''";
+      const planRow = await first<PlanRow>(db, `SELECT * FROM plan WHERE ${planWhere} LIMIT 1`, ...rp);
       if (planRow && planRow.narrative.trim() !== "") {
         candidates.push({ type: "milestone", key: "plan", score: 0, snippet: "" });
       }
+      const mWhere = scoped ? "WHERE repo = ?" : "";
       const rows = await all<{ key: number }>(
         db,
-        `SELECT id AS key FROM milestones
-         ORDER BY (updated_at IS NULL), updated_at DESC, created_at DESC, id DESC LIMIT ${fetchCap}`
+        `SELECT id AS key FROM milestones ${mWhere}
+         ORDER BY (updated_at IS NULL), updated_at DESC, created_at DESC, id DESC LIMIT ${fetchCap}`,
+        ...rp
       );
       for (const r of rows) candidates.push({ type: "milestone", key: `milestone:${r.key}`, score: 0, snippet: "" });
     }
@@ -402,11 +427,17 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
   const stagedMap = new Map<string, DocVersionRow[]>();
   if (docKeys.length) {
     const ph = docKeys.map(() => "?").join(", ");
-    for (const d of await all<DocRow>(db, `SELECT * FROM docs WHERE slug IN (${ph})`, ...docKeys)) docMap.set(d.slug, d);
+    // Scope hydration by repo too: since 0022 the same slug can name a doc in another
+    // repo, and docMap/stagedMap are keyed by slug alone — an unscoped fetch would let
+    // the wrong repo's row win.
+    const scope = scoped ? " AND repo = ?" : "";
+    for (const d of await all<DocRow>(db, `SELECT * FROM docs WHERE slug IN (${ph})${scope}`, ...docKeys, ...rp))
+      docMap.set(d.slug, d);
     for (const v of await all<DocVersionRow>(
       db,
-      `SELECT * FROM doc_versions WHERE status = 'staged' AND slug IN (${ph}) ORDER BY version ASC`,
-      ...docKeys
+      `SELECT * FROM doc_versions WHERE status = 'staged' AND slug IN (${ph})${scope} ORDER BY version ASC`,
+      ...docKeys,
+      ...rp
     )) {
       const list = stagedMap.get(v.slug) ?? [];
       list.push(v);
@@ -435,12 +466,17 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
   const milestoneMap = new Map<string, MilestoneRow>();
   if (milestoneIds.length) {
     const ph = milestoneIds.map(() => "?").join(", ");
-    for (const m of await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE id IN (${ph})`, ...milestoneIds)) {
+    // roadmap_fts carries no repo, so a scoped query's milestone FTS hits are filtered
+    // here: out-of-repo ids never enter the map and drop out in assembly (`if (!m)`).
+    const scope = scoped ? " AND repo = ?" : "";
+    for (const m of await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE id IN (${ph})${scope}`, ...milestoneIds, ...rp)) {
       milestoneMap.set(`milestone:${m.id}`, m);
     }
   }
   const progressMap = milestoneIds.length ? await getProgress(db) : new Map<number, MilestoneProgressRow>();
-  const planRow = needPlan ? await first<PlanRow>(db, `SELECT * FROM plan WHERE narrative != '' LIMIT 1`) : null;
+  const planRow = needPlan
+    ? await first<PlanRow>(db, `SELECT * FROM plan WHERE ${scoped ? "repo = ? AND " : ""}narrative != '' LIMIT 1`, ...rp)
+    : null;
 
   // Browse mode carries no per-row score, so order is by the merged recency from
   // step 1; FTS mode already has a normalized score. Sort once by score desc and,
