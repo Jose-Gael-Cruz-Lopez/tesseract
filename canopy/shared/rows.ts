@@ -7,7 +7,26 @@ export interface RepoRow {
   repo: string;               // "owner/name"
   added_at: string;
   added_by: string | null;
-  installation_id: number | null;   // reserved for the Phase 3 GitHub App
+  installation_id: number | null;   // the GitHub App installation that connected it (0024)
+  status: "connected" | "disconnected";  // soft-disconnect on uninstall (0024)
+}
+
+// A GitHub App installation (0024): one per account that installed the App.
+export interface InstallationRow {
+  installation_id: number;
+  account_login: string;
+  account_type: "User" | "Organization";
+  created_at: string;
+  suspended_at: string | null;
+}
+
+// Per-user repo-access cache backing repoGate (0024). TTL-refreshed from GitHub;
+// can_push flags admin (plan/promote) access.
+export interface RepoAccessRow {
+  login: string;
+  repo: string;
+  can_push: number;   // 1 = push/admin
+  checked_at: string;
 }
 
 export interface SectionRow { name: string; description: string | null; }
