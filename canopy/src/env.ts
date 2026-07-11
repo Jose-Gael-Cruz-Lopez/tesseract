@@ -12,4 +12,11 @@ export interface Env {
   GEMINI_API_KEY?: string; // Google Gemini key for capture-time PR/issue summaries (REST generateContent); absent → excerpt fallback.
   GITHUB_SERVICE_TOKEN?: string; // app-level token for the scheduled progress-cache recompute backstop; absent → scheduled() no-ops
   ADMIN_LOGINS?: string;  // comma-separated GitHub logins allowed to run admin actions (e.g. the server-side backfill)
+  // GitHub App (Phase 3, connect-your-repos). Absent → App features (install, per-repo
+  // tokens) are inert. GITHUB_APP_PRIVATE_KEY is a PKCS#8 PEM (convert the downloaded
+  // PKCS#1 key: `openssl pkcs8 -topk8 -nocrypt -in app.pem`).
+  GITHUB_APP_ID?: string;
+  GITHUB_APP_CLIENT_ID?: string;
+  GITHUB_APP_CLIENT_SECRET?: string;
+  GITHUB_APP_PRIVATE_KEY?: string;
 }
