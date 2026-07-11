@@ -11,16 +11,29 @@ import { route_triage, stage_milestone_proposal, promote_milestone_proposal } fr
 // against the real schema (not a mocked one).
 
 describe("repo-ownership helpers", () => {
-  it("docRepo returns the doc's repo, or null when the slug is absent", async () => {
+  it("docRepo is scoped by (repo, slug): its own repo's doc, else null — even for a same-slug doc in another repo", async () => {
     // Column shape copied from hub-routes.test.ts's seedDoc — do not invent columns.
-    await run(
-      env.DB,
-      `INSERT INTO docs (repo, slug, section, title, body, current_version, updated_at, updated_by, space)
-       VALUES (?, ?, 'reference', ?, ?, 1, ?, 'author', ?)`,
-      "octo/hub", "arch", "arch", "body", nowIso(), "canopy"
-    );
-    expect(await docRepo(env.DB, "arch")).toBe("octo/hub");
-    expect(await docRepo(env.DB, "no-such-slug")).toBeNull();
+    const seedDoc = (repo: string, slug: string) =>
+      run(
+        env.DB,
+        `INSERT INTO docs (repo, slug, section, title, body, current_version, updated_at, updated_by, space)
+         VALUES (?, ?, 'reference', ?, 'body', 1, ?, 'author', 'canopy')`,
+        repo, slug, slug, nowIso()
+      );
+    // The gated repo owns "arch"; a DIFFERENT repo owns a same-slug "readme".
+    await seedDoc("octo/hub", "arch");
+    await seedDoc("octo/other", "readme");
+
+    // Present in the gated repo → its repo.
+    expect(await docRepo(env.DB, "arch", "octo/hub")).toBe("octo/hub");
+    // Absent slug → null.
+    expect(await docRepo(env.DB, "no-such-slug", "octo/hub")).toBeNull();
+    // The crux: "readme" exists, but only in octo/other — scoping to octo/hub must be
+    // null (an unscoped WHERE slug=? would wrongly surface octo/other's row and, in the
+    // hub route, spuriously 404 a legitimate edit to the gated repo's own same-slug doc).
+    expect(await docRepo(env.DB, "readme", "octo/hub")).toBeNull();
+    // And scoped to the repo that DOES own it → that repo.
+    expect(await docRepo(env.DB, "readme", "octo/other")).toBe("octo/other");
   });
 
   it("adrRepo returns the row's repo, or null when absent", async () => {

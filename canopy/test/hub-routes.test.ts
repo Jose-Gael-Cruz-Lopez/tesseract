@@ -4,7 +4,7 @@ import { app } from "../src/routes";
 import { _hubTestHooks, _resetHubTestHooks } from "../src/hub";
 import { run, nowIso } from "../src/db";
 import { write_plan } from "../src/tools/plan";
-import { propose_doc_update, stage_milestone_proposal } from "../src/tools/writes";
+import { propose_doc_update, stage_milestone_proposal, route_triage } from "../src/tools/writes";
 import { ingestEvent } from "../src/consumer";
 import type { CapturedEvent } from "@shared/contract";
 import { createSession } from "../src/auth/session";
@@ -288,5 +288,47 @@ describe("hub mutation routes (push-gated + repo-ownership guarded)", () => {
     expect(body).toEqual({ ok: true, slug: "hub-doc-promote", version: 1, status: "promoted" });
     const persisted = await env.DB.prepare(`SELECT body, current_version FROM docs WHERE repo = 'octo/hub' AND slug = 'hub-doc-promote'`).first<{ body: string; current_version: number }>();
     expect(persisted).toEqual({ body: "hub body", current_version: 1 });
+  });
+
+  // One cross-repo-404 per DISTINCT ownership helper (milestoneRepo / milestoneProposalRepo /
+  // triageRepo) — adr + doc are already covered above; these three wire different helpers, so a
+  // mis-wire would slip through without them. Each is a REAL negative: seed the target in
+  // octo/other, gate to octo/hub with push, POST, assert 404 AND re-query D1 to prove the
+  // other repo's row was NOT mutated (if the guard were removed, the writer would run and flip
+  // the row, failing the persistence assertion).
+
+  it("milestones/:id/complete 404s a cross-repo id and leaves the other repo's milestone unmutated (milestoneRepo)", async () => {
+    await connect("octo/hub");
+    await connect("octo/other");
+    // milestones column shape copied from fts-isolation.test.ts, with the 0020 repo column.
+    await run(env.DB, `INSERT INTO milestones (repo, title, description, target_date, status, created_at, created_by) VALUES ('octo/other', 'other ms', 'd', '2026-08-01', 'upcoming', ?, 'author')`, nowIso());
+    const row = (await env.DB.prepare(`SELECT last_insert_rowid() AS id`).first()) as { id: number };
+    const res = await hubPost(`/r/octo/hub/milestones/${row.id}/complete`, { canPush: true });
+    expect(res.status).toBe(404); // belongs to octo/other, not the gated hub
+    const persisted = await env.DB.prepare(`SELECT status FROM milestones WHERE id = ?`).bind(row.id).first<{ status: string }>();
+    expect(persisted?.status).toBe("upcoming"); // NOT flipped to 'done'
+  });
+
+  it("milestone-proposals/:id/promote 404s a cross-repo id and leaves the other repo's proposal unpromoted (milestoneProposalRepo)", async () => {
+    await connect("octo/hub");
+    await connect("octo/other");
+    const pid = await stage_milestone_proposal(env.DB, { title: "other prop", target_date: "2026-08-01", status: "upcoming", change_summary: "s", confidence: "high" }, "author", null, "octo/other");
+    const res = await hubPost(`/r/octo/hub/milestone-proposals/${pid}/promote`, { canPush: true });
+    expect(res.status).toBe(404); // belongs to octo/other, not the gated hub
+    const persisted = await env.DB.prepare(`SELECT staged_status FROM milestone_proposals WHERE id = ?`).bind(pid).first<{ staged_status: string }>();
+    expect(persisted?.staged_status).toBe("staged"); // NOT promoted
+    // …and no live milestone was materialized from it into octo/other.
+    const live = await env.DB.prepare(`SELECT COUNT(*) AS n FROM milestones WHERE repo = 'octo/other'`).first<{ n: number }>();
+    expect(live?.n).toBe(0);
+  });
+
+  it("needs-triage/:id/discard 404s a cross-repo id and leaves the other repo's item unresolved (triageRepo)", async () => {
+    await connect("octo/hub");
+    await connect("octo/other");
+    const tid = await route_triage(env.DB, { raw: "x", reason: "r", repo: "octo/other" });
+    const res = await hubPost(`/r/octo/hub/needs-triage/${tid}/discard`, { canPush: true });
+    expect(res.status).toBe(404); // belongs to octo/other, not the gated hub
+    const persisted = await env.DB.prepare(`SELECT resolved FROM needs_triage WHERE id = ?`).bind(tid).first<{ resolved: number }>();
+    expect(persisted?.resolved).toBe(0); // NOT resolved
   });
 });

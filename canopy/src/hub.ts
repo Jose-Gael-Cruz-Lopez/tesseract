@@ -133,7 +133,7 @@ hubApp.post("/doc/:slug/promote", async (c) => {
   const body = await c.req.json().catch(() => null);
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
-  const owner = await docRepo(c.env.DB, c.req.param("slug"));
+  const owner = await docRepo(c.env.DB, c.req.param("slug"), repoOf(c));
   if (owner !== repoOf(c)) return c.json({ error: "not found" }, 404);
   try {
     const res = await promote_doc(c.env.DB, c.req.param("slug"), version, c.get("principal").login, repoOf(c));
@@ -146,7 +146,7 @@ hubApp.post("/doc/:slug/reject", async (c) => {
   const body = await c.req.json().catch(() => null);
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
-  const owner = await docRepo(c.env.DB, c.req.param("slug"));
+  const owner = await docRepo(c.env.DB, c.req.param("slug"), repoOf(c));
   if (owner !== repoOf(c)) return c.json({ error: "not found" }, 404);
   try {
     const res = await reject_doc_version(c.env.DB, c.req.param("slug"), version, repoOf(c));
