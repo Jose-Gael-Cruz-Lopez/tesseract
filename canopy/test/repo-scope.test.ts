@@ -6,6 +6,7 @@ import { ingestEvent, ingestFeedEntry } from "../src/consumer";
 import { route_triage, propose_doc_update } from "../src/tools/writes";
 import { list_needs_triage, get_doc } from "../src/tools/reads";
 import { list_events } from "../src/tools/mywork";
+import { write_plan, get_plan } from "../src/tools/plan";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
 // with the transient repo='' sentinel backfilled to GITHUB_REPO at runtime.
@@ -156,5 +157,51 @@ describe("per-repo doc uniqueness (0022)", () => {
     const b = await get_doc(env.DB, "architecture", "acme/b");
     expect(a?.versions[0].body).toBe("A's architecture");
     expect(b?.versions[0].body).toBe("B's architecture");
+  });
+});
+
+// Phase 2 recreations (0023): the plan is per-repo — each repo owns its own
+// narrative + version history (before 0023 the plan was a global id=1 singleton),
+// so two repos' plans and their version 1 coexist and read back independently.
+describe("per-repo plan (0023)", () => {
+  it("two repos' plans + version histories coexist and read back scoped", async () => {
+    const a = await write_plan(
+      env.DB,
+      { narrative: "Plan A", milestones: [{ title: "A1", target_date: "2026-08-01", status: "upcoming" }] },
+      "author",
+      "acme/a"
+    );
+    const b = await write_plan(
+      env.DB,
+      { narrative: "Plan B", milestones: [{ title: "B1", target_date: "2026-09-01", status: "upcoming" }] },
+      "author",
+      "acme/b"
+    );
+    expect(a.version).toBe(1);
+    expect(b.version).toBe(1); // each repo's history starts at 1 — NOT a global sequence
+
+    // Storage: one plan row per repo, distinct narratives.
+    const rows = await env.DB.prepare(
+      `SELECT repo, narrative FROM plan WHERE repo IN ('acme/a', 'acme/b') ORDER BY repo`
+    ).all<{ repo: string; narrative: string }>();
+    expect((rows.results ?? []).map((r) => [r.repo, r.narrative])).toEqual([
+      ["acme/a", "Plan A"],
+      ["acme/b", "Plan B"],
+    ]);
+
+    // Both repos hold a version-1 snapshot (PK widened to (repo, version) — before
+    // 0023 the second INSERT would collide on the global version PK).
+    const versions = await env.DB.prepare(
+      `SELECT repo FROM plan_versions WHERE version = 1 AND repo IN ('acme/a', 'acme/b') ORDER BY repo`
+    ).all<{ repo: string }>();
+    expect((versions.results ?? []).map((r) => r.repo)).toEqual(["acme/a", "acme/b"]);
+
+    // get_plan scopes BOTH narrative and milestones to the requested repo.
+    const viewA = await get_plan(env.DB, "acme/a");
+    const viewB = await get_plan(env.DB, "acme/b");
+    expect(viewA.narrative).toBe("Plan A");
+    expect(viewB.narrative).toBe("Plan B");
+    expect(viewA.milestones.map((m) => m.title)).toEqual(["A1"]);
+    expect(viewB.milestones.map((m) => m.title)).toEqual(["B1"]);
   });
 });

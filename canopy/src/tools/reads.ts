@@ -377,8 +377,10 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
       for (const r of rows) candidates.push({ type: "milestone", key: String(r.key), score: -r.rank, snippet: r.snip });
     } else {
       // Browse: the plan row first (only when it carries a narrative), then
-      // milestones by recency (updated_at, then created_at).
-      const planRow = await first<PlanRow>(db, `SELECT * FROM plan WHERE id = 1`);
+      // milestones by recency (updated_at, then created_at). query() is not yet
+      // repo-scoped (a follow-on sub-phase); in single-repo mode the one non-empty
+      // plan row IS "the plan" — per-repo plan search lands with that phase.
+      const planRow = await first<PlanRow>(db, `SELECT * FROM plan WHERE narrative != '' LIMIT 1`);
       if (planRow && planRow.narrative.trim() !== "") {
         candidates.push({ type: "milestone", key: "plan", score: 0, snippet: "" });
       }
@@ -438,7 +440,7 @@ export async function query(db: DB, req: QueryRequest): Promise<QueryResult> {
     }
   }
   const progressMap = milestoneIds.length ? await getProgress(db) : new Map<number, MilestoneProgressRow>();
-  const planRow = needPlan ? await first<PlanRow>(db, `SELECT * FROM plan WHERE id = 1`) : null;
+  const planRow = needPlan ? await first<PlanRow>(db, `SELECT * FROM plan WHERE narrative != '' LIMIT 1`) : null;
 
   // Browse mode carries no per-row score, so order is by the merged recency from
   // step 1; FTS mode already has a normalized score. Sort once by score desc and,

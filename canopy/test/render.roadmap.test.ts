@@ -39,6 +39,7 @@ const escMockMd = (body: string) =>
 
 function makeMilestone(overrides: Partial<MilestoneWithProgress> = {}): MilestoneWithProgress {
   return {
+    repo: "",
     id: 1,
     title: "Vectorize GA",
     description: "Ship semantic search to everyone.",

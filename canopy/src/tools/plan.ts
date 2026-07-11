@@ -34,17 +34,19 @@ const githubRefJson = (ref: number | number[] | null | undefined): string | null
  * 'done', which is admin-authored and therefore legal ONLY here) in one
  * non-destructively versioned write. Milestones not mentioned are left
  * untouched — never implicitly deleted. `INSERT OR IGNORE` guards the
- * singleton row for prod resilience (the test harness never deletes it, but a
- * fresh/drifted D1 might be missing it).
+ * per-repo row for prod resilience (the test harness never deletes it, but a
+ * fresh/drifted D1 might be missing it). The plan is per-repo (0023): `repo`
+ * defaults to '' (single-repo-safe; the entry point passes defaultRepo(env)).
  */
 export async function write_plan(
   db: DB,
   input: PlanWrite,
-  author: string
+  author: string,
+  repo = ""
 ): Promise<{ version: number; milestones: MilestoneRow[] }> {
-  await run(db, `INSERT OR IGNORE INTO plan (id, narrative, current_version) VALUES (1, '', 0)`);
+  await run(db, `INSERT OR IGNORE INTO plan (repo, narrative, current_version) VALUES (?, '', 0)`, repo);
 
-  const plan = await first<PlanRow>(db, `SELECT * FROM plan WHERE id = 1`);
+  const plan = await first<PlanRow>(db, `SELECT * FROM plan WHERE repo = ?`, repo);
   const version = (plan?.current_version ?? 0) + 1;
   const now = nowIso();
 
@@ -68,8 +70,9 @@ export async function write_plan(
     } else {
       await run(
         db,
-        `INSERT INTO milestones (title, description, phase, target_date, status, github_ref, created_at, created_by, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO milestones (repo, title, description, phase, target_date, status, github_ref, created_at, created_by, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        repo,
         m.title,
         m.description ?? null,
         m.phase ?? null,
@@ -83,19 +86,25 @@ export async function write_plan(
     }
   }
 
-  const milestones = await all<MilestoneRow>(db, `SELECT * FROM milestones ORDER BY target_date ASC, id ASC`);
+  const milestones = await all<MilestoneRow>(
+    db,
+    `SELECT * FROM milestones WHERE repo = ? ORDER BY target_date ASC, id ASC`,
+    repo
+  );
 
   await run(
     db,
-    `UPDATE plan SET narrative = ?, current_version = ?, updated_at = ?, updated_by = ? WHERE id = 1`,
+    `UPDATE plan SET narrative = ?, current_version = ?, updated_at = ?, updated_by = ? WHERE repo = ?`,
     input.narrative,
     version,
     now,
-    author
+    author,
+    repo
   );
   await run(
     db,
-    `INSERT INTO plan_versions (version, narrative, milestones_json, created_at, created_by) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO plan_versions (repo, version, narrative, milestones_json, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
+    repo,
     version,
     input.narrative,
     JSON.stringify(milestones),
@@ -107,14 +116,19 @@ export async function write_plan(
 }
 
 /**
- * Read the admin plan: narrative + version metadata, plus every milestone
- * (target_date ASC, id ASC — same order as the roadmap) merged with the
- * progress cache. NO GitHub, NO token — read-only against D1. Returns a
- * default empty view if the plan singleton row is missing.
+ * Read the admin plan for `repo`: narrative + version metadata, plus every
+ * milestone (target_date ASC, id ASC — same order as the roadmap) merged with
+ * the progress cache. NO GitHub, NO token — read-only against D1. Returns a
+ * default empty view if the plan row is missing. `repo` defaults to ''
+ * (single-repo-safe; the entry point passes defaultRepo(env)).
  */
-export async function get_plan(db: DB): Promise<PlanView> {
-  const plan = await first<PlanRow>(db, `SELECT * FROM plan WHERE id = 1`);
-  const milestones = await all<MilestoneRow>(db, `SELECT * FROM milestones ORDER BY target_date ASC, id ASC`);
+export async function get_plan(db: DB, repo = ""): Promise<PlanView> {
+  const plan = await first<PlanRow>(db, `SELECT * FROM plan WHERE repo = ?`, repo);
+  const milestones = await all<MilestoneRow>(
+    db,
+    `SELECT * FROM milestones WHERE repo = ? ORDER BY target_date ASC, id ASC`,
+    repo
+  );
   const progress = await getProgress(db);
 
   return {

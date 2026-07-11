@@ -100,7 +100,7 @@ describe("write_plan", () => {
     await run(env.DB, `DELETE FROM plan`);
     const r = await write_plan(env.DB, { narrative: "n", milestones: [] }, AUTHOR);
     expect(r.version).toBe(1);
-    const plan = await first(env.DB, `SELECT * FROM plan WHERE id = 1`);
+    const plan = await first(env.DB, `SELECT * FROM plan WHERE repo = ''`);
     expect(plan).not.toBeNull();
   });
 });

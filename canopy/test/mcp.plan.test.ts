@@ -47,7 +47,7 @@ describe("registered MCP update_plan tool", () => {
     expect(body.version).toBe(1);
     expect(body.milestones).toHaveLength(1);
 
-    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE id = 1`);
+    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ''`);
     expect(plan?.updated_by).toBe(AUTHOR);
     expect(plan?.narrative).toBe("shipped via MCP");
 
@@ -86,7 +86,7 @@ describe("update_plan is admin-only — non-admin principals don't even get the 
     expect(res.text.toLowerCase()).toContain("not found");
 
     // Nothing was written — the seeded plan row is untouched.
-    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE id = 1`);
+    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ''`);
     expect(plan?.narrative).not.toBe("should not land");
   });
 });
