@@ -12,6 +12,7 @@ import { promote_doc, ratify_adr, promote_milestone_proposal, reject_milestone_p
 import { get_plan } from "./tools/plan";
 import { getMyWork } from "./tools/mywork";
 import type { DashboardData } from "@shared/dashboard";
+import hubApp from "./hub";
 
 export const app = new Hono<AppEnv>();
 
@@ -37,6 +38,10 @@ app.get("/github/app/callback", async (c) => {
   }
   return c.redirect("/");
 });
+
+// Multi-tenant hub routes (Phase 3): /r/:owner/:repo/* behind repoGate. Coexists with
+// the flat defaultRepo routes below until the UI cutover.
+app.route("/r/:owner/:repo", hubApp);
 
 app.post("/ingest", async (c) => {
   const json = await c.req.json().catch(() => null);
