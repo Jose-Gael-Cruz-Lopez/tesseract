@@ -11,6 +11,7 @@ import {
   accessibleRepos,
 } from "../src/auth/app";
 import { authorizeRepo } from "../src/auth/access";
+import { handleInstallationEvent } from "../src/auth/connect";
 
 const b64urlDecode = (s: string): string => {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -225,5 +226,56 @@ describe("repo access authorization (auth/access.ts)", () => {
     // an hour later, access is gone → refresh returns empty → hub closes
     const r = await authorizeRepo(env.DB, "octocat", "acme/app", async () => [], { now: "2026-07-11T01:00:00Z" });
     expect(r.allowed).toBe(false);
+  });
+});
+
+// Phase 3: connect-your-repos — the installation-lifecycle webhook sync.
+describe("connect-your-repos webhook sync (auth/connect.ts)", () => {
+  const created = (id: number, repos: string[]) =>
+    handleInstallationEvent(
+      env.DB,
+      "installation",
+      { action: "created", installation: { id, account: { login: "octocat", type: "User" } }, repositories: repos.map((r) => ({ full_name: r })), sender: { login: "octocat" } },
+      "2026-07-11T00:00:00Z"
+    );
+  const status = async (repo: string) =>
+    (await env.DB.prepare(`SELECT status FROM repos WHERE repo = ?`).bind(repo).first<{ status: string }>())?.status;
+
+  it("installation.created records the install and connects its repos", async () => {
+    await created(100, ["octocat/app", "octocat/site"]);
+    const inst = await env.DB.prepare(`SELECT * FROM installations WHERE installation_id = 100`).first<InstallationRow>();
+    expect(inst).toMatchObject({ account_login: "octocat", account_type: "User", suspended_at: null });
+    expect(await status("octocat/app")).toBe("connected");
+    expect(await status("octocat/site")).toBe("connected");
+  });
+
+  it("installation_repositories added/removed connects and soft-disconnects", async () => {
+    await created(100, ["octocat/app"]);
+    await handleInstallationEvent(
+      env.DB,
+      "installation_repositories",
+      { action: "added", installation: { id: 100 }, repositories_added: [{ full_name: "octocat/new" }], repositories_removed: [{ full_name: "octocat/app" }], sender: { login: "octocat" } },
+      "2026-07-11T00:01:00Z"
+    );
+    expect(await status("octocat/new")).toBe("connected");
+    expect(await status("octocat/app")).toBe("disconnected"); // soft — the row remains
+  });
+
+  it("installation.deleted soft-disconnects all the install's repos (rows retained)", async () => {
+    await created(100, ["octocat/app", "octocat/site"]);
+    await handleInstallationEvent(env.DB, "installation", { action: "deleted", installation: { id: 100 } }, "2026-07-11T00:05:00Z");
+    const rows = await env.DB.prepare(`SELECT status FROM repos WHERE installation_id = 100`).all<{ status: string }>();
+    expect((rows.results ?? []).length).toBe(2);
+    expect((rows.results ?? []).every((r) => r.status === "disconnected")).toBe(true);
+  });
+
+  it("installation.suspend/unsuspend toggles suspended_at", async () => {
+    await created(100, []);
+    const suspendedAt = async () =>
+      (await env.DB.prepare(`SELECT suspended_at FROM installations WHERE installation_id = 100`).first<{ suspended_at: string | null }>())?.suspended_at;
+    await handleInstallationEvent(env.DB, "installation", { action: "suspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:05:00Z");
+    expect(await suspendedAt()).toBe("2026-07-11T00:05:00Z");
+    await handleInstallationEvent(env.DB, "installation", { action: "unsuspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:06:00Z");
+    expect(await suspendedAt()).toBeNull();
   });
 });

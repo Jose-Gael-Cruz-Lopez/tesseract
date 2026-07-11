@@ -1,7 +1,8 @@
 import type { CapturedEvent } from "@shared/contract";
 import type { Env } from "./env";
-import { type DB } from "./db";
+import { type DB, nowIso } from "./db";
 import { ingestEvent } from "./consumer";
+import { handleInstallationEvent } from "./auth/connect";
 import { type Summarizer, type PrSummary, type IssueSummary, geminiPrSummarizer, geminiIssueSummarizer, storePrSummary, storeIssueSummary } from "./tools/summarize";
 import { applyEventProgress } from "./tools/progress";
 
@@ -310,6 +311,20 @@ export async function handleGithubWebhook(
   }
 
   const eventName = request.headers.get("x-github-event") ?? "";
+
+  // Installation lifecycle (connect-your-repos): sync the connection tables from the
+  // payload (which carries the account + repo list) — no capture, no gate.
+  if (eventName === "installation" || eventName === "installation_repositories") {
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      payload = null;
+    }
+    const res = await handleInstallationEvent(env.DB, eventName, payload, nowIso());
+    return json({ ok: true, ...res });
+  }
+
   if (eventName !== "pull_request" && eventName !== "issues") {
     // Verified, but not a surface we capture (ping, push, …).
     return json({ ok: true, ignored: true });
