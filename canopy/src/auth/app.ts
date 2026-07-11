@@ -87,3 +87,127 @@ export async function installationToken(
   tokenCache.set(installationId, { token: body.token, expiresAt });
   return body.token;
 }
+
+// ── User-to-server side (sign-in + the collaborator boundary) ──────────────────
+// The App's user-authorization flow yields a user token scoped to the App's
+// permissions ∩ the user's own access. We use it to identify the user and to read,
+// GitHub-native, exactly which connected repos they can reach (and whether with push).
+
+export interface UserTokens {
+  token: string;
+  refreshToken: string | null;
+  expiresAt: number | null; // epoch seconds; null if the App doesn't expire user tokens
+}
+
+export interface AccessibleRepo {
+  repo: string; // "owner/name"
+  can_push: boolean; // push ⇒ admin (plan/promote)
+}
+
+async function oauthToken(
+  env: Env,
+  form: Record<string, string>,
+  nowSec: number,
+  doFetch: typeof fetch
+): Promise<UserTokens> {
+  if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_CLIENT_SECRET) {
+    throw new Error("GitHub App OAuth not configured (GITHUB_APP_CLIENT_ID / _CLIENT_SECRET)");
+  }
+  const res = await doFetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json", "user-agent": "canopy" },
+    body: JSON.stringify({ client_id: env.GITHUB_APP_CLIENT_ID, client_secret: env.GITHUB_APP_CLIENT_SECRET, ...form }),
+  });
+  if (!res.ok) throw new Error(`user token request failed: ${res.status}`);
+  const body = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    refresh_token?: string;
+    error?: string;
+  };
+  if (!body.access_token) throw new Error(`user token error: ${body.error ?? "no token"}`);
+  return {
+    token: body.access_token,
+    refreshToken: body.refresh_token ?? null,
+    expiresAt: body.expires_in ? nowSec + body.expires_in : null,
+  };
+}
+
+/** Exchange an OAuth callback `code` for a user-to-server token (+ refresh token). */
+export async function exchangeUserCode(
+  env: Env,
+  code: string,
+  opts?: { fetchImpl?: typeof fetch; nowSec?: number }
+): Promise<UserTokens> {
+  return oauthToken(env, { code }, opts?.nowSec ?? Math.floor(Date.now() / 1000), opts?.fetchImpl ?? fetch);
+}
+
+/** Refresh an expiring user token via its refresh token. */
+export async function refreshUserToken(
+  env: Env,
+  refreshToken: string,
+  opts?: { fetchImpl?: typeof fetch; nowSec?: number }
+): Promise<UserTokens> {
+  return oauthToken(
+    env,
+    { grant_type: "refresh_token", refresh_token: refreshToken },
+    opts?.nowSec ?? Math.floor(Date.now() / 1000),
+    opts?.fetchImpl ?? fetch
+  );
+}
+
+// Paginated GET over a GitHub list endpoint (per_page=100), collecting `key`.
+async function ghGetAll<T>(doFetch: typeof fetch, path: string, token: string, key: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 1; ; page++) {
+    const url = `https://api.github.com${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`;
+    const res = await doFetch(url, {
+      headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "user-agent": "canopy" },
+    });
+    if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+    const body = (await res.json()) as Record<string, unknown>;
+    const items = (body[key] as T[]) ?? [];
+    out.push(...items);
+    if (items.length < 100) return out;
+  }
+}
+
+/** The App installations this user can see (the accounts they've installed it on). */
+export async function listUserInstallations(
+  userToken: string,
+  opts?: { fetchImpl?: typeof fetch }
+): Promise<Array<{ id: number; account_login: string; account_type: string }>> {
+  const raw = await ghGetAll<{ id: number; account: { login: string; type: string } }>(
+    opts?.fetchImpl ?? fetch,
+    "/user/installations",
+    userToken,
+    "installations"
+  );
+  return raw.map((i) => ({ id: i.id, account_login: i.account.login, account_type: i.account.type }));
+}
+
+/** The repos this user can access within one installation (+ push flag). */
+export async function listUserInstallationRepos(
+  userToken: string,
+  installationId: number,
+  opts?: { fetchImpl?: typeof fetch }
+): Promise<AccessibleRepo[]> {
+  const raw = await ghGetAll<{ full_name: string; permissions?: { push?: boolean } }>(
+    opts?.fetchImpl ?? fetch,
+    `/user/installations/${installationId}/repositories`,
+    userToken,
+    "repositories"
+  );
+  return raw.map((r) => ({ repo: r.full_name, can_push: r.permissions?.push ?? false }));
+}
+
+/**
+ * Every repo this user can reach across all their installations — the authoritative
+ * collaborator boundary `repoGate` and the hub-list check against.
+ */
+export async function accessibleRepos(userToken: string, opts?: { fetchImpl?: typeof fetch }): Promise<AccessibleRepo[]> {
+  const installs = await listUserInstallations(userToken, opts);
+  const all: AccessibleRepo[] = [];
+  for (const inst of installs) all.push(...(await listUserInstallationRepos(userToken, inst.id, opts)));
+  return all;
+}

@@ -2,7 +2,14 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import type { InstallationRow, RepoAccessRow } from "@shared/rows";
 import type { Env } from "../src/env";
-import { appJwt, installationToken, _clearInstallationTokenCache } from "../src/auth/app";
+import {
+  appJwt,
+  installationToken,
+  _clearInstallationTokenCache,
+  exchangeUserCode,
+  refreshUserToken,
+  accessibleRepos,
+} from "../src/auth/app";
 
 const b64urlDecode = (s: string): string => {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -21,7 +28,16 @@ async function makeAppEnv(): Promise<{ appEnv: Env; publicKey: CryptoKey }> {
   let raw = "";
   for (const b of pkcs8) raw += String.fromCharCode(b);
   const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(raw).replace(/(.{64})/g, "$1\n")}\n-----END PRIVATE KEY-----`;
-  return { appEnv: { ...env, GITHUB_APP_ID: "12345", GITHUB_APP_PRIVATE_KEY: pem } as Env, publicKey: pair.publicKey };
+  return {
+    appEnv: {
+      ...env,
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_PRIVATE_KEY: pem,
+      GITHUB_APP_CLIENT_ID: "Iv1.testclient",
+      GITHUB_APP_CLIENT_SECRET: "testsecret",
+    } as Env,
+    publicKey: pair.publicKey,
+  };
 }
 
 // Phase 3 (GitHub App / connect-your-repos): the connection data model — repos.status
@@ -100,5 +116,59 @@ describe("GitHub App client (auth/app.ts)", () => {
     expect(t1).toBe("ghs_test");
     expect(t2).toBe("ghs_test");
     expect(calls).toBe(1); // minted once, then served from cache
+  });
+});
+
+// Phase 3: the user-to-server side — code exchange, refresh, and the accessible-repos
+// (collaborator) boundary read GitHub-native from /user/installations.
+describe("GitHub App user-auth client (auth/app.ts)", () => {
+  it("exchangeUserCode returns the user token, refresh token, and computed expiry", async () => {
+    const { appEnv } = await makeAppEnv();
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toContain("/login/oauth/access_token");
+      expect(JSON.parse(init!.body as string)).toMatchObject({ client_id: "Iv1.testclient", code: "abc123" });
+      return new Response(JSON.stringify({ access_token: "ghu_x", expires_in: 28800, refresh_token: "ghr_y" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const t = await exchangeUserCode(appEnv, "abc123", { fetchImpl, nowSec: 1000 });
+    expect(t).toEqual({ token: "ghu_x", refreshToken: "ghr_y", expiresAt: 1000 + 28800 });
+  });
+
+  it("refreshUserToken exchanges a refresh token for a fresh user token", async () => {
+    const { appEnv } = await makeAppEnv();
+    const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(init!.body as string)).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_old" });
+      return new Response(JSON.stringify({ access_token: "ghu_new", expires_in: 28800, refresh_token: "ghr_new" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const t = await refreshUserToken(appEnv, "ghr_old", { fetchImpl, nowSec: 2000 });
+    expect(t).toMatchObject({ token: "ghu_new", refreshToken: "ghr_new", expiresAt: 2000 + 28800 });
+  });
+
+  it("accessibleRepos flattens repos across the user's installations, with push flags", async () => {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/user/installations?")) {
+        return new Response(JSON.stringify({ installations: [
+          { id: 1, account: { login: "octocat", type: "User" } },
+          { id: 2, account: { login: "acme", type: "Organization" } },
+        ] }), { status: 200 });
+      }
+      if (u.includes("/user/installations/1/repositories")) {
+        return new Response(JSON.stringify({ repositories: [{ full_name: "octocat/app", permissions: { push: true } }] }), { status: 200 });
+      }
+      if (u.includes("/user/installations/2/repositories")) {
+        return new Response(JSON.stringify({ repositories: [
+          { full_name: "acme/site", permissions: { push: false } },
+          { full_name: "acme/api" }, // no permissions block → can_push defaults false
+        ] }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const repos = await accessibleRepos("ghu_x", { fetchImpl });
+    expect(repos).toEqual([
+      { repo: "octocat/app", can_push: true },
+      { repo: "acme/site", can_push: false },
+      { repo: "acme/api", can_push: false },
+    ]);
   });
 });
