@@ -3,8 +3,9 @@ import { IngestPayload } from "@shared/contract";
 import type { AppEnv } from "./auth/principal";
 import { sessionGate, isAdmin } from "./auth/principal";
 import { authApp } from "./auth/routes";
+import { syncInstallationFromApp } from "./auth/connect";
 import { consume } from "./consumer";
-import { defaultRepo } from "./db";
+import { defaultRepo, nowIso } from "./db";
 import { runBackfill } from "./tools/backfill";
 import { get_doc, list_docs, get_feed, query, list_needs_triage, list_adrs, list_milestone_proposals, list_proposals, list_identity_tasks } from "./tools/reads";
 import { promote_doc, ratify_adr, promote_milestone_proposal, reject_milestone_proposal, complete_milestone, reject_doc_version, reject_adr, resolve_triage, assign_triage, map_identity, type AssignType } from "./tools/writes";
@@ -20,6 +21,22 @@ app.use("*", sessionGate);
 
 // Auth endpoints (login/callback public via the gate's allowlist; logout/mcp-token gated).
 app.route("/auth", authApp);
+
+// GitHub App post-install callback (session-gated): GitHub redirects the installer back
+// here with only an `installation_id`. Sync the install's account + repo list straight
+// from the App API so the connection shows immediately (the webhook is still the durable
+// source). Best-effort — a missing/non-numeric id or any sync failure just lands "/",
+// never a 500.
+app.get("/github/app/callback", async (c) => {
+  const installationId = c.req.query("installation_id");
+  if (!installationId || !Number.isInteger(Number(installationId))) return c.redirect("/");
+  try {
+    await syncInstallationFromApp(c.env, c.env.DB, Number(installationId), c.get("principal").login, nowIso());
+  } catch {
+    // Swallow — the installation webhook will still sync this install; never 500 the callback.
+  }
+  return c.redirect("/");
+});
 
 app.post("/ingest", async (c) => {
   const json = await c.req.json().catch(() => null);
