@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
-import { all, first } from "../src/db";
+import { all, first, defaultRepo } from "../src/db";
 import { IngestPayload } from "@shared/contract";
 import { ingestMilestoneProposal, consume } from "../src/consumer";
 import type { MilestoneProposalRow, MilestoneRow, NeedsTriageRow } from "@shared/rows";
@@ -158,7 +158,8 @@ describe("roadmap HTTP routes (session-gated)", () => {
     const { milestones } = await write_plan(
       env.DB,
       { narrative: "Q3 push", milestones: [{ title: "GA", target_date: "2026-09-01", status: "upcoming", github_ref: 3 }] },
-      "andres"
+      "andres",
+      defaultRepo(env) // the /roadmap route reads at defaultRepo(env) — seed there to match
     );
     await upsertProgress(env.DB, milestones[0].id, 4, 6, "event");
 
@@ -196,7 +197,8 @@ describe("registered MCP get_roadmap tool", () => {
     const { milestones } = await write_plan(
       env.DB,
       { narrative: "MCP view", milestones: [{ title: "GA", target_date: "2026-09-01", status: "upcoming", github_ref: 3 }] },
-      "andres"
+      "andres",
+      defaultRepo(env) // the MCP get_roadmap tool reads at defaultRepo(env) — seed there to match
     );
     await upsertProgress(env.DB, milestones[0].id, 4, 6, "event");
 

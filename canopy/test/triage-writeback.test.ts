@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { app } from "../src/routes";
 import { createSession } from "../src/auth/session";
 import { hmacSeal } from "../src/auth/crypto";
-import { all, first } from "../src/db";
+import { all, first, defaultRepo } from "../src/db";
 import type { DocVersionRow, AdrRow, NeedsTriageRow, MilestoneProposalRow } from "@shared/rows";
 import { ingestDocProposal } from "../src/consumer";
 import { propose_doc_update, promote_doc, stage_adr, ratify_adr, route_triage, stage_milestone_proposal, promote_milestone_proposal, reject_milestone_proposal } from "../src/tools/writes";
@@ -62,7 +62,8 @@ describe("GET /proposals", () => {
 describe("POST /doc/:slug/reject", () => {
   it("flips a staged version to 'rejected', drops it from /proposals, and never deletes it", async () => {
     const cookie = await authedCookie("andres");
-    await propose_doc_update(env.DB, { ...docBase, slug: "spec", title: "Spec", body: "# draft" }, "andres");
+    // The reject route is wired to defaultRepo(env), so create the doc there too.
+    await propose_doc_update(env.DB, { ...docBase, slug: "spec", title: "Spec", body: "# draft", repo: defaultRepo(env) }, "andres");
 
     let proposals = (await getJson<{ proposals: unknown[] }>("/proposals", cookie)).proposals;
     expect(proposals.length).toBe(1);
@@ -83,7 +84,7 @@ describe("POST /doc/:slug/reject", () => {
 
   it("double-reject is idempotent-safe (no error, still rejected)", async () => {
     const cookie = await authedCookie("andres");
-    await propose_doc_update(env.DB, { ...docBase, slug: "idem", title: "Idem", body: "x" }, "andres");
+    await propose_doc_update(env.DB, { ...docBase, slug: "idem", title: "Idem", body: "x", repo: defaultRepo(env) }, "andres");
     expect((await post("/doc/idem/reject", cookie, { version: 1 })).status).toBe(200);
     const second = await post("/doc/idem/reject", cookie, { version: 1 });
     expect(second.status).toBe(200);
@@ -93,7 +94,7 @@ describe("POST /doc/:slug/reject", () => {
   });
 
   it("returns 401 without a session cookie (and does not mutate)", async () => {
-    await propose_doc_update(env.DB, { ...docBase, slug: "guarded", title: "G", body: "x" }, "andres");
+    await propose_doc_update(env.DB, { ...docBase, slug: "guarded", title: "G", body: "x", repo: defaultRepo(env) }, "andres");
     const res = await app.request("/doc/guarded/reject", { method: "POST" }, env);
     expect(res.status).toBe(401);
     const v = await first<DocVersionRow>(env.DB, `SELECT * FROM doc_versions WHERE slug = 'guarded' AND version = 1`);
