@@ -1,4 +1,6 @@
 import { type DB, run } from "../db";
+import type { Env } from "../env";
+import { appJwt, installationToken } from "./app";
 
 // Connect-your-repos: keep the `installations` + `repos` tables in sync with GitHub App
 // installation lifecycle. Driven entirely by the webhook payload (which carries the
@@ -103,4 +105,44 @@ export async function handleInstallationEvent(db: DB, eventName: string, payload
   }
 
   return { handled: false };
+}
+
+/**
+ * Sync one installation directly from the GitHub App API (not a webhook payload): the
+ * install callback lands the user here with only an `installation_id`, so we read the
+ * account via the App JWT and the repo list via an installation token, then upsert both
+ * tables. Single page (per_page=100); pagination beyond 100 repos is a follow-up. The
+ * webhook stays the durable source of truth — this just makes the connection appear
+ * immediately after install. `fetchImpl`/`nowSec` are injectable for tests.
+ */
+export async function syncInstallationFromApp(
+  env: Env,
+  db: DB,
+  installationId: number,
+  addedBy: string | null,
+  now: string,
+  opts?: { fetchImpl?: typeof fetch; nowSec?: number }
+): Promise<{ repos: string[] }> {
+  const doFetch = opts?.fetchImpl ?? fetch;
+
+  // Account (login + type) is an App-level read, authed by the short-lived App JWT.
+  const jwt = await appJwt(env, opts?.nowSec);
+  const instRes = await doFetch(`https://api.github.com/app/installations/${installationId}`, {
+    headers: { authorization: `Bearer ${jwt}`, accept: "application/vnd.github+json", "user-agent": "canopy" },
+  });
+  if (!instRes.ok) throw new Error(`installation lookup failed for ${installationId}: ${instRes.status}`);
+  const { account } = (await instRes.json()) as { account: { login: string; type: string } };
+  await recordInstallation(db, { id: installationId, account_login: account.login, account_type: account.type }, now);
+
+  // Repo list is an installation-scoped read, authed by a minted installation token.
+  const token = await installationToken(env, installationId, opts);
+  const reposRes = await doFetch("https://api.github.com/installation/repositories?per_page=100", {
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "user-agent": "canopy" },
+  });
+  if (!reposRes.ok) throw new Error(`installation repositories fetch failed for ${installationId}: ${reposRes.status}`);
+  const { repositories } = (await reposRes.json()) as { repositories: Array<{ full_name: string }> };
+  const names = repositories.map((r) => r.full_name);
+  await connectRepos(db, installationId, names, addedBy, now);
+
+  return { repos: names };
 }
