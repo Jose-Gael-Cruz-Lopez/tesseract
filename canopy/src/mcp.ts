@@ -120,7 +120,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
     "get_roadmap",
     "Read the roadmap plan: admin narrative + milestones in target-date order with cached progress (no live GitHub).",
     {},
-    async () => runTool(() => get_plan(env.DB))
+    async () => runTool(() => get_plan(env.DB, defaultRepo(env)))
   );
 
   server.tool(
@@ -168,7 +168,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
           github_ref: z.union([z.number(), z.array(z.number())]).nullable().optional(),
         })).default([]),
       },
-      async (input) => runTool(() => write_plan(env.DB, input as PlanWrite, principal.login))
+      async (input) => runTool(() => write_plan(env.DB, input as PlanWrite, principal.login, defaultRepo(env)))
     );
   }
 

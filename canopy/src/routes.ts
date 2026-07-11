@@ -100,7 +100,7 @@ app.post("/doc/:slug/promote", async (c) => {
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
   try {
-    const res = await promote_doc(c.env.DB, c.req.param("slug"), version, c.get("principal").login);
+    const res = await promote_doc(c.env.DB, c.req.param("slug"), version, c.get("principal").login, defaultRepo(c.env));
     return c.json({ ok: true, ...res });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -114,7 +114,7 @@ app.post("/doc/:slug/reject", async (c) => {
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
   try {
-    const res = await reject_doc_version(c.env.DB, c.req.param("slug"), version);
+    const res = await reject_doc_version(c.env.DB, c.req.param("slug"), version, defaultRepo(c.env));
     return c.json({ ok: true, ...res });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -206,7 +206,7 @@ app.post("/identity-tasks/:login/map", async (c) => {
 
 // Roadmap read (session-gated): admin narrative + milestones in target-date order,
 // merged with cached progress from the plan store. No live GitHub, no per-user token.
-app.get("/roadmap", async (c) => c.json(await get_plan(c.env.DB)));
+app.get("/roadmap", async (c) => c.json(await get_plan(c.env.DB, defaultRepo(c.env))));
 
 // Personal dashboard (session-gated): the signed-in user's two-list My Work —
 // previous activity (summarized merged/closed PRs) + open assigned issues,
