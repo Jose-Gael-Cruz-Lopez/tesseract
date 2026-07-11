@@ -56,3 +56,22 @@ describe("hub roadmap route", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("hub read routes", () => {
+  it("feed is isolated to the gated repo", async () => {
+    await connect("octo/hub");
+    await connect("octo/other");
+    // seed one feed entry in each repo — column shape copied from repo-scope.test.ts /
+    // query.fts.test.ts (feed has no `kind`/`tags` columns; tags live in entry_tags).
+    await run(env.DB, `INSERT INTO feed (author, summary, body, artifacts, created_at, repo) VALUES (?, ?, ?, NULL, ?, ?)`, LOGIN, "hub-only", "hub-only", nowIso(), "octo/hub");
+    await run(env.DB, `INSERT INTO feed (author, summary, body, artifacts, created_at, repo) VALUES (?, ?, ?, NULL, ?, ?)`, LOGIN, "other-only", "other-only", nowIso(), "octo/other");
+    _hubTestHooks.getUserToken = async () => "user-tok";
+    _hubTestHooks.listRepos = [{ repo: "octo/hub", can_push: true }, { repo: "octo/other", can_push: true }];
+
+    const res = await app.request(`/r/octo/hub/feed`, { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    expect(res.status).toBe(200);
+    const { feed } = await res.json() as { feed: Array<{ body: string }> };
+    expect(feed.some((f) => f.body === "hub-only")).toBe(true);
+    expect(feed.some((f) => f.body === "other-only")).toBe(false);
+  });
+});
