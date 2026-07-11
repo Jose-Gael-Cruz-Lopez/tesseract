@@ -35,6 +35,9 @@ AUTH_ORG = ""
 # Comma-separated GitHub logins allowed in (login gate when AUTH_ORG is empty)
 # and for admin actions. Set to your GitHub login to start.
 ADMIN_LOGINS = "Jose-Gael-Cruz-Lopez"
+# The GitHub App's URL slug — the "Connect repos" button links to
+# github.com/apps/<slug>/installations/new (Phase 3). Not a secret.
+GITHUB_APP_SLUG = "memo-sphere"
 
 [observability]
 enabled = true
