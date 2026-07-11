@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { propose_doc_update, stage_adr, promote_doc, ratify_adr } from "../src/tools/writes";
-import { first } from "../src/db";
+import { first, defaultRepo } from "../src/db";
 import type { DocRow, DocVersionRow, AdrRow } from "@shared/rows";
 import { app } from "../src/routes";
 import { createSession } from "../src/auth/session";
@@ -71,7 +71,8 @@ async function authedCookie(login: string): Promise<string> {
 
 describe("promote/ratify HTTP routes (session-gated)", () => {
   it("POST /doc/:slug/promote promotes for an authenticated principal", async () => {
-    await propose_doc_update(env.DB, { ...base, body: "# v1", change_summary: "first" }, "andres");
+    // The promote route is wired to defaultRepo(env), so create the doc there too.
+    await propose_doc_update(env.DB, { ...base, body: "# v1", change_summary: "first", repo: defaultRepo(env) }, "andres");
     const cookie = await authedCookie("andres");
     const res = await app.request(
       "/doc/architecture/promote",

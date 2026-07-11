@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildCanopyMcpServer } from "../src/mcp";
-import { all, first } from "../src/db";
+import { all, first, defaultRepo } from "../src/db";
 import type { MilestoneRow, PlanRow } from "@shared/rows";
 
 // ADMIN_LOGINS binds "admin-user" in vitest.config.ts — this login clears isAdmin().
@@ -47,7 +47,8 @@ describe("registered MCP update_plan tool", () => {
     expect(body.version).toBe(1);
     expect(body.milestones).toHaveLength(1);
 
-    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ''`);
+    // update_plan writes at defaultRepo(env) (the wired MCP entry point).
+    const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ?`, defaultRepo(env));
     expect(plan?.updated_by).toBe(AUTHOR);
     expect(plan?.narrative).toBe("shipped via MCP");
 
