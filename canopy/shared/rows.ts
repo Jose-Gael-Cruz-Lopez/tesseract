@@ -29,6 +29,16 @@ export interface RepoAccessRow {
   checked_at: string;
 }
 
+// The user-to-server token (+ refresh) per login (0025), so repoGate can refresh a
+// user's access set without re-auth. expires_at is an ISO string (NULL = non-expiring).
+export interface UserTokenRow {
+  login: string;
+  token: string;
+  refresh_token: string | null;
+  expires_at: string | null;
+  updated_at: string;
+}
+
 export interface SectionRow { name: string; description: string | null; }
 export interface TagRow { tag: string; description: string | null; }
 

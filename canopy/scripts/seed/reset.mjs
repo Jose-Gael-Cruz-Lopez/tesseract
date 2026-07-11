@@ -4,6 +4,7 @@
 // its DELETE here.
 export const RESET_STATEMENTS = [
   "DELETE FROM repo_access",
+  "DELETE FROM user_tokens",
   "DELETE FROM installations",
   "DELETE FROM repos",
   "DELETE FROM processed_items",
