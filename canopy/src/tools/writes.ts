@@ -236,11 +236,15 @@ export async function promote_doc(
   db: DB,
   slug: string,
   version: number,
-  author: string
+  author: string,
+  repo = ""
 ): Promise<{ slug: string; version: number; status: "promoted" }> {
+  // Scope by repo: since 0022 a slug names a doc PER repo, so an unscoped promote
+  // would clobber a same-slug doc in another repo. repo defaults '' (single-repo-safe).
   const ver = await first<DocVersionRow>(
     db,
-    `SELECT * FROM doc_versions WHERE slug = ? AND version = ?`,
+    `SELECT * FROM doc_versions WHERE repo = ? AND slug = ? AND version = ?`,
+    repo,
     slug,
     version
   );
@@ -248,14 +252,15 @@ export async function promote_doc(
   if (ver.status !== "staged") throw new Error(`doc version not staged: ${slug} v${version} is ${ver.status}`);
 
   const updated_at = nowIso();
-  await run(db, `UPDATE doc_versions SET status = 'promoted' WHERE slug = ? AND version = ?`, slug, version);
+  await run(db, `UPDATE doc_versions SET status = 'promoted' WHERE repo = ? AND slug = ? AND version = ?`, repo, slug, version);
   await run(
     db,
-    `UPDATE docs SET body = ?, current_version = ?, updated_at = ?, updated_by = ? WHERE slug = ?`,
+    `UPDATE docs SET body = ?, current_version = ?, updated_at = ?, updated_by = ? WHERE repo = ? AND slug = ?`,
     ver.body,
     version,
     updated_at,
     author,
+    repo,
     slug
   );
   return { slug, version, status: "promoted" };
@@ -315,8 +320,11 @@ export async function promote_milestone_proposal(db: DB, id: number, author: str
   const now = nowIso();
   const res = await run(
     db,
-    `INSERT INTO milestones (title, description, target_date, status, github_ref, created_at, created_by, updated_at)
-     VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`,
+    // The live milestone inherits the proposal's repo (0020+); without it every
+    // promoted milestone would land in the '' repo regardless of origin.
+    `INSERT INTO milestones (repo, title, description, target_date, status, github_ref, created_at, created_by, updated_at)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+    p.repo,
     p.title,
     p.target_date,
     p.status,        // the gate guarantees this is never 'done'
@@ -349,18 +357,21 @@ export async function complete_milestone(db: DB, id: number): Promise<MilestoneR
 export async function reject_doc_version(
   db: DB,
   slug: string,
-  version: number
+  version: number,
+  repo = ""
 ): Promise<{ slug: string; version: number; status: "rejected" }> {
+  // Repo-scoped for the same reason as promote_doc (per-repo slug since 0022).
   const ver = await first<DocVersionRow>(
     db,
-    `SELECT * FROM doc_versions WHERE slug = ? AND version = ?`,
+    `SELECT * FROM doc_versions WHERE repo = ? AND slug = ? AND version = ?`,
+    repo,
     slug,
     version
   );
   if (!ver) throw new Error(`no such doc version: ${slug} v${version}`);
   if (ver.status === "rejected") return { slug, version, status: "rejected" }; // idempotent
   if (ver.status !== "staged") throw new Error(`cannot reject ${slug} v${version}: it is ${ver.status}`);
-  await run(db, `UPDATE doc_versions SET status = 'rejected' WHERE slug = ? AND version = ?`, slug, version);
+  await run(db, `UPDATE doc_versions SET status = 'rejected' WHERE repo = ? AND slug = ? AND version = ?`, repo, slug, version);
   return { slug, version, status: "rejected" };
 }
 

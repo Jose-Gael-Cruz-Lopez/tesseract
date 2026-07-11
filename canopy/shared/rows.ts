@@ -123,6 +123,7 @@ export interface MilestoneRow {
 }
 
 export interface MilestoneProposalRow {
+  repo: string;                // owning repo, "owner/name" (0020)
   id: number;
   title: string;
   target_date: string;
