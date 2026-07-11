@@ -8,7 +8,10 @@
   box-shadow: var(--pop-shadow);
   border-radius: 6px;
   position: fixed;
-  z-index: 1000;
+  /* Above .mod-scrim (1100) so an anchored popover opened FROM inside a modal
+     (e.g. Settings → Appearance) renders on top of it and stays clickable;
+     still below toasts (1200). */
+  z-index: 1150;
   max-width: min(360px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow: auto;
