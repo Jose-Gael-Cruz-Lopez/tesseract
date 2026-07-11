@@ -12,6 +12,7 @@ import { promote_doc, ratify_adr, promote_milestone_proposal, reject_milestone_p
 import { get_plan } from "./tools/plan";
 import { getMyWork } from "./tools/mywork";
 import type { DashboardData } from "@shared/dashboard";
+import { listAccessibleConnectedRepos } from "./tools/connected";
 import hubApp from "./hub";
 
 export const app = new Hono<AppEnv>();
@@ -242,6 +243,17 @@ app.get("/me/dashboard", async (c) => {
     // Absolute backstop: never 500. Anything unexpected (D1) → empty degraded payload.
     const empty: DashboardData = { person: null, previousActivity: [], todo: [], degraded: true };
     return c.json(empty);
+  }
+});
+
+// The signed-in user's connected hubs (GitHub-accessible ∩ connected). Feeds the web
+// hub-list + the "Connect repos" button (appSlug). Never 500s → empty on any failure.
+app.get("/me/repos", async (c) => {
+  try {
+    const repos = await listAccessibleConnectedRepos(c.env.DB, c.env, c.get("principal").login);
+    return c.json({ repos, appSlug: c.env.GITHUB_APP_SLUG ?? null });
+  } catch {
+    return c.json({ repos: [], appSlug: c.env.GITHUB_APP_SLUG ?? null });
   }
 });
 
