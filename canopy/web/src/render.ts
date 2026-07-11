@@ -3,7 +3,7 @@
 // `.map().join('')`, `sc-if` to ternaries, and `onClick="{{ fn }}"` to
 // `data-act` / `data-arg` attributes dispatched in main.ts.
 
-import type { Me, StagedProposal, IdentityTask } from "./api";
+import type { Me, StagedProposal, IdentityTask, Repo } from "./api";
 import type { FeedRow, DocRow, DocVersionRow, AdrRow, NeedsTriageRow } from "@shared/rows";
 import type { QueryResult, QueryPrimary, QueryPointer, Authority, MilestoneWithProgress, PlanView } from "./api";
 import type { DashboardData, MyWorkPr, MyWorkTodo } from "@shared/dashboard";
@@ -11,7 +11,7 @@ import { TAGS } from "@shared/vocabulary";
 import { renderMarkdown } from "./markdown";
 import { extractOutline } from "./outline";
 import { REPO_URL } from "./github";
-import { esc, attr, initialsOf, relTime } from "./ui";
+import { esc, attr, initialsOf, relTime, dashedCard } from "./ui";
 import { reviewView, type ReviewFilter, type ReviewProps, type DiffViewMode } from "./review";
 import { maintenanceView, type MaintenanceProps, type AssignKind } from "./maintenance";
 import { reviewItemsFromReads, ASSIGN_OPTIONS, unplacedFromRow, identityFromTask, peopleFromLogins } from "./triage-map";
@@ -20,7 +20,7 @@ import { reviewItemsFromReads, ASSIGN_OPTIONS, unplacedFromRow, identityFromTask
 // Technical | Product). Values come from the data, not a fixed union.
 export type DocSpace = string;
 
-export type Screen = "mywork" | "feed" | "docs" | "roadmap" | "review" | "maintenance" | "search" | "settings" | "guide";
+export type Screen = "mywork" | "feed" | "docs" | "roadmap" | "review" | "maintenance" | "search" | "settings" | "guide" | "hubs";
 
 /** Async data slice: a screen's fetched payload plus its load status. */
 export interface Loadable<T> {
@@ -33,6 +33,12 @@ export interface AppState {
   view: "auth" | "app";
   authStep: "login" | "verifying" | "nonmember";
   me: Me | null;
+  /** The selected hub (owner/name) hub-scoped reads/writes target; null → no hub (hub-list). DORMANT until ?hubs / Task 10. */
+  activeRepo: string | null;
+  /** The signed-in user's connected repos (GET /me/repos) — feeds the hub-list + header switcher. */
+  myRepos: Loadable<Repo[]>;
+  /** GitHub App slug for the "connect a repo" install link; null when unset server-side. */
+  appSlug: string | null;
   mywork: Loadable<DashboardData | null>;
   screen: Screen;
   theme: "dark" | "light" | "midnight" | "system";
@@ -95,6 +101,9 @@ export function initialState(): AppState {
   return {
     view: "auth", authStep: "login",
     me: null,
+    activeRepo: null,
+    myRepos: { status: "idle", data: [] },
+    appSlug: null,
     screen: "mywork",
     theme: "dark", systemDark: true,
     collapsed: false,
@@ -175,6 +184,11 @@ const AVATAR = "border:1px solid var(--border-strong);background:color-mix(in sr
 
 function logo(size: number): string {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><rect x="2" y="4.5" width="20" height="3.4" rx="1.7" fill="var(--accent)"></rect><rect x="5" y="10.3" width="14" height="3.4" rx="1.7" fill="currentColor"></rect><rect x="8" y="16.1" width="8" height="3.4" rx="1.7" fill="currentColor" opacity="0.5"></rect></svg>`;
+}
+
+/** The GitHub mark (Octocat) — reused from the sign-in button for hub-list repo cards. */
+function ghMark(size: number): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.38-1.34-1.75-1.34-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.23 1.84 1.23 1.07 1.83 2.81 1.3 3.49.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.32-5.47-5.87 0-1.3.47-2.36 1.23-3.19-.12-.3-.53-1.51.12-3.15 0 0 1.01-.32 3.3 1.22a11.5 11.5 0 0 1 6 0c2.29-1.54 3.3-1.22 3.3-1.22.65 1.64.24 2.85.12 3.15.77.83 1.23 1.89 1.23 3.19 0 4.56-2.81 5.57-5.49 5.86.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"></path></svg>`;
 }
 
 // ── real-data helpers (authors are github logins; no curated display map) ─────
@@ -361,7 +375,7 @@ function sidebar(s: AppState): string {
 }
 
 function header(s: AppState): string {
-  const titles: Record<Screen, string> = { mywork: "My Work", feed: "Feed", docs: "Docs", roadmap: "Roadmap", review: "Review", maintenance: "Maintenance", search: "Search", settings: "Settings", guide: "Get Started" };
+  const titles: Record<Screen, string> = { mywork: "My Work", feed: "Feed", docs: "Docs", roadmap: "Roadmap", review: "Review", maintenance: "Maintenance", search: "Search", settings: "Settings", guide: "Get Started", hubs: "Hubs" };
   // dark = "show the moon icon" — true for any non-light theme (dark + midnight).
   const dark = resolved(s) !== "light";
 
@@ -430,10 +444,18 @@ function header(s: AppState): string {
         : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"></path></svg>`}
     </button>`;
 
+  // Repo switcher (Phase 3, DORMANT until ?hubs / Task 10): only meaningful once
+  // myRepos has loaded, so it stays hidden on the flat boot path (myRepos is never
+  // fetched there) and never appears unannounced.
+  const repoSwitcher = s.myRepos.data.length > 0
+    ? `<select data-act="switchRepo" class="cnpy-select" title="Switch repo">${s.myRepos.data.map((r) => `<option value="${attr(r.repo)}"${r.repo === s.activeRepo ? " selected" : ""}>${esc(r.repo)}</option>`).join("")}</select>`
+    : "";
+
   return `<header style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 24px;min-height:57px;border-bottom:1px solid var(--border);flex:none">
     <div style="display:flex;align-items:center;gap:12px;min-width:0">
       <h1 style="font-size:15px;font-weight:600;letter-spacing:-0.01em;margin:0">${titles[s.screen]}</h1>
       ${filterChip}
+      ${repoSwitcher}
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex:none">
       ${feedControls}${docsControls}${roadmapControls}${myworkControls}${themeBtn}
@@ -1277,6 +1299,51 @@ function maintenanceScreen(s: AppState): string {
   return `${hint}${maintenanceView(maintenanceProps(s))}`;
 }
 
+// ── hubs (multi-tenant repo picker; DORMANT — reachable only via ?hubs until Task 10) ──
+function hubCard(r: Repo, active: boolean): string {
+  return `<button data-act="switchRepo" data-arg="${attr(r.repo)}" class="cnpy-card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:left;width:100%;border:1px solid ${active ? "var(--accent)" : "var(--border)"};border-radius:12px;padding:16px 18px;margin-bottom:10px;background:${active ? "var(--accent-soft)" : "transparent"}">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <div style="width:34px;height:34px;border-radius:9px;${AVATAR};flex:none;color:var(--fg-70)">${ghMark(16)}</div>
+      <div style="min-width:0">
+        <div style="font-size:13.5px;font-weight:600;letter-spacing:-0.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.repo)}</div>
+        <div style="font-size:11.5px;color:var(--fg-40);margin-top:2px">${r.can_push ? "Push access" : "Read-only"}</div>
+      </div>
+    </div>
+    ${active
+      ? `<span style="font-size:9.5px;font-weight:600;font-family:var(--mono);letter-spacing:.06em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:5px;padding:2px 6px;flex:none">ACTIVE</span>`
+      : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--fg-40);flex:none"><path d="M9 6l6 6-6 6"></path></svg>`}
+  </button>`;
+}
+
+function hubsView(s: AppState): string {
+  if (s.myRepos.status === "loading" && s.myRepos.data.length === 0) {
+    return `<div style="max-width:640px;margin:0 auto;padding:32px 24px 100px">${notice("Loading your repos&hellip;")}</div>`;
+  }
+  if (s.myRepos.status === "error") {
+    return `<div style="max-width:640px;margin:0 auto;padding:32px 24px 100px">${notice("Couldn't load your repos.")}</div>`;
+  }
+  // Falls back to the GitHub App install-picker page when the App slug isn't
+  // configured server-side (GITHUB_APP_SLUG unset) — never a dead link.
+  const installUrl = s.appSlug ? `https://github.com/apps/${s.appSlug}/installations/new` : "https://github.com/settings/installations";
+
+  if (s.myRepos.data.length === 0) {
+    return `<div style="height:100%;display:flex;align-items:center;justify-content:center;padding:40px">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:18px">
+        ${dashedCard("Connect your first repo", "Install the Canopy GitHub App on a repo to get started.", true)}
+        <a href="${attr(installUrl)}" target="_blank" rel="noopener" class="cnpy-accentbtn" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:9px;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;text-decoration:none">Connect a repo</a>
+      </div>
+    </div>`;
+  }
+
+  return `<div style="max-width:640px;margin:0 auto;padding:32px 24px 100px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
+      <div style="font-size:11px;font-weight:600;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--fg-40)">Your repos</div>
+      <a href="${attr(installUrl)}" target="_blank" rel="noopener" class="cnpy-link" style="font-size:12.5px;font-weight:500;color:var(--accent);text-decoration:none">Connect another repo</a>
+    </div>
+    ${s.myRepos.data.map((r) => hubCard(r, r.repo === s.activeRepo)).join("")}
+  </div>`;
+}
+
 // ── root ─────────────────────────────────────────────────────────────────────
 function screenBody(s: AppState): string {
   switch (s.screen) {
@@ -1289,6 +1356,7 @@ function screenBody(s: AppState): string {
     case "search": return searchView(s);
     case "settings": return settingsView(s);
     case "guide": return guideView(s);
+    case "hubs": return hubsView(s);
     default: return feedView(s);
   }
 }
