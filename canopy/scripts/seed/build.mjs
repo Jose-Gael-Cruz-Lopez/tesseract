@@ -77,7 +77,7 @@ export function buildSeedStatements(fx) {
   const rm = fx.roadmap;
   if (rm) {
     s.push(
-      `UPDATE plan SET narrative = ${q(rm.narrative)}, current_version = ${num(rm.version)}, updated_at = ${q(rm.updated_at)}, updated_by = ${q(rm.updated_by)} WHERE id = 1`
+      `UPDATE plan SET narrative = ${q(rm.narrative)}, current_version = ${num(rm.version)}, updated_at = ${q(rm.updated_at)}, updated_by = ${q(rm.updated_by)} WHERE repo = ''`
     );
     s.push(
       `INSERT INTO plan_versions (version, narrative, milestones_json, created_at, created_by) VALUES (` +

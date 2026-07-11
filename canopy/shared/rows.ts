@@ -109,6 +109,7 @@ export interface McpTokenRow {
 }
 
 export interface MilestoneRow {
+  repo: string;                // owning repo, "owner/name" (0020)
   id: number;
   title: string;
   description: string | null;
@@ -217,17 +218,18 @@ export interface IdentityTaskRow {
   resolved_by: string | null;
 }
 
-// The plan singleton (0012).
+// The plan narrative (0012 singleton; per-repo since 0023 — PK(repo)).
 export interface PlanRow {
-  id: number;
+  repo: string;                // owning repo, "owner/name" (0023)
   narrative: string;
   current_version: number;
   updated_at: string | null;
   updated_by: string | null;
 }
 
-// Non-destructive plan snapshot (0012).
+// Non-destructive plan snapshot (0012; per-repo since 0023 — PK(repo, version)).
 export interface PlanVersionRow {
+  repo: string;                // owning repo, "owner/name" (0023)
   version: number;
   narrative: string;
   milestones_json: string;

@@ -146,6 +146,7 @@ describe("decodeReviewId — invalid inputs", () => {
 
 function makeTriageRow(overrides: Partial<NeedsTriageRow> = {}): NeedsTriageRow {
   return {
+    repo: "",
     id: 7,
     raw: JSON.stringify({ slug: "pool-sizing", title: "Notes on connection pool sizing", body: "Pool exhaustion under load traces to the reporting service.", section: "runbooks" }),
     reason: "out-of-vocab section: runbooks",
