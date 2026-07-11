@@ -10,6 +10,7 @@ import {
   refreshUserToken,
   accessibleRepos,
 } from "../src/auth/app";
+import { authorizeRepo } from "../src/auth/access";
 
 const b64urlDecode = (s: string): string => {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -170,5 +171,59 @@ describe("GitHub App user-auth client (auth/app.ts)", () => {
       { repo: "acme/site", can_push: false },
       { repo: "acme/api", can_push: false },
     ]);
+  });
+});
+
+// Phase 3: repoGate's authorization core — connected + collaborator, TTL-cached.
+describe("repo access authorization (auth/access.ts)", () => {
+  const connect = (repo: string) =>
+    env.DB.prepare(`INSERT INTO repos (repo, added_at, status) VALUES (?, 'x', 'connected')`).bind(repo).run();
+
+  it("denies a repo that isn't connected (no hub), without hitting GitHub", async () => {
+    let refreshed = false;
+    const r = await authorizeRepo(env.DB, "octocat", "acme/app", async () => {
+      refreshed = true;
+      return [{ repo: "acme/app", can_push: true }];
+    });
+    expect(r).toEqual({ allowed: false, canPush: false });
+    expect(refreshed).toBe(false); // short-circuits on not-connected
+  });
+
+  it("allows a connected repo the user can access, and caches so refresh runs once within TTL", async () => {
+    await connect("acme/app");
+    let refreshes = 0;
+    const refresh = async () => {
+      refreshes++;
+      return [{ repo: "acme/app", can_push: true }];
+    };
+    const r1 = await authorizeRepo(env.DB, "octocat", "acme/app", refresh, { now: "2026-07-11T00:00:00Z" });
+    const r2 = await authorizeRepo(env.DB, "octocat", "acme/app", refresh, { now: "2026-07-11T00:01:00Z" });
+    expect(r1).toEqual({ allowed: true, canPush: true });
+    expect(r2).toEqual({ allowed: true, canPush: true });
+    expect(refreshes).toBe(1); // second call served from cache
+  });
+
+  it("denies a connected repo the user cannot access, negative-cached via their access set", async () => {
+    await connect("acme/app");    // the user CAN reach this
+    await connect("acme/secret"); // the user CANNOT
+    let refreshes = 0;
+    const refresh = async () => {
+      refreshes++;
+      return [{ repo: "acme/app", can_push: true }]; // reaches acme/app only
+    };
+    // Probing the accessible repo populates the cache with a fresh checked_at.
+    expect((await authorizeRepo(env.DB, "octocat", "acme/app", refresh, { now: "2026-07-11T00:00:00Z" })).allowed).toBe(true);
+    // Probing the inaccessible repo within TTL: MAX(checked_at) is fresh → no re-fetch, denied.
+    const no = await authorizeRepo(env.DB, "octocat", "acme/secret", refresh, { now: "2026-07-11T00:01:00Z" });
+    expect(no.allowed).toBe(false);
+    expect(refreshes).toBe(1); // the fresh access set already answered "not accessible"
+  });
+
+  it("re-syncs past the TTL and revokes access the user has lost", async () => {
+    await connect("acme/app");
+    await authorizeRepo(env.DB, "octocat", "acme/app", async () => [{ repo: "acme/app", can_push: false }], { now: "2026-07-11T00:00:00Z" });
+    // an hour later, access is gone → refresh returns empty → hub closes
+    const r = await authorizeRepo(env.DB, "octocat", "acme/app", async () => [], { now: "2026-07-11T01:00:00Z" });
+    expect(r.allowed).toBe(false);
   });
 });
