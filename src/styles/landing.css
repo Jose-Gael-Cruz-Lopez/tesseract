@@ -1,0 +1,60 @@
+/* Full-screen intro video shown before the auth screen (src/ui/landing.js). */
+
+.landing {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.landing-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;   /* fill the viewport, cropping as needed */
+  display: block;
+}
+
+/* Skip → jump to sign-in. Pill, bottom-right, legible over any frame. */
+.landing-skip {
+  position: absolute;
+  bottom: 28px;
+  right: 28px;
+  padding: 8px 20px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .35);
+  color: #fff;
+  font: 500 14px var(--font-ui, -apple-system, sans-serif);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background .15s ease, border-color .15s ease;
+}
+.landing-skip:hover {
+  background: rgba(0, 0, 0, .6);
+  border-color: #fff;
+}
+
+/* Sound toggle, bottom-left. */
+.landing-sound {
+  position: absolute;
+  bottom: 28px;
+  left: 28px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .35);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background .15s ease, border-color .15s ease;
+}
+.landing-sound:hover {
+  background: rgba(0, 0, 0, .6);
+  border-color: #fff;
+}

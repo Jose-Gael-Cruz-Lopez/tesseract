@@ -17,8 +17,10 @@ import './styles/settings.css';
 import './styles/import.css';
 import './styles/dev.css';
 import './styles/templates.css';
+import './styles/landing.css';
 
 import { initTheme } from './ui/theme.js';
+import { mountLanding } from './ui/landing.js';
 import { getSession, setSession } from './auth/auth.js';
 import { initStore, seedWorkspace, setDevAvailable } from './data/store.js';
 import { mountApp } from './app.js';
@@ -48,9 +50,21 @@ async function showAuth(root) {
   }
 }
 
+// Signed-out visitors see the intro video first; when it ends (or is skipped),
+// hand off to the sign-in / onboarding flow.
+function showLanding(root) {
+  mountLanding(root, { onDone: () => showAuth(root) });
+}
+
 async function boot() {
   initTheme();
   const root = document.getElementById('root');
+
+  // Preview the intro landing on demand, regardless of session: /?landing
+  if (new URLSearchParams(location.search).has('landing')) {
+    showLanding(root);
+    return;
+  }
 
   // A real Supabase (Google) session takes precedence over the mock flow.
   // getSupabaseSession() awaits URL detection, so it also resolves the session
@@ -86,7 +100,7 @@ async function boot() {
   }
 
   const session = getSession();
-  if (!session || !session.onboarded) showAuth(root);
+  if (!session || !session.onboarded) showLanding(root);
   else startApp(root);
 }
 
