@@ -3,8 +3,8 @@ import { env } from "cloudflare:test";
 import { bootstrapRepo, defaultRepo, _resetBootstrapForTests, REPO_TABLES } from "../src/db";
 import { repoFromDelivery } from "../src/webhook";
 import { ingestEvent, ingestFeedEntry } from "../src/consumer";
-import { route_triage } from "../src/tools/writes";
-import { list_needs_triage } from "../src/tools/reads";
+import { route_triage, propose_doc_update } from "../src/tools/writes";
+import { list_needs_triage, get_doc } from "../src/tools/reads";
 import { list_events } from "../src/tools/mywork";
 
 // Phase 2a: the repos registry + an additive `repo` column on every per-repo table,
@@ -135,5 +135,26 @@ describe("per-repo event uniqueness (0021)", () => {
     await ingestEvent(env.DB, pr42, "wh", "acme/a");
     const again = await ingestEvent(env.DB, pr42, "wh", "acme/a");
     expect(again.outcome).toBe("unchanged"); // same (repo, semantic_key) → dropped
+  });
+});
+
+// Phase 2 recreations (0022): docs.slug is per-repo — the same slug coexists across
+// repos, and a repo-scoped get_doc returns that repo's doc.
+describe("per-repo doc uniqueness (0022)", () => {
+  const doc = (repo: string, body: string) => propose_doc_update(
+    env.DB, { slug: "architecture", section: "reference", body, change_summary: "init", confidence: "high" as const, repo }, "author",
+  );
+
+  it("the same doc slug in two repos stays distinct, read back per-repo", async () => {
+    await doc("acme/a", "A's architecture");
+    await doc("acme/b", "B's architecture");
+
+    const rows = await env.DB.prepare(`SELECT repo FROM docs WHERE slug = 'architecture' ORDER BY repo`).all<{ repo: string }>();
+    expect((rows.results ?? []).map((r) => r.repo)).toEqual(["acme/a", "acme/b"]);
+
+    const a = await get_doc(env.DB, "architecture", "acme/a");
+    const b = await get_doc(env.DB, "architecture", "acme/b");
+    expect(a?.versions[0].body).toBe("A's architecture");
+    expect(b?.versions[0].body).toBe("B's architecture");
   });
 });
