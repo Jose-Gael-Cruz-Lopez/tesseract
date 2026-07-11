@@ -19,20 +19,37 @@ async function cookieFor(login: string): Promise<string> {
 }
 
 describe("listAccessibleConnectedRepos", () => {
-  it("returns the intersection of GitHub-accessible and connected repos", async () => {
+  it("returns the intersection of GitHub-accessible and connected repos, enforcing the collaborator boundary from the GitHub side", async () => {
     await run(env.DB, `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES ('octo/a', ?, ?, 1, 'connected')`, nowIso(), LOGIN);
     await run(env.DB, `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES ('octo/b', ?, ?, 1, 'disconnected')`, nowIso(), LOGIN);
-    // octo/c is accessible on GitHub but NOT connected → excluded.
+    // octo/d is CONNECTED in the DB but NOT GitHub-accessible (absent from listRepos below).
+    // This is the security-critical MIRROR axis: accessibleRepos is the collaborator boundary,
+    // so a connected-but-unreachable repo must be excluded. If a refactor ever iterated the
+    // `connected` DB set instead of filtering `reachable`, octo/d's hub would leak to a
+    // non-collaborator — this asserts it does not.
+    await run(env.DB, `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES ('octo/d', ?, ?, 1, 'connected')`, nowIso(), LOGIN);
+    // octo/c is accessible on GitHub but NOT connected → excluded (the other axis).
     const out = await listAccessibleConnectedRepos(env.DB, env, LOGIN, {
       getToken: async () => "tok",
       listRepos: async () => [{ repo: "octo/a", can_push: true }, { repo: "octo/b", can_push: false }, { repo: "octo/c", can_push: true }],
     });
-    expect(out).toEqual([{ repo: "octo/a", can_push: true }]); // b disconnected, c not connected
+    expect(out).toEqual([{ repo: "octo/a", can_push: true }]); // b disconnected, c not connected, d not GitHub-accessible
+    expect(out.some((r) => r.repo === "octo/d")).toBe(false); // connected-but-inaccessible never leaks (collaborator boundary)
   });
 
   it("is empty when the user has no token", async () => {
     const out = await listAccessibleConnectedRepos(env.DB, env, LOGIN, { getToken: async () => null, listRepos: async () => [] });
     expect(out).toEqual([]);
+  });
+
+  it("does NOT swallow failures — it rejects so the route is the sole never-500 backstop", async () => {
+    // The function propagates; only GET /me/repos' try/catch degrades to an empty list.
+    await expect(
+      listAccessibleConnectedRepos(env.DB, env, LOGIN, {
+        getToken: async () => "tok",
+        listRepos: async () => { throw new Error("github down"); },
+      })
+    ).rejects.toThrow("github down");
   });
 });
 
