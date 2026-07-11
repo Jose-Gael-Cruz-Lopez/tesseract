@@ -218,3 +218,75 @@ describe("hub read routes", () => {
     expect(body.previousActivity.some((p) => p.number === 202)).toBe(false);
   });
 });
+
+// A push-authorized POST against the hub as `login` (default LOGIN), for the mutation
+// routes below. Mirrors hubGet but for POST + an optional JSON body.
+async function hubPost(path: string, opts?: { login?: string; canPush?: boolean; body?: unknown }): Promise<Response> {
+  const login = opts?.login ?? LOGIN;
+  _hubTestHooks.getUserToken = async () => "user-tok";
+  _hubTestHooks.listRepos = [{ repo: "octo/hub", can_push: opts?.canPush ?? true }];
+  return app.request(
+    path,
+    {
+      method: "POST",
+      headers: { cookie: await cookieFor(login), "content-type": "application/json" },
+      body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    },
+    env
+  );
+}
+
+describe("hub mutation routes (push-gated + repo-ownership guarded)", () => {
+  it("admin mutation is 403 without push access", async () => {
+    await connect("octo/hub");
+    const res = await hubPost(`/r/octo/hub/adr/1/ratify`, { canPush: false }); // read-only collaborator
+    expect(res.status).toBe(403);
+  });
+
+  it("id-keyed mutation 404s a cross-repo id", async () => {
+    await connect("octo/hub");
+    await run(env.DB, `INSERT INTO adrs (title, context, decision, rationale, status, confidence, created_at, created_by, repo) VALUES ('x', 'ctx', 'dec', 'why', 'draft', 'high', ?, 'tester', 'octo/other')`, nowIso());
+    const row = (await env.DB.prepare(`SELECT last_insert_rowid() AS id`).first()) as { id: number };
+    const res = await hubPost(`/r/octo/hub/adr/${row.id}/ratify`, { canPush: true });
+    expect(res.status).toBe(404); // belongs to octo/other, not the gated hub
+  });
+
+  it("push-gate runs BEFORE the ownership lookup: a read-only collaborator gets 403, never a 404, even on a nonexistent id", async () => {
+    await connect("octo/hub");
+    // id 424242 doesn't exist anywhere — if the ownership lookup ran first this would
+    // 404; the 403 proves requirePush short-circuits before any DB probe.
+    const res = await hubPost(`/r/octo/hub/adr/424242/ratify`, { canPush: false });
+    expect(res.status).toBe(403);
+  });
+
+  it("a push-authorized collaborator CAN ratify an ADR that belongs to their own gated repo", async () => {
+    await connect("octo/hub");
+    await run(env.DB, `INSERT INTO adrs (title, context, decision, rationale, status, confidence, created_at, created_by, repo) VALUES ('own adr', 'ctx', 'dec', 'why', 'draft', 'high', ?, 'tester', 'octo/hub')`, nowIso());
+    const row = (await env.DB.prepare(`SELECT last_insert_rowid() AS id`).first()) as { id: number };
+    const res = await hubPost(`/r/octo/hub/adr/${row.id}/ratify`, { canPush: true });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; status: string };
+    expect(body).toEqual({ ok: true, id: row.id, status: "ratified" });
+    const persisted = await env.DB.prepare(`SELECT status FROM adrs WHERE id = ?`).bind(row.id).first<{ status: string }>();
+    expect(persisted?.status).toBe("ratified");
+  });
+
+  it("doc slug-keyed mutation 404s a cross-repo slug", async () => {
+    await connect("octo/hub");
+    await connect("octo/other");
+    await propose_doc_update(env.DB, { slug: "other-doc", section: "reference", body: "b", change_summary: "s", confidence: "high", repo: "octo/other" }, "author");
+    const res = await hubPost(`/r/octo/hub/doc/other-doc/promote`, { canPush: true, body: { version: 1 } });
+    expect(res.status).toBe(404); // belongs to octo/other, not the gated hub
+  });
+
+  it("a push-authorized collaborator CAN promote a doc that belongs to their own gated repo", async () => {
+    await connect("octo/hub");
+    await propose_doc_update(env.DB, { slug: "hub-doc-promote", section: "reference", body: "hub body", change_summary: "s", confidence: "high", repo: "octo/hub" }, "author");
+    const res = await hubPost(`/r/octo/hub/doc/hub-doc-promote/promote`, { canPush: true, body: { version: 1 } });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; slug: string; version: number; status: string };
+    expect(body).toEqual({ ok: true, slug: "hub-doc-promote", version: 1, status: "promoted" });
+    const persisted = await env.DB.prepare(`SELECT body, current_version FROM docs WHERE repo = 'octo/hub' AND slug = 'hub-doc-promote'`).first<{ body: string; current_version: number }>();
+    expect(persisted).toEqual({ body: "hub body", current_version: 1 });
+  });
+});
