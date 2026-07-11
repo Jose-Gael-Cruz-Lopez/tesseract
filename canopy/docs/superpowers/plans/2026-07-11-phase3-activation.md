@@ -1082,6 +1082,18 @@ With the App live + secrets set, merge to `main` (user-authorized) → Workers B
 
 - [ ] **Step 3: Remove the flat repo-scoped routes**
 
+> **⚠️ SECURITY ORDERING (whole-branch review, 2026-07-11):** the flat **mutation** routes
+> (`/adr/:id/ratify`, `/adr/:id/reject`, `/milestones/:id/complete`,
+> `/milestone-proposals/:id/promote|reject`, `/needs-triage/:id/discard|assign`,
+> `/doc/:slug/promote|reject`) are session-gated but have **no push-gate and no repo-ownership
+> guard** — an id-keyed one acts on any global id. This is safe ONLY while the App is
+> unconfigured (the grandfathered bootstrap repo is the sole `connected` repo, so it's the only
+> data that exists). These flat mutation routes MUST be removed or guarded **atomically with App
+> activation — before any second tenant can connect** — not merely "after cutover". Do NOT let a
+> window exist where a second connected repo coexists with the unguarded flat mutations. (For this
+> deployment `ADMIN_LOGINS` is a single login, which incidentally neutralizes the practical
+> exposure, but the sequencing must not rely on that.)
+
 Once hubs are verified, delete (or 301-redirect to the grandfathered hub) the flat repo-scoped routes in `src/routes.ts` that duplicated hub behavior — `/roadmap`, `/feed`, `/docs`, `/doc/:slug`, `/search`, `/needs-triage`, `/adrs`, `/proposals`, `/milestone-proposals`, `/me/dashboard`, `/ingest`, and the promote/reject/assign/discard/complete POSTs — leaving only the non-hub surfaces (`/auth/*`, `/me/repos`, `/identity-tasks` + map, `/github/app/callback`). Keep `/ingest` reachable for any agent still posting flat until MCP is repo-routed (follow-up). Run `npm test` (update/remove flat-route tests that no longer apply) + `npm run typecheck`.
 
 - [ ] **Step 4: Commit + final deploy (user-authorized)**
