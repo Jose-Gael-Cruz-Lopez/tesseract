@@ -11,6 +11,7 @@ import {
   listStagedProposals, listAdrs, promoteDoc, rejectDoc, ratifyAdr, rejectAdr,
   listNeedsTriage, listIdentityTasks, assignTriage, discardTriage, mapIdentity, type AssignTarget,
   getMe, logout, mintMcpToken, adminBackfill,
+  getMyRepos, setActiveRepo,
   Unauthorized, NotFound, ApiError,
 } from "./api";
 import { decodeReviewId } from "./triage-map";
@@ -137,7 +138,7 @@ function persist(key: string, value: string): void {
 }
 
 // ── screen ↔ URL hash (so a reload stays on the current page) ─────────────────
-const SCREENS: Screen[] = ["mywork", "feed", "docs", "roadmap", "review", "maintenance", "search", "settings", "guide"];
+const SCREENS: Screen[] = ["mywork", "feed", "docs", "roadmap", "review", "maintenance", "search", "settings", "guide", "hubs"];
 function screenFromHash(): Screen {
   const h = location.hash.replace(/^#/, "") as Screen;
   return SCREENS.includes(h) ? h : "mywork";
@@ -152,6 +153,7 @@ function loadForScreen(screen: Screen): void {
     case "maintenance": loadNeedsTriageIfNeeded(); loadIdentityTasksIfNeeded(); loadFeedIfNeeded(); break;
     case "search": loadSearchIfNeeded(); break;
     case "mywork": loadMyWorkIfNeeded(); break;
+    case "hubs": loadMyReposIfNeeded(); break;
     default: rerender(); break; // settings, guide — no data load
   }
 }
@@ -361,6 +363,28 @@ function loadRoadmapIfNeeded(): void {
   else rerender();
 }
 
+// The signed-in user's connected repos (Phase 3 hub-list, DORMANT until ?hubs):
+// feeds both the "hubs" screen's card grid and the header repo switcher.
+function loadMyRepos(): void {
+  state.myRepos = { status: "loading", data: state.myRepos.data };
+  rerender();
+  getMyRepos()
+    .then(({ repos, appSlug }) => {
+      state.myRepos = { status: "ok", data: repos };
+      state.appSlug = appSlug;
+      rerender();
+    })
+    .catch((e) => {
+      if (e instanceof Unauthorized) { state.view = "auth"; state.authStep = "login"; rerender(); return; }
+      state.myRepos = { status: "error", data: [], error: e instanceof Error ? e.message : String(e) };
+      rerender();
+    });
+}
+function loadMyReposIfNeeded(): void {
+  if (state.myRepos.status === "idle") loadMyRepos();
+  else rerender();
+}
+
 // Write-completion handlers refetch the triage slices directly (not via
 // IfNeeded), so two loads of the same slice can overlap; the seq guard lets
 // only the newest in-flight request commit, so a slow earlier response can't
@@ -516,6 +540,30 @@ function fallbackCopy(text: string): boolean {
   }
 }
 
+// Switch the active hub (Phase 3, DORMANT). Every hub-scoped Loadable was
+// fetched for the PREVIOUS repo, so each is reset to idle before landing on My
+// Work — otherwise the *IfNeeded loaders would see non-idle status and skip
+// refetching, rendering stale cross-tenant data the next time each screen is
+// visited. identityTasks is untouched: identity mapping is not hub-scoped.
+function switchRepo(repo: string): void {
+  setActiveRepo(repo);
+  state.activeRepo = repo;
+  state.feed = { status: "idle", data: [] };
+  state.feedAuthors = [];
+  state.feedAuthor = "all";
+  state.docsList = { status: "idle", data: [] };
+  state.docDetail = { status: "idle", data: null };
+  state.docSlug = null;
+  state.roadmap = { status: "idle", data: { narrative: "", version: 0, updated_at: null, updated_by: null, milestones: [] } };
+  state.mywork = { status: "idle", data: null };
+  state.searchResults = { status: "idle", data: EMPTY_QUERY_RESULT };
+  state.needsTriage = { status: "idle", data: [] };
+  state.draftAdrs = { status: "idle", data: [] };
+  state.proposals = { status: "idle", data: [] };
+  state.screen = "mywork";
+  loadForScreen(state.screen);
+}
+
 // ── action dispatch ──────────────────────────────────────────────────────────
 function dispatch(act: string, arg: string | null, value: string | null): void {
   switch (act) {
@@ -539,6 +587,18 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
     case "goFeed": state.screen = "feed"; loadFeedIfNeeded(); return;
     case "goDocs": state.screen = "docs"; loadDocsIfNeeded(); return;
     case "goRoadmap": state.screen = "roadmap"; loadRoadmapIfNeeded(); loadFeedIfNeeded(); return;
+    // DORMANT (Phase 3): no sidebar entry yet — reachable via ?hubs at boot, a
+    // manual #hubs hash, or the header switcher's underlying hub list. Kept as
+    // a normal go* case for when a later task wires a nav item to it.
+    case "goHubs": state.screen = "hubs"; loadMyReposIfNeeded(); return;
+    // Repo switcher: fires from either the hub-card grid (data-arg) or the
+    // header <select> (its value) — see the mount "change" listener below.
+    case "switchRepo": {
+      const repo = arg ?? value;
+      if (!repo) return;
+      switchRepo(repo);
+      return;
+    }
 
     // roadmap tab toggle
     case "roadmapNarrative": state.roadmapTab = "narrative"; break;
@@ -848,8 +908,12 @@ if (new URLSearchParams(location.search).get("denied") === "1") {
       state.me = me;
       state.displayName = me.name ?? me.login;
       state.view = "app";
+      // DORMANT hub-list (Phase 3, Task 6): only force the hubs screen when the
+      // ?hubs query flag is present. Without it, boot is byte-for-byte the
+      // existing flat-screen path — a later task flips this to the real default.
+      const hubsRequested = new URLSearchParams(location.search).has("hubs");
       // Restore the screen from the URL hash (reload stays put) instead of always My Work.
-      state.screen = screenFromHash();
+      state.screen = hubsRequested ? "hubs" : screenFromHash();
       loadForScreen(state.screen);
       // Boot-time loads for the sidebar triage badges — the counts must be
       // right on every screen, not just after visiting Review/Maintenance.

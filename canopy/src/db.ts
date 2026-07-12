@@ -23,6 +23,9 @@ export function defaultRepo(env: Env): string {
 // GITHUB_REPO in the `repos` registry and rewrites the transient `repo = ''` sentinel on
 // any legacy rows to it. Idempotent and guarded to run at most once per isolate; on a
 // pre-0020 DB (no repos table) it swallows the error and retries on a later request.
+// Seeds status='connected' explicitly (Phase 3 grandfather, migration 0026): the
+// pre-existing single-tenant repo must keep its hub after the multi-tenant cutover —
+// authorizeRepo only shows a hub for status='connected' (src/auth/access.ts).
 let _bootstrapped = false;
 export function _resetBootstrapForTests(): void { _bootstrapped = false; }
 export async function bootstrapRepo(env: Env, db: DB): Promise<void> {
@@ -32,7 +35,14 @@ export async function bootstrapRepo(env: Env, db: DB): Promise<void> {
   try {
     const known = await first<{ x: number }>(db, `SELECT 1 AS x FROM repos WHERE repo = ?`, repo);
     if (!known) {
-      await run(db, `INSERT OR IGNORE INTO repos (repo, added_at, added_by) VALUES (?, ?, ?)`, repo, nowIso(), "bootstrap");
+      await run(
+        db,
+        `INSERT OR IGNORE INTO repos (repo, status, added_at, added_by) VALUES (?, ?, ?, ?)`,
+        repo,
+        "connected",
+        nowIso(),
+        "bootstrap"
+      );
       for (const t of REPO_TABLES) await run(db, `UPDATE ${t} SET repo = ? WHERE repo = ''`, repo);
     }
     _bootstrapped = true;

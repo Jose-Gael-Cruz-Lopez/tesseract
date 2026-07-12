@@ -19,4 +19,5 @@ export interface Env {
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
+  GITHUB_APP_SLUG?: string; // the App's URL slug for the install link (github.com/apps/<slug>/installations/new)
 }

@@ -8,7 +8,7 @@ export interface Principal {
   login: string;
 }
 
-export type AppEnv = { Bindings: Env; Variables: { principal: Principal } };
+export type AppEnv = { Bindings: Env; Variables: { principal: Principal; repo?: string; canPush?: boolean } };
 
 /**
  * Is this login an admin? ADMIN_LOGINS is a comma-separated allowlist of GitHub

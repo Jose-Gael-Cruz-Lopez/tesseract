@@ -18,6 +18,19 @@ export class ApiError extends Error {
 }
 export class NotFound extends Error {}
 
+// The active hub (owner/name) the read functions target. null → flat/no-hub (hub-list).
+let activeRepo: string | null = null;
+export function setActiveRepo(r: string | null): void { activeRepo = r; }
+export function getActiveRepo(): string | null { return activeRepo; }
+// Prefix a hub-scoped path with the active repo when one is selected.
+function scoped(path: string): string {
+  return activeRepo ? `/r/${activeRepo}${path}` : path;
+}
+
+export interface Repo { repo: string; can_push: boolean; }
+export interface MyRepos { repos: Repo[]; appSlug: string | null; }
+export async function getMyRepos(): Promise<MyRepos> { return getJson<MyRepos>("/me/repos"); }
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "same-origin", headers: { accept: "application/json" } });
   if (res.status === 401) throw new Unauthorized();
@@ -48,15 +61,15 @@ export function getFeed(q: FeedQuery = {}): Promise<FeedRow[]> {
   if (q.author) p.set("author", q.author);
   if (q.tags && q.tags.length) p.set("tags", q.tags.join(","));
   const qs = p.toString();
-  return getJson<{ feed: FeedRow[] }>(`/feed${qs ? `?${qs}` : ""}`).then((r) => r.feed);
+  return getJson<{ feed: FeedRow[] }>(scoped(`/feed${qs ? `?${qs}` : ""}`)).then((r) => r.feed);
 }
 
 export function listDocs(): Promise<DocRow[]> {
-  return getJson<{ docs: DocRow[] }>("/docs").then((r) => r.docs);
+  return getJson<{ docs: DocRow[] }>(scoped("/docs")).then((r) => r.docs);
 }
 
 export function getDoc(slug: string): Promise<{ doc: DocRow; versions: DocVersionRow[] }> {
-  return getJson<{ doc: DocRow; versions: DocVersionRow[] }>(`/doc/${encodeURIComponent(slug)}`).catch((e) => {
+  return getJson<{ doc: DocRow; versions: DocVersionRow[] }>(scoped(`/doc/${encodeURIComponent(slug)}`)).catch((e) => {
     if (e instanceof ApiError && e.status === 404) throw new NotFound(slug);
     throw e;
   });
@@ -90,7 +103,7 @@ export function search(q: string, opts: { types?: QueryType[]; section?: string;
   if (opts.space) p.set("space", opts.space);
   if (opts.limit) p.set("limit", String(opts.limit));
   const qs = p.toString();
-  return getJson<{ result: QueryResult }>(`/search${qs ? `?${qs}` : ""}`).then((r) => r.result);
+  return getJson<{ result: QueryResult }>(scoped(`/search${qs ? `?${qs}` : ""}`)).then((r) => r.result);
 }
 
 export type MilestoneWithProgress = MilestoneRow & { progress: { closed: number; total: number; computed_at: string } | null };
@@ -106,17 +119,17 @@ export interface PlanView {
   milestones: MilestoneWithProgress[];
 }
 export function getRoadmap(): Promise<PlanView> {
-  return getJson<PlanView>("/roadmap");
+  return getJson<PlanView>(scoped("/roadmap"));
 }
 
 export function listNeedsTriage(): Promise<NeedsTriageRow[]> {
-  return getJson<{ items: NeedsTriageRow[] }>("/needs-triage").then((r) => r.items);
+  return getJson<{ items: NeedsTriageRow[] }>(scoped("/needs-triage")).then((r) => r.items);
 }
 export function listAdrs(status?: string): Promise<AdrRow[]> {
-  return getJson<{ adrs: AdrRow[] }>(`/adrs${status ? `?status=${encodeURIComponent(status)}` : ""}`).then((r) => r.adrs);
+  return getJson<{ adrs: AdrRow[] }>(scoped(`/adrs${status ? `?status=${encodeURIComponent(status)}` : ""}`)).then((r) => r.adrs);
 }
 export function listMilestoneProposals(): Promise<MilestoneProposalRow[]> {
-  return getJson<{ proposals: MilestoneProposalRow[] }>("/milestone-proposals").then((r) => r.proposals);
+  return getJson<{ proposals: MilestoneProposalRow[] }>(scoped("/milestone-proposals")).then((r) => r.proposals);
 }
 
 export interface Me { login: string; name: string | null; avatar_url: string | null; org: string; admin: boolean; }
@@ -142,7 +155,7 @@ export function adminBackfill(): Promise<{
 }
 
 export function getMyDashboard(): Promise<DashboardData> {
-  return getJson<DashboardData>("/me/dashboard");
+  return getJson<DashboardData>(scoped("/me/dashboard"));
 }
 
 // The Triage "Proposals" queue = staged doc versions newer than the live doc.
@@ -169,7 +182,7 @@ export interface StagedProposal {
   promotedBody: string;
 }
 export function listStagedProposals(): Promise<StagedProposal[]> {
-  return getJson<{ proposals: StagedProposal[] }>("/proposals").then((r) => r.proposals);
+  return getJson<{ proposals: StagedProposal[] }>(scoped("/proposals")).then((r) => r.proposals);
 }
 
 // Maintenance · Identity: pending unknown-login tasks, each with a small LIVE
@@ -197,34 +210,34 @@ export function listIdentityTasks(): Promise<IdentityTask[]> {
 
 // ── confirms (cookie-authed) ─────────────────────────────────────────────────
 export function promoteDoc(slug: string, version: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/doc/${encodeURIComponent(slug)}/promote`, { version });
+  return postJson<{ ok: true }>(scoped(`/doc/${encodeURIComponent(slug)}/promote`), { version });
 }
 export function ratifyAdr(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/adr/${id}/ratify`);
+  return postJson<{ ok: true }>(scoped(`/adr/${id}/ratify`));
 }
 export function promoteMilestoneProposal(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/milestone-proposals/${id}/promote`);
+  return postJson<{ ok: true }>(scoped(`/milestone-proposals/${id}/promote`));
 }
 export function completeMilestone(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/milestones/${id}/complete`);
+  return postJson<{ ok: true }>(scoped(`/milestones/${id}/complete`));
 }
 
 // ── triage write-back (Phase 3): reject / discard / assign-materialize ─────────
 export function rejectDoc(slug: string, version: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/doc/${encodeURIComponent(slug)}/reject`, { version });
+  return postJson<{ ok: true }>(scoped(`/doc/${encodeURIComponent(slug)}/reject`), { version });
 }
 export function rejectAdr(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/adr/${id}/reject`);
+  return postJson<{ ok: true }>(scoped(`/adr/${id}/reject`));
 }
 export function rejectMilestoneProposal(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/milestone-proposals/${id}/reject`);
+  return postJson<{ ok: true }>(scoped(`/milestone-proposals/${id}/reject`));
 }
 export function discardTriage(id: number): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/needs-triage/${id}/discard`);
+  return postJson<{ ok: true }>(scoped(`/needs-triage/${id}/discard`));
 }
 export interface AssignTarget { type?: "doc" | "adr" | "milestone" | "feed"; section?: string; space?: "sapling" | "canopy"; tags?: string[]; }
 export function assignTriage(id: number, target: AssignTarget): Promise<{ ok: true }> {
-  return postJson<{ ok: true }>(`/needs-triage/${id}/assign`, target);
+  return postJson<{ ok: true }>(scoped(`/needs-triage/${id}/assign`), target);
 }
 
 // Maintenance · Identity: map a login to a person — the `people` table's only
