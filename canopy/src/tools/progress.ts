@@ -96,14 +96,19 @@ export async function getProgress(db: DB): Promise<Map<number, MilestoneProgress
   return new Map(rows.map((r) => [r.milestone_id, r]));
 }
 
-// Latest-snapshot SQL: for a set of issue numbers, the most-recently-captured
-// 'issue' event per ref_number (occurred_at DESC, id DESC as the tiebreak).
+// Latest-snapshot SQL: within one repo, for a set of issue numbers, the
+// most-recently-captured 'issue' event per ref_number (occurred_at DESC, id DESC
+// as the tiebreak). Scoped by repo (AND repo = ?, bound last after the IN
+// placeholders): issue numbers are only unique WITHIN a repo, so an unscoped
+// snapshot could pick a DIFFERENT repo's same-numbered issue and miscount this
+// repo's milestone (issue #14). The repo bind is the LAST parameter — callers
+// pass `...refNumbers, repo`.
 function latestIssueSnapshotSql(count: number): string {
   const placeholders = Array(count).fill("?").join(", ");
   return `
     SELECT ref_number, raw FROM (
       SELECT ref_number, raw, ROW_NUMBER() OVER (PARTITION BY ref_number ORDER BY occurred_at DESC, id DESC) rn
-      FROM events WHERE event_type = 'issue' AND ref_number IN (${placeholders})
+      FROM events WHERE event_type = 'issue' AND ref_number IN (${placeholders}) AND repo = ?
     ) WHERE rn = 1
   `;
 }
@@ -158,7 +163,7 @@ export async function applyEventProgress(db: DB, payload: unknown, repo: string)
     }
     if (!Array.isArray(ref) || !ref.includes(issueNumber)) continue;
 
-    const rows = ref.length > 0 ? await all<{ ref_number: number; raw: string }>(db, latestIssueSnapshotSql(ref.length), ...ref) : [];
+    const rows = ref.length > 0 ? await all<{ ref_number: number; raw: string }>(db, latestIssueSnapshotSql(ref.length), ...ref, repo) : [];
     let closed = 0;
     for (const row of rows) {
       try {

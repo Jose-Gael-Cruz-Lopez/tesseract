@@ -63,7 +63,8 @@ function issuePayload(
   number: number,
   state: "open" | "closed",
   action: string,
-  milestone: { number: number; open_issues: number; closed_issues: number } | null = null
+  milestone: { number: number; open_issues: number; closed_issues: number } | null = null,
+  updatedAt = "2026-07-01T10:00:00Z"
 ) {
   return {
     action,
@@ -72,7 +73,7 @@ function issuePayload(
       title: `Issue ${number}`,
       html_url: `https://github.com/o/r/issues/${number}`,
       state,
-      updated_at: "2026-07-01T10:00:00Z",
+      updated_at: updatedAt,
       user: { login: "AndresL230" },
       assignees: [],
       labels: [],
@@ -120,8 +121,10 @@ describe("applyEventProgress — array ref", () => {
 
     const [event7] = eventsFromDelivery("issues", issuePayload(7, "closed", "closed"));
     const [event8] = eventsFromDelivery("issues", issuePayload(8, "open", "opened"));
-    await ingestEvent(env.DB, event7, "github-webhook");
-    await ingestEvent(env.DB, event8, "github-webhook");
+    // The recount now scopes its events snapshot query by repo (issue #14), so the
+    // captured snapshots must live in the same repo as the milestone ("o/r").
+    await ingestEvent(env.DB, event7, "github-webhook", "o/r");
+    await ingestEvent(env.DB, event8, "github-webhook", "o/r");
 
     await applyEventProgress(env.DB, issuePayload(7, "closed", "closed"), "o/r");
 
@@ -149,6 +152,26 @@ describe("applyEventProgress — repo scoping (issue #14)", () => {
     // milestone_progress row at all (not merely a different value).
     const rowB = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idB);
     expect(rowB).toBeNull();
+  });
+
+  it("array-ref recount reads only THIS repo's issue snapshots (not another repo's same-numbered issue)", async () => {
+    const idA = await seedMilestone("[42]", "M", "o/a");
+
+    // The SAME issue number 42 is captured in BOTH repos. o/b's snapshot is LATER,
+    // so without repo scoping it wins the latest-snapshot ORDER BY (occurred_at
+    // DESC) and its "open" state would drive o/a's milestone to closed=0 — the
+    // cross-tenant contamination this scopes out.
+    const [snapA] = eventsFromDelivery("issues", issuePayload(42, "closed", "closed", null, "2026-07-01T10:00:00Z"));
+    const [snapB] = eventsFromDelivery("issues", issuePayload(42, "open", "opened", null, "2026-07-02T10:00:00Z"));
+    await ingestEvent(env.DB, snapA, "github-webhook", "o/a");
+    await ingestEvent(env.DB, snapB, "github-webhook", "o/b");
+
+    await applyEventProgress(env.DB, issuePayload(42, "closed", "closed"), "o/a");
+
+    // Only o/a's own snapshot (issue 42 closed) is counted → closed=1, NOT o/b's
+    // later "open" snapshot (which would yield closed=0).
+    const rowA = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idA);
+    expect(rowA).toMatchObject({ closed: 1, total: 1, source: "event" });
   });
 });
 
