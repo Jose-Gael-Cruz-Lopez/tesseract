@@ -32,15 +32,28 @@ async function runTool(fn: () => Promise<unknown>) {
 }
 
 /**
- * Build a fully-registered Canopy MCP server for one principal. Exported so tests
+ * Build a fully-registered Canopy MCP server for one principal, scoped to `repo`
+ * when given (the multi-tenant /mcp/:owner/:repo entry point). Exported so tests
  * can drive the REAL registered tools (e.g. over an in-memory transport) rather
  * than re-implementing the tool bodies — the same closures production runs.
+ *
+ * `repo` is left undefined, not defaulted, on purpose: some tools below (the
+ * writes, plus get_roadmap) already hardcoded defaultRepo(env) pre-#10 — for
+ * those, `writeRepo` (repo ?? defaultRepo(env)) preserves that exact fallback.
+ * The rest (query/get_doc/list_docs/get_feed/get_my_work/get_events) were NEVER
+ * repo-scoped pre-#10 (their repo param is optional with no filter when omitted)
+ * — passing `repo` straight through keeps the flat /mcp path byte-for-byte
+ * unscoped, while /mcp/:owner/:repo's explicit repo now isolates them too
+ * (closing what would otherwise be a cross-tenant read leak on those tools).
  *
  * A fresh McpServer per request is required (SDK 1.26+ guards against reuse), so
  * this must NOT be hoisted to global scope.
  */
-export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer {
+export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: string): McpServer {
   const server = new McpServer({ name: "canopy", version: "1.0.0" });
+  // Only for tools that already unconditionally read/wrote at defaultRepo(env)
+  // before #10 (see doc comment above) — an explicit repo overrides it.
+  const writeRepo = repo ?? defaultRepo(env);
 
   server.tool(
     "query",
@@ -56,22 +69,22 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
     },
     // Agent default include_staged:true — the agent should see staged/unpromoted
     // context (flagged), unlike the human Search which defaults false.
-    async (args) => runTool(() => query(env.DB, { ...args, q: args.q ?? "", include_staged: args.include_staged ?? true })),
+    async (args) => runTool(() => query(env.DB, { ...args, q: args.q ?? "", include_staged: args.include_staged ?? true }, repo)),
   );
 
   server.tool("get_doc", "Get a doc and all its versions by slug.", { slug: z.string() }, async ({ slug }) =>
-    runTool(() => get_doc(env.DB, slug))
+    runTool(() => get_doc(env.DB, slug, repo))
   );
 
   server.tool("list_docs", "List docs, optionally filtered by section.", { section: z.string().optional() }, async ({ section }) =>
-    runTool(() => list_docs(env.DB, section))
+    runTool(() => list_docs(env.DB, section, repo))
   );
 
   server.tool(
     "get_feed",
     "Read the feed with optional author/tags/since/limit filters.",
     { author: z.string().optional(), tags: z.array(z.string()).optional(), since: z.string().optional(), limit: z.number().optional() },
-    async (args) => runTool(() => get_feed(env.DB, args))
+    async (args) => runTool(() => get_feed(env.DB, args, repo))
   );
 
   server.tool(
@@ -93,7 +106,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
           env.DB,
           feedEntryFromMcpArgs({ summary, body, tags, prs, commits, issues }),
           principal.login,
-          defaultRepo(env),
+          writeRepo,
           ephemeralLedger()
         )
       )
@@ -113,28 +126,28 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
       base_version: z.number().optional(),
       force: z.boolean().optional(),
     },
-    async (proposal) => runTool(() => ingestDocProposal(env.DB, proposal, principal.login, defaultRepo(env), ephemeralLedger()))
+    async (proposal) => runTool(() => ingestDocProposal(env.DB, proposal, principal.login, writeRepo, ephemeralLedger()))
   );
 
   server.tool(
     "get_roadmap",
     "Read the roadmap plan: admin narrative + milestones in target-date order with cached progress (no live GitHub).",
     {},
-    async () => runTool(() => get_plan(env.DB, defaultRepo(env)))
+    async () => runTool(() => get_plan(env.DB, writeRepo))
   );
 
   server.tool(
     "get_my_work",
     "Your personal My Work projection from captured GitHub events (no live GitHub): previous-activity (your 5 most recent summarized merged/closed PRs) and to-do (your open assigned issues). Read-only.",
     {},
-    async () => runTool(() => getMyWork(env.DB, principal.login))
+    async () => runTool(() => getMyWork(env.DB, principal.login, repo))
   );
 
   server.tool(
     "get_events",
     "Recent captured GitHub events (raw log behind My Work and roadmap progress). Filter by type/subject. Read-only.",
     { type: z.enum(["pr_merged", "pr_closed", "issue"]).optional(), subject: z.string().optional(), limit: z.number().optional() },
-    async (args) => runTool(() => list_events(env.DB, args))
+    async (args) => runTool(() => list_events(env.DB, args, repo))
   );
 
   server.tool(
@@ -145,7 +158,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
     // consume() under the bearer principal already in scope. Re-parse with the contract
     // so defaults (empty arrays) are applied and the type is exactly IngestPayload —
     // the SDK already validated against IngestPayload.shape, so this never throws.
-    async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal, defaultRepo(env))),
+    async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal, writeRepo)),
   );
 
   // ADMIN-only: the plan write surface — non-admin principals don't even see the tool
@@ -168,16 +181,34 @@ export function buildCanopyMcpServer(env: Env, principal: Principal): McpServer 
           github_ref: z.union([z.number(), z.array(z.number())]).nullable().optional(),
         })).default([]),
       },
-      async (input) => runTool(() => write_plan(env.DB, input as PlanWrite, principal.login, defaultRepo(env)))
+      async (input) => runTool(() => write_plan(env.DB, input as PlanWrite, principal.login, writeRepo))
     );
   }
 
   return server;
 }
 
-export function handleMcp(request: Request, env: Env, ctx: ExecutionContext, principal: Principal): Promise<Response> {
-  const server = buildCanopyMcpServer(env, principal);
-  // createMcpHandler wraps @modelcontextprotocol/sdk over Streamable HTTP, stateless (no McpAgent/DO).
-  const handler = createMcpHandler(server, { route: "/mcp" });
+/**
+ * Handle one /mcp request. `repo`, when given, scopes every repo-capable tool
+ * registered above to it (see buildCanopyMcpServer's doc comment for exactly how
+ * each tool falls back when it's omitted). Left undefined by the flat /mcp entry
+ * point (index.ts, no owner/repo in the path) so that surface is byte-for-byte
+ * unchanged; the multi-tenant /mcp/:owner/:repo entry point (index.ts, authorized
+ * like the hub gate) passes its gated repo explicitly.
+ */
+export function handleMcp(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  principal: Principal,
+  repo?: string
+): Promise<Response> {
+  const server = buildCanopyMcpServer(env, principal, repo);
+  // createMcpHandler wraps @modelcontextprotocol/sdk over Streamable HTTP, stateless
+  // (no McpAgent/DO). route is the REQUEST's own pathname, not a hardcoded "/mcp":
+  // createMcpHandler 404s internally whenever url.pathname !== route, and this same
+  // handler now serves both /mcp and /mcp/:owner/:repo — index.ts has already
+  // validated the path (and authorized the repo) before calling in here.
+  const handler = createMcpHandler(server, { route: new URL(request.url).pathname });
   return handler(request, env, ctx);
 }
