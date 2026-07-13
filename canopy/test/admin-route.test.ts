@@ -29,16 +29,18 @@ describe("POST /admin/backfill (session- + admin-gated)", () => {
     expect(await res.json()).toEqual({ error: "admin only" });
   });
 
-  it("passes the admin gate and 503s when the service token is unset (proves wiring, no network)", async () => {
+  it("passes the admin gate and 503s when the configured repo isn't connected (proves wiring, no network)", async () => {
     // ADMIN_LOGINS binds "admin-user" in vitest.config.ts, so this login clears
-    // isAdmin. GITHUB_SERVICE_TOKEN is a secret never set in tests, so runBackfill
-    // returns ok:false BEFORE any GitHub fetch → 503 with the config error.
+    // isAdmin. This route backfills defaultRepo(c.env) (GITHUB_REPO), but no `repos`
+    // row for it is seeded in this test (bootstrapRepo never runs — this hits the
+    // Hono app directly, not worker.fetch), so runBackfill returns ok:false BEFORE
+    // any GitHub fetch → 503 with the config error.
     const res = await app.request(
       "/admin/backfill",
       { method: "POST", headers: { cookie: await cookieFor("admin-user") } },
       env
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "service token or repo not configured" });
+    expect(await res.json()).toEqual({ error: "repo not connected or has no installation" });
   });
 });
