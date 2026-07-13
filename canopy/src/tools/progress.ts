@@ -1,6 +1,8 @@
 import type { MilestoneRow, MilestoneProgressRow } from "@shared/rows";
 import { type DB, all, run, nowIso } from "../db";
 import { progressFromIssueEvent } from "../webhook";
+import { installationToken } from "../auth/app";
+import type { Env } from "../env";
 
 const GH_API = "application/vnd.github+json";
 const USER_AGENT = "canopy";
@@ -163,16 +165,25 @@ export async function applyEventProgress(db: DB, payload: unknown): Promise<void
 }
 
 /**
- * Scheduled backstop: recompute every milestone-with-a-github_ref's progress
- * live from GitHub and overwrite the cache with source:'recompute'. A milestone
- * whose fetch fails (expired token, GitHub outage, …) is left with its existing
- * cache row untouched — this never wipes progress, and never 500s.
+ * Scheduled backstop: recompute `opts.repo`'s own milestones-with-a-github_ref
+ * progress live from GitHub and overwrite the cache with source:'recompute'. Scoped
+ * by repo (WHERE repo = ?) — this is the multi-tenant isolation boundary: `opts.token`
+ * is one repo's installation token, so a milestone belonging to a DIFFERENT repo must
+ * never be selected here (it would be fetched from the wrong GitHub repo, or fail
+ * auth, or — worse — coincidentally match a same-numbered issue/milestone in
+ * `opts.repo` and write bogus progress into another tenant's row). A milestone whose
+ * fetch fails (expired token, GitHub outage, …) is left with its existing cache row
+ * untouched — this never wipes progress, and never 500s.
  */
 export async function recomputeAllProgress(
   db: DB,
   opts: { token: string; repo: string; fetchImpl?: typeof fetch }
 ): Promise<{ updated: number }> {
-  const milestones = await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE github_ref IS NOT NULL`);
+  const milestones = await all<MilestoneRow>(
+    db,
+    `SELECT * FROM milestones WHERE repo = ? AND github_ref IS NOT NULL`,
+    opts.repo
+  );
   let updated = 0;
   for (const m of milestones) {
     const progress = await fetchMilestoneProgress({
@@ -187,4 +198,31 @@ export async function recomputeAllProgress(
     }
   }
   return { updated };
+}
+
+/**
+ * Recompute progress for every connected repo, each authed by its own installation
+ * token (retires the single GITHUB_SERVICE_TOKEN). `installationTokenImpl`/`fetchImpl`
+ * are injectable for tests. Delegates to `recomputeAllProgress`, which is itself
+ * repo-scoped (WHERE repo = ?) — so one repo's recompute can never read or write
+ * another connected repo's milestones, even though this loop mints a different token
+ * per iteration.
+ */
+export async function recomputeConnectedRepos(
+  db: DB,
+  env: Env,
+  opts?: { fetchImpl?: typeof fetch; installationTokenImpl?: (env: Env, id: number) => Promise<string> }
+): Promise<void> {
+  const mint = opts?.installationTokenImpl ?? ((e: Env, id: number) => installationToken(e, id, { fetchImpl: opts?.fetchImpl }));
+  const rows = await all<{ repo: string; installation_id: number | null }>(
+    db,
+    `SELECT repo, installation_id FROM repos WHERE status = 'connected' AND installation_id IS NOT NULL`
+  );
+  for (const r of rows) {
+    if (r.installation_id == null) continue;
+    const token = await mint(env, r.installation_id);
+    // reuse the existing per-repo recompute; fetchImpl threads through so a test that
+    // seeds milestones for a connected repo also gets its GitHub calls stubbed.
+    await recomputeAllProgress(db, { token, repo: r.repo, fetchImpl: opts?.fetchImpl });
+  }
 }
