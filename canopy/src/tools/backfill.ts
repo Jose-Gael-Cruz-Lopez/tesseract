@@ -5,11 +5,14 @@ import { ingestEvent } from "../consumer";
 import { eventsFromDelivery } from "../webhook";
 import { type Summarizer, type PrSummary, type IssueSummary, geminiPrSummarizer, geminiIssueSummarizer, storePrSummary, storeIssueSummary } from "./summarize";
 import { applyEventProgress } from "./progress";
+import { installationToken } from "../auth/app";
 
 // Admin-triggered server-side GitHub backfill. Unlike scripts/backfill-events.mjs
 // (which signs synthetic webhook deliveries with the webhook secret), this runs
-// INSIDE the Worker with GITHUB_SERVICE_TOKEN — the same token the scheduled()
-// progress recompute uses — so it fetches GitHub REST directly, no webhook secret.
+// INSIDE the Worker authed by the TARGET REPO's OWN GitHub App installation token
+// (retiring the single app-level GITHUB_SERVICE_TOKEN — the same per-installation
+// tokens the scheduled() progress recompute now uses) — so it fetches GitHub REST
+// directly, no webhook secret.
 //
 // It reconstructs the SAME deliveries the webhook would have received, reuses the
 // PURE eventsFromDelivery() derivation (never duplicated here), post-maps each
@@ -156,12 +159,14 @@ function issueDelivery(issue: GhIssueListItem) {
 export async function runBackfill(
   env: Env,
   principalLogin: string,
+  repo: string,
   opts?: {
     fetchImpl?: typeof fetch;
     summarizer?: Summarizer<PrSummary> | null;
     issueSummarizer?: Summarizer<IssueSummary> | null;
     summaryBatchLimit?: number;
     summaryCallDelayMs?: number;
+    installationTokenImpl?: (env: Env, id: number) => Promise<string>;
   }
 ): Promise<BackfillResult> {
   // Nothing-ran failure envelope. The route turns this into a 503 whose error
@@ -181,9 +186,27 @@ export async function runBackfill(
     issuesToSummarize: 0,
   });
 
-  const token = env.GITHUB_SERVICE_TOKEN;
-  const repo = env.GITHUB_REPO;
-  if (!token || !repo) return failed("service token or repo not configured");
+  // Resolve `repo`'s OWN installation token (retires the single GITHUB_SERVICE_TOKEN) —
+  // never another repo's, so one tenant's admin can never read a different repo's
+  // GitHub history through this route.
+  const repoRow = await first<{ installation_id: number | null; status: string }>(
+    env.DB,
+    `SELECT installation_id, status FROM repos WHERE repo = ?`,
+    repo
+  );
+  if (!repoRow || repoRow.status !== "connected" || repoRow.installation_id == null) {
+    return failed("repo not connected or has no installation");
+  }
+  const mint = opts?.installationTokenImpl ?? ((e: Env, id: number) => installationToken(e, id, { fetchImpl: opts?.fetchImpl }));
+  let token: string;
+  try {
+    token = await mint(env, repoRow.installation_id);
+  } catch (e) {
+    // Mirrors the "never throws, always {ok:false}" contract the rest of this fn
+    // already keeps for GitHub REST failures below — an unmintable token (App
+    // misconfigured, installation suspended, …) must 503 gracefully, not 500.
+    return failed(`installation token mint failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   const doFetch = opts?.fetchImpl ?? fetch;
   const summarizer = opts?.summarizer ?? (env.GEMINI_API_KEY ? geminiPrSummarizer(env.GEMINI_API_KEY) : null);
@@ -204,10 +227,10 @@ export async function runBackfill(
     let url: string | null = `https://api.github.com/repos/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100`;
     while (url) {
       const res: Response = await doFetch(url, { headers });
-      // Fail the whole run, loud: a 401/403/404 here (dead or under-scoped
-      // GITHUB_SERVICE_TOKEN) would otherwise read as "0 PRs" — fake success.
+      // Fail the whole run, loud: a 401/403/404 here (a revoked/under-scoped
+      // installation token) would otherwise read as "0 PRs" — fake success.
       // Both lists are fetched before any ingestion, so nothing is half-written.
-      if (!res.ok) return failed(`GitHub ${res.status} listing closed PRs (check GITHUB_SERVICE_TOKEN)`);
+      if (!res.ok) return failed(`GitHub ${res.status} listing closed PRs (check the repo's installation access)`);
       const page = (await res.json()) as GhPrListItem[];
       prList.push(...page);
       url = nextLink(res);
@@ -221,7 +244,7 @@ export async function runBackfill(
     let url: string | null = `https://api.github.com/repos/${repo}/issues?state=open&per_page=100`;
     while (url) {
       const res: Response = await doFetch(url, { headers });
-      if (!res.ok) return failed(`GitHub ${res.status} listing open issues (check GITHUB_SERVICE_TOKEN)`);
+      if (!res.ok) return failed(`GitHub ${res.status} listing open issues (check the repo's installation access)`);
       const page = (await res.json()) as GhIssueListItem[];
       for (const issue of page) {
         if (issue.pull_request) continue;
