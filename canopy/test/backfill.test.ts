@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { all, first, run } from "../src/db";
+import { all, first, run, nowIso } from "../src/db";
 import { runBackfill } from "../src/tools/backfill";
 import type { Env } from "../src/env";
 import type { Summarizer, PrSummary, IssueSummary } from "../src/tools/summarize";
@@ -8,6 +8,28 @@ import type { EventRow, PrSummaryRow, IssueSummaryRow } from "@shared/rows";
 
 const threeDaysAgo = "2026-06-28T00:00:00Z";
 const twentyDaysAgo = "2026-06-11T00:00:00Z";
+
+// The repo every fixture below belongs to (its PR/issue html_urls all point at
+// "github.com/o/r/..."). runBackfill now resolves ITS OWN installation token from
+// the `repos` row rather than a single app-level GITHUB_SERVICE_TOKEN, so every test
+// needs a connected repos row with an installation_id — seeded once per test here.
+const REPO = "o/r";
+const INSTALLATION_ID = 77;
+
+async function seedConnectedRepo(): Promise<void> {
+  await run(
+    env.DB,
+    `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, 'x', ?, 'connected')`,
+    REPO,
+    nowIso(),
+    INSTALLATION_ID
+  );
+}
+beforeEach(seedConnectedRepo);
+
+// installationTokenImpl bypasses the real App-JWT path (unconfigured in tests, and
+// out of scope here — that machinery is exercised in test/github-app.test.ts).
+const stubInstallationToken = async (_env: Env, id: number): Promise<string> => `tok-${id}`;
 
 // A Response-level fetch stub (the pool exports no fetch mock) — mirrors
 // test/roadmap.test.ts / test/progress.test.ts. Routes by path substring: the
@@ -37,7 +59,15 @@ const PR_STUB: PrSummary = { title: "Humanized PR", what: "AI summary", why: nul
 const ISSUE_STUB: IssueSummary = { title: "Humanized issue", summary: "Issue AI summary", next_step: null };
 
 function envWith(overrides: Partial<Env> = {}): Env {
-  return { ...(env as unknown as Env), GITHUB_SERVICE_TOKEN: "svc-token", GITHUB_REPO: "o/r", ...overrides };
+  return { ...(env as unknown as Env), GITHUB_REPO: "o/r", ...overrides };
+}
+
+// Every test in this file backfills REPO as "admin-user" with the installation-token
+// mint stubbed — only the `runBackfill`-specific opts (fetchImpl, summarizer, …) vary
+// per call. `repo` is overridable (the "repo not connected" tests below pass a
+// different one deliberately).
+function backfill(opts?: Parameters<typeof runBackfill>[3], repo: string = REPO) {
+  return runBackfill(envWith(), "admin-user", repo, { installationTokenImpl: stubInstallationToken, ...opts });
 }
 
 const mergedPr = {
@@ -121,7 +151,7 @@ describe("runBackfill", () => {
   it("captures ALL closed PRs (full history, no recency window) + open issues, written by the admin principal", async () => {
     const summarizer = countingSummarizer(PR_STUB);
     const issueSummarizer = countingSummarizer(ISSUE_STUB);
-    const res = await runBackfill(envWith(), "admin-user", {
+    const res = await backfill({
       fetchImpl: stubFetch([mergedPr, olderPr], [openIssue, prAsIssue]),
       summarizer,
       issueSummarizer,
@@ -160,10 +190,10 @@ describe("runBackfill", () => {
     const summarizer = countingSummarizer(PR_STUB);
     const issueSummarizer = countingSummarizer({ ...ISSUE_STUB, summary: "Issue summary." });
     const fetchImpl = stubFetch([mergedPr], [openIssue]);
-    const firstRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0 });
+    const firstRun = await backfill({ fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0 });
     expect(firstRun.captured).toBe(2);
 
-    const secondRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0 });
+    const secondRun = await backfill({ fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0 });
     expect(secondRun.ok).toBe(true);
     expect(secondRun.captured).toBe(0);
     expect(secondRun.unchanged).toBe(2);
@@ -173,14 +203,14 @@ describe("runBackfill", () => {
   it("retroactively re-summarizes a PR whose existing summary fell back to excerpt", async () => {
     const nullSummarizer: Summarizer<PrSummary> = { model: "stub", summarize: async () => null }; // forces the excerpt fallback
     const fetchImpl = stubFetch([mergedPr], []);
-    const firstRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer: nullSummarizer, summaryCallDelayMs: 0 });
+    const firstRun = await backfill({ fetchImpl, summarizer: nullSummarizer, summaryCallDelayMs: 0 });
     expect(firstRun.summarized).toBe(1);
     expect(firstRun.prSummarizedCount).toBe(0); // excerpt fallback never counts as "done"
 
     // Second run: a real summarizer is available now — the stored summary is
     // still the excerpt fallback (model:'excerpt') → re-summarized.
     const realSummarizer = countingSummarizer({ ...PR_STUB, what: "A real AI summary." });
-    const secondRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer: realSummarizer, summaryCallDelayMs: 0 });
+    const secondRun = await backfill({ fetchImpl, summarizer: realSummarizer, summaryCallDelayMs: 0 });
     expect(secondRun.captured).toBe(0);
     expect(secondRun.unchanged).toBe(1);
     expect(secondRun.summarized).toBe(1);
@@ -191,14 +221,14 @@ describe("runBackfill", () => {
   it("skips re-summarizing a PR that already has a real (non-excerpt) summary", async () => {
     const summarizer = countingSummarizer({ ...PR_STUB, what: "Plain prose, no headings — the new richer style." });
     const fetchImpl = stubFetch([mergedPr], []);
-    const firstRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, summaryCallDelayMs: 0 });
+    const firstRun = await backfill({ fetchImpl, summarizer, summaryCallDelayMs: 0 });
     expect(firstRun.summarized).toBe(1);
     expect(firstRun.prSummarizedCount).toBe(1);
     expect(summarizer.calls).toBe(1);
 
     // Second run: model !== 'excerpt' already → skipped, no second summarizer
     // call, regardless of the stored text's exact shape.
-    const secondRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, summaryCallDelayMs: 0 });
+    const secondRun = await backfill({ fetchImpl, summarizer, summaryCallDelayMs: 0 });
     expect(secondRun.summarized).toBe(0);
     expect(secondRun.prSummarizedCount).toBe(1);
     expect(summarizer.calls).toBe(1);
@@ -212,7 +242,7 @@ describe("runBackfill", () => {
     const summarizer = countingSummarizer(PR_STUB);
 
     // First run captures the PR and writes a structured summary.
-    const firstRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, summaryCallDelayMs: 0 });
+    const firstRun = await backfill({ fetchImpl, summarizer, summaryCallDelayMs: 0 });
     expect(firstRun.ok).toBe(true);
     expect(summarizer.calls).toBeGreaterThan(0);
     const callsAfterFirst = summarizer.calls;
@@ -220,32 +250,76 @@ describe("runBackfill", () => {
     // Simulate a prose-era row: model kept, structured columns wiped.
     await run(env.DB, `UPDATE pr_summaries SET title = NULL, what = NULL, why = NULL, impact = NULL`);
 
-    const secondRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, summaryCallDelayMs: 0 });
+    const secondRun = await backfill({ fetchImpl, summarizer, summaryCallDelayMs: 0 });
     const callsAfterSecond = summarizer.calls;
     expect(secondRun.ok).toBe(true);
     // The prose-era row (title wiped) must regenerate — one more summarizer call.
     expect(callsAfterSecond).toBeGreaterThan(callsAfterFirst);
 
     // Third run: the row is structured again — skipped, no further calls.
-    const thirdRun = await runBackfill(envWith(), "admin-user", { fetchImpl, summarizer, summaryCallDelayMs: 0 });
+    const thirdRun = await backfill({ fetchImpl, summarizer, summaryCallDelayMs: 0 });
     expect(thirdRun.ok).toBe(true);
     expect(summarizer.calls).toBe(callsAfterSecond);
   });
 
-  it("returns {ok:false} (no throw, no writes) when the service token is missing", async () => {
-    const res = await runBackfill(envWith({ GITHUB_SERVICE_TOKEN: undefined }), "admin-user", {
+  it("returns {ok:false} (no throw, no writes) when the target repo has no repos row at all", async () => {
+    const res = await backfill(
+      { fetchImpl: stubFetch([mergedPr], [openIssue]), summarizer: countingSummarizer(PR_STUB) },
+      "o/never-connected"
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("not connected");
+    expect(res).toMatchObject({ captured: 0, unchanged: 0, summarized: 0, summaryBudgetExhausted: false, prSummarizedCount: 0, prs: 0, issues: 0 });
+    expect(await all(env.DB, `SELECT * FROM events`)).toHaveLength(0);
+  });
+
+  it("returns {ok:false} when the repo row exists but is disconnected", async () => {
+    await run(
+      env.DB,
+      `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, 'x', ?, 'disconnected')`,
+      "o/gone",
+      nowIso(),
+      5
+    );
+    const res = await backfill(
+      { fetchImpl: stubFetch([mergedPr], [openIssue]), summarizer: countingSummarizer(PR_STUB) },
+      "o/gone"
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("not connected");
+    expect(await all(env.DB, `SELECT * FROM events`)).toHaveLength(0);
+  });
+
+  it("returns {ok:false} when the repo is connected but has no installation_id (pre-App grandfather row)", async () => {
+    await run(
+      env.DB,
+      `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, 'x', NULL, 'connected')`,
+      "o/legacy",
+      nowIso()
+    );
+    const res = await backfill(
+      { fetchImpl: stubFetch([mergedPr], [openIssue]), summarizer: countingSummarizer(PR_STUB) },
+      "o/legacy"
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("no installation");
+    expect(await all(env.DB, `SELECT * FROM events`)).toHaveLength(0);
+  });
+
+  it("returns {ok:false} (never throws) when minting the installation token fails", async () => {
+    const res = await backfill({
       fetchImpl: stubFetch([mergedPr], [openIssue]),
       summarizer: countingSummarizer(PR_STUB),
+      installationTokenImpl: async () => { throw new Error("mint boom"); },
     });
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("service token or repo");
-    expect(res).toMatchObject({ captured: 0, unchanged: 0, summarized: 0, summaryBudgetExhausted: false, prSummarizedCount: 0, prs: 0, issues: 0 });
+    expect(res.error).toContain("mint boom");
     expect(await all(env.DB, `SELECT * FROM events`)).toHaveLength(0);
   });
 
   it("fails loud — {ok:false, error} with the GitHub status — when the PR list fetch is rejected", async () => {
     const fetchImpl = (async () => new Response("bad credentials", { status: 401 })) as unknown as typeof fetch;
-    const res = await runBackfill(envWith(), "admin-user", {
+    const res = await backfill({
       fetchImpl,
       summarizer: countingSummarizer({ ...PR_STUB, what: "unused" }),
       summaryCallDelayMs: 0,
@@ -265,7 +339,7 @@ describe("runBackfill", () => {
       }
       return new Response("forbidden", { status: 403 });
     }) as unknown as typeof fetch;
-    const res = await runBackfill(envWith(), "admin-user", {
+    const res = await backfill({
       fetchImpl,
       summarizer: countingSummarizer({ ...PR_STUB, what: "unused" }),
       summaryCallDelayMs: 0,
@@ -280,7 +354,7 @@ describe("runBackfill", () => {
     const summarizer = countingSummarizer({ ...PR_STUB, what: "**What changed:** Summary." });
     const fetchImpl = stubFetch([prA, prB, prC], []);
 
-    const firstRun = await runBackfill(envWith(), "admin-user", {
+    const firstRun = await backfill({
       fetchImpl,
       summarizer,
       summaryBatchLimit: 2,
@@ -291,7 +365,7 @@ describe("runBackfill", () => {
     expect(firstRun.prSummarizedCount).toBe(2); // 2 of 3 done so far — the "X of Y" progress bar's numerator
     expect(summarizer.calls).toBe(2);
 
-    const secondRun = await runBackfill(envWith(), "admin-user", {
+    const secondRun = await backfill({
       fetchImpl,
       summarizer,
       summaryBatchLimit: 2,
@@ -309,7 +383,7 @@ describe("runBackfill", () => {
   it("waits summaryCallDelayMs between summarizer calls", async () => {
     const summarizer = countingSummarizer({ ...PR_STUB, what: "**What changed:** Summary." });
     const start = Date.now();
-    await runBackfill(envWith(), "admin-user", {
+    await backfill({
       fetchImpl: stubFetch([prA, prB], []),
       summarizer,
       summaryBatchLimit: 10,
@@ -326,14 +400,14 @@ describe("runBackfill — issue summarization", () => {
     const issueSummarizer = countingSummarizer({ ...ISSUE_STUB, summary: "What the issue is and what to do." });
     const fetchImpl = stubFetch([], [openIssue]);
 
-    const firstRun = await runBackfill(envWith(), "admin-user", {
+    const firstRun = await backfill({
       fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0,
     });
     expect(firstRun.issuesToSummarize).toBe(1);
     expect(firstRun.issueSummarizedCount).toBe(1);
     expect(issueSummarizer.calls).toBe(1);
 
-    const secondRun = await runBackfill(envWith(), "admin-user", {
+    const secondRun = await backfill({
       fetchImpl, summarizer, issueSummarizer, summaryCallDelayMs: 0,
     });
     expect(secondRun.issueSummarizedCount).toBe(1); // already has a real summary → skipped
@@ -346,7 +420,7 @@ describe("runBackfill — issue summarization", () => {
   it("does not count an issue toward issueSummarizedCount when the AI call fails and falls back to excerpt", async () => {
     const nullSummarizer: Summarizer<IssueSummary> = { model: "stub", summarize: async () => null }; // forces the excerpt fallback
     const fetchImpl = stubFetch([], [openIssue]);
-    const firstRun = await runBackfill(envWith(), "admin-user", {
+    const firstRun = await backfill({
       fetchImpl, summarizer: countingSummarizer({ ...PR_STUB, what: "unused" }), issueSummarizer: nullSummarizer, summaryCallDelayMs: 0,
     });
     expect(firstRun.summarized).toBe(1); // the AI call was attempted
@@ -358,7 +432,7 @@ describe("runBackfill — issue summarization", () => {
 
   it("never summarizes an unassigned open issue", async () => {
     const issueSummarizer = countingSummarizer({ ...ISSUE_STUB, summary: "should never be called" });
-    const res = await runBackfill(envWith(), "admin-user", {
+    const res = await backfill({
       fetchImpl: stubFetch([], [unassignedIssue]),
       summarizer: countingSummarizer({ ...PR_STUB, what: "x" }),
       issueSummarizer,
@@ -380,7 +454,7 @@ describe("runBackfill — issue summarization", () => {
     // the budget, the assigned issue is summarized this run — the To-do surface
     // (and the per-Sync AI rate-limit wall, which issues clear well before) is
     // never starved by a PR backlog. PRs take the remaining budget.
-    const firstRun = await runBackfill(envWith(), "admin-user", {
+    const firstRun = await backfill({
       fetchImpl, summarizer, issueSummarizer, summaryBatchLimit: 2, summaryCallDelayMs: 0,
     });
     expect(firstRun.summarized).toBe(2); // budget fully spent: 1 issue + 1 PR
@@ -390,7 +464,7 @@ describe("runBackfill — issue summarization", () => {
     expect(summarizer.calls).toBe(1); // only 1 PR fit in the remaining budget
 
     // A follow-up run clears the remaining PR backlog; the issue is already done.
-    const secondRun = await runBackfill(envWith(), "admin-user", {
+    const secondRun = await backfill({
       fetchImpl, summarizer, issueSummarizer, summaryBatchLimit: 2, summaryCallDelayMs: 0,
     });
     expect(issueSummarizer.calls).toBe(1); // already structured → skipped, not re-called
