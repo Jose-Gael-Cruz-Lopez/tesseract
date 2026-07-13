@@ -1090,9 +1090,18 @@ With the App live + secrets set, merge to `main` (user-authorized) → Workers B
 > unconfigured (the grandfathered bootstrap repo is the sole `connected` repo, so it's the only
 > data that exists). These flat mutation routes MUST be removed or guarded **atomically with App
 > activation — before any second tenant can connect** — not merely "after cutover". Do NOT let a
-> window exist where a second connected repo coexists with the unguarded flat mutations. (For this
-> deployment `ADMIN_LOGINS` is a single login, which incidentally neutralizes the practical
-> exposure, but the sequencing must not rely on that.)
+> window exist where a second connected repo coexists with the unguarded flat mutations.
+>
+> **CORRECTION (Phase B whole-branch review, 2026-07-12):** an earlier draft of this note claimed
+> "`ADMIN_LOGINS` is a single login, which incidentally neutralizes the practical exposure" — that
+> is **FALSE**. `ADMIN_LOGINS` gates ONLY `/admin/backfill`; the other ~10 flat mutations + `/ingest`
+> were session-gated only. Because the login flip (Task 10) opens sessions to ANY GitHub user (the
+> pre-flip `AUTH_ORG="" → isAllowed→isAdmin` invariant that made every session an admin is gone),
+> those flat mutations became reachable by any signed-in user = broken access control. **FIXED
+> in-branch (Task 10 critfix):** every flat mutation route + `/ingest` now carries the same `isAdmin`
+> gate `/admin/backfill` already had, restoring "only an admin can mutate via the flat surface". So
+> the flat mutations are now *guarded*; Task 11's remaining job is *removing* them (with the
+> Mnemosphere dev-sphere read-migration), which is no longer a security blocker.
 
 Once hubs are verified, delete (or 301-redirect to the grandfathered hub) the flat repo-scoped routes in `src/routes.ts` that duplicated hub behavior — `/roadmap`, `/feed`, `/docs`, `/doc/:slug`, `/search`, `/needs-triage`, `/adrs`, `/proposals`, `/milestone-proposals`, `/me/dashboard`, `/ingest`, and the promote/reject/assign/discard/complete POSTs — leaving only the non-hub surfaces (`/auth/*`, `/me/repos`, `/identity-tasks` + map, `/github/app/callback`). Keep `/ingest` reachable for any agent still posting flat until MCP is repo-routed (follow-up). Run `npm test` (update/remove flat-route tests that no longer apply) + `npm run typecheck`.
 

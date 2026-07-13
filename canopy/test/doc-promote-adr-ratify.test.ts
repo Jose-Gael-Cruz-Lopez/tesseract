@@ -70,10 +70,11 @@ async function authedCookie(login: string): Promise<string> {
 }
 
 describe("promote/ratify HTTP routes (session-gated)", () => {
-  it("POST /doc/:slug/promote promotes for an authenticated principal", async () => {
+  it("POST /doc/:slug/promote promotes for an admin principal", async () => {
     // The promote route is wired to defaultRepo(env), so create the doc there too.
     await propose_doc_update(env.DB, { ...base, body: "# v1", change_summary: "first", repo: defaultRepo(env) }, "andres");
-    const cookie = await authedCookie("andres");
+    // admin-gated (Task 10 critfix): "admin-user" is the ADMIN_LOGINS entry in vitest.config.ts.
+    const cookie = await authedCookie("admin-user");
     const res = await app.request(
       "/doc/architecture/promote",
       { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ version: 1 }) },
@@ -92,9 +93,9 @@ describe("promote/ratify HTTP routes (session-gated)", () => {
     expect(adr?.status).toBe("draft"); // unchanged
   });
 
-  it("POST /adr/:id/ratify ratifies for an authenticated principal", async () => {
+  it("POST /adr/:id/ratify ratifies for an admin principal", async () => {
     const id = await stage_adr(env.DB, { title: "t", context: "c", decision: "d", rationale: "r", confidence: "high" }, "andres");
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const res = await app.request(`/adr/${id}/ratify`, { method: "POST", headers: { cookie } }, env);
     expect(res.status).toBe(200);
     const adr = await first<AdrRow>(env.DB, `SELECT * FROM adrs WHERE id = ?`, id);

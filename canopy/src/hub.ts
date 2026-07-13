@@ -14,6 +14,7 @@ import {
 import { docRepo, adrRepo, milestoneProposalRepo, milestoneRepo, triageRepo } from "./tools/repo-ownership";
 import { IngestPayload } from "@shared/contract";
 import { consume } from "./consumer";
+import { runBackfill } from "./tools/backfill";
 
 // Multi-tenant hub router (Phase 3): mounted at /r/:owner/:repo, gated by repoGate on
 // every route. Handlers read the authorized repo via repoOf(c) rather than defaultRepo(env).
@@ -219,6 +220,18 @@ hubApp.post("/needs-triage/:id/assign", async (c) => {
     const res = await assign_triage(c.env.DB, id, c.get("principal").login, { type: body?.type, section: body?.section, space: body?.space, tags: body?.tags });
     return c.json({ ok: true, ...res });
   } catch (e) { return c.json({ error: e instanceof Error ? e.message : String(e) }, 400); }
+});
+
+// ADMIN action, push-gated: server-side GitHub backfill for the gated repo's OWN
+// GitHub App installation — the per-repo counterpart to the flat POST /admin/backfill
+// (routes.ts), which still backs the single-tenant deployment's defaultRepo(env).
+// No id/slug ownership lookup needed: repoOf(c) IS the target, already authorized by
+// the gate above.
+hubApp.post("/admin/backfill", async (c) => {
+  const gate = requirePush(c); if (gate) return gate;
+  const res = await runBackfill(c.env, c.get("principal").login, repoOf(c));
+  if (!res.ok) return c.json({ error: res.error }, 503);
+  return c.json(res);
 });
 
 export default hubApp;

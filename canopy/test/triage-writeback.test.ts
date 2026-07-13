@@ -30,6 +30,8 @@ const docBase = { section: "reference", change_summary: "s", confidence: "high" 
 // ── GET /proposals: server-joined queue ───────────────────────────────────────
 describe("GET /proposals", () => {
   it("returns staged versions newer than the live doc, joined with both bodies + reconciler metadata", async () => {
+    // GET /proposals is a READ — NOT admin-gated (Task 10 critfix gates only mutations), so a
+    // plain non-admin session reads it. The mutation tests below use "admin-user".
     const cookie = await authedCookie("andres");
     // v1 promoted (live), v2 staged as a one-line edit on top (changed/max < 0.5).
     const v1Body = Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n");
@@ -61,7 +63,7 @@ describe("GET /proposals", () => {
 // ── reject doc version ────────────────────────────────────────────────────────
 describe("POST /doc/:slug/reject", () => {
   it("flips a staged version to 'rejected', drops it from /proposals, and never deletes it", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     // The reject route is wired to defaultRepo(env), so create the doc there too.
     await propose_doc_update(env.DB, { ...docBase, slug: "spec", title: "Spec", body: "# draft", repo: defaultRepo(env) }, "andres");
 
@@ -83,7 +85,7 @@ describe("POST /doc/:slug/reject", () => {
   });
 
   it("double-reject is idempotent-safe (no error, still rejected)", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     await propose_doc_update(env.DB, { ...docBase, slug: "idem", title: "Idem", body: "x", repo: defaultRepo(env) }, "andres");
     expect((await post("/doc/idem/reject", cookie, { version: 1 })).status).toBe(200);
     const second = await post("/doc/idem/reject", cookie, { version: 1 });
@@ -105,7 +107,7 @@ describe("POST /doc/:slug/reject", () => {
 // ── reject adr ────────────────────────────────────────────────────────────────
 describe("POST /adr/:id/reject", () => {
   it("flips a draft to 'rejected', drops it from the decisions queue, and never deletes it", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await stage_adr(env.DB, { title: "Use X", context: "c", decision: "d", rationale: "r", confidence: "high" }, "andres");
 
     let drafts = (await getJson<{ adrs: unknown[] }>("/adrs?status=draft", cookie)).adrs;
@@ -123,7 +125,7 @@ describe("POST /adr/:id/reject", () => {
   });
 
   it("double-reject is idempotent-safe; cannot reject a ratified decision", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await stage_adr(env.DB, { title: "T", context: "c", decision: "d", rationale: "r", confidence: "high" }, "andres");
     expect((await post(`/adr/${id}/reject`, cookie)).status).toBe(200);
     expect((await post(`/adr/${id}/reject`, cookie)).status).toBe(200); // idempotent
@@ -146,7 +148,7 @@ const milestoneBase = {
 
 describe("POST /milestone-proposals/:id/reject", () => {
   it("flips a staged proposal to 'rejected', drops it from the queue, and never deletes it", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await stage_milestone_proposal(env.DB, milestoneBase, "andres");
 
     let proposals = (await getJson<{ proposals: unknown[] }>("/milestone-proposals", cookie)).proposals;
@@ -164,7 +166,7 @@ describe("POST /milestone-proposals/:id/reject", () => {
   });
 
   it("double-reject is idempotent-safe; cannot reject a promoted proposal", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await stage_milestone_proposal(env.DB, milestoneBase, "andres");
     expect((await post(`/milestone-proposals/${id}/reject`, cookie)).status).toBe(200);
     expect((await post(`/milestone-proposals/${id}/reject`, cookie)).status).toBe(200); // idempotent
@@ -187,7 +189,7 @@ describe("POST /milestone-proposals/:id/reject", () => {
 // ── discard triage ────────────────────────────────────────────────────────────
 describe("POST /needs-triage/:id/discard", () => {
   it("resolves the item (audit cols set), drops it from /needs-triage, and never deletes it", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await route_triage(env.DB, { raw: "some free text", reason: "out of vocab" });
 
     let items = (await getJson<{ items: unknown[] }>("/needs-triage", cookie)).items;
@@ -203,12 +205,12 @@ describe("POST /needs-triage/:id/discard", () => {
     const row = await first<NeedsTriageRow>(env.DB, `SELECT * FROM needs_triage WHERE id = ?`, id);
     expect(row?.resolved).toBe(1);
     expect(row?.resolution).toBe("discarded");
-    expect(row?.resolved_by).toBe("andres");
+    expect(row?.resolved_by).toBe("admin-user"); // actor = the authenticated (admin) principal
     expect(row?.resolved_at).toBeTruthy();
   });
 
   it("double-discard is idempotent-safe", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const id = await route_triage(env.DB, { raw: "x", reason: "y" });
     expect((await post(`/needs-triage/${id}/discard`, cookie)).status).toBe(200);
     expect((await post(`/needs-triage/${id}/discard`, cookie)).status).toBe(200);
@@ -220,7 +222,7 @@ describe("POST /needs-triage/:id/discard", () => {
 // ── assign-materialize triage ─────────────────────────────────────────────────
 describe("POST /needs-triage/:id/assign", () => {
   it("materializes a REAL doc through the gate AND resolves with assigned_ref (out-of-vocab section, human supplies one)", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     // Triage an out-of-vocab section so it lands in the queue.
     const r = await ingestDocProposal(
       env.DB,
@@ -240,7 +242,7 @@ describe("POST /needs-triage/:id/assign", () => {
     const v = await first<DocVersionRow>(env.DB, `SELECT * FROM doc_versions WHERE slug = 'orphan'`);
     expect(v?.status).toBe("staged");
     expect(v?.change_kind).toBe("new");
-    expect(v?.created_by).toBe("andres"); // author = the authenticated principal, not the agent
+    expect(v?.created_by).toBe("admin-user"); // author = the authenticated (admin) principal, not the agent
 
     // The triage item is resolved (and not deleted).
     const row = await first<NeedsTriageRow>(env.DB, `SELECT * FROM needs_triage WHERE id = ?`, id);
@@ -250,7 +252,7 @@ describe("POST /needs-triage/:id/assign", () => {
   });
 
   it("a low-confidence-new doc assigns successfully (the human's assignment vouches for it)", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const r = await ingestDocProposal(
       env.DB,
       { slug: "shy", section: "reference", body: "tentative", change_summary: "s", confidence: "low" },
@@ -266,7 +268,7 @@ describe("POST /needs-triage/:id/assign", () => {
   });
 
   it("double-assign is idempotent-safe: no second version is materialized", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     await ingestDocProposal(
       env.DB,
       { slug: "twice", section: "bogus", body: "b", change_summary: "s", confidence: "high" },
@@ -281,7 +283,7 @@ describe("POST /needs-triage/:id/assign", () => {
   });
 
   it("refuses (400) to place a doc with no valid section, leaving no stray triage row and no doc", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     await ingestDocProposal(
       env.DB,
       { slug: "nope", section: "still-bogus", body: "b", change_summary: "s", confidence: "high" },
@@ -306,7 +308,7 @@ describe("POST /needs-triage/:id/assign", () => {
   });
 
   it("assign on an already-discarded item reports resolution:'discarded', not 'assigned'", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     // Triage a free-form item (cannot be placed via assign — but first we discard it).
     const id = await route_triage(env.DB, { raw: "some free text", reason: "out of vocab" });
 

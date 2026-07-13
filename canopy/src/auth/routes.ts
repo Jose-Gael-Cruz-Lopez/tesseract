@@ -1,15 +1,10 @@
 import { Hono } from "hono";
-import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { AppEnv } from "./principal";
-import { isAdmin, isAllowed } from "./principal";
-import { pkce, randomToken, hmacSeal, hmacUnseal } from "./crypto";
-import { buildAuthorizeUrl, exchangeCode, getUser } from "./github";
-import { createSession, setSessionCookie, readSessionCookie, deleteSession, clearSessionCookie } from "./session";
+import { isAdmin } from "./principal";
+import { readSessionCookie, deleteSession, clearSessionCookie } from "./session";
 import { mintToken } from "./tokens";
-import { first, run, nowIso } from "../db";
-
-const OAUTH_TX_COOKIE = "oauth_tx";
-const OAUTH_RETURN_COOKIE = "oauth_return";
+import { first } from "../db";
+import { startAppLogin, finishAppLogin } from "./app-login";
 
 /**
  * A safe same-origin post-login return path. Must be a relative path (starts with
@@ -39,52 +34,28 @@ export function callbackUrl(reqUrl: string): string {
 
 export const authApp = new Hono<AppEnv>();
 
-// PUBLIC: start the OAuth dance.
-authApp.get("/login", async (c) => {
-  const state = randomToken(16);
-  const { verifier, challenge } = await pkce();
-  const sealed = await hmacSeal(`${state}.${verifier}`, c.env.COOKIE_SECRET);
-  setCookie(c, OAUTH_TX_COOKIE, sealed, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
-  // Where to land after the round-trip: "/" for the app, "/admin/" for the admin UI.
-  const ret = safeReturnPath(c.req.query("return"));
-  setCookie(c, OAUTH_RETURN_COOKIE, ret, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
-  return c.redirect(
-    buildAuthorizeUrl({ clientId: c.env.GITHUB_CLIENT_ID, redirectUri: callbackUrl(c.req.url), state, challenge }),
-    302
-  );
-});
+// PUBLIC (Phase 3 flip, Task 10): sign-in via the GitHub App user-authorization flow —
+// delegates to startAppLogin (src/auth/app-login.ts). Authorizes with THIS path's own
+// callbackUrl (/auth/callback, defined above and registered on the App) rather than
+// app-login's own default alias (/auth/app/callback, below): exchangeUserCode sends no
+// redirect_uri at token-exchange time, so the authorize-time redirect_uri never has to
+// match anything at exchange — it only has to be ONE of the App's registered callback
+// URLs, and both /auth/callback and /auth/app/callback are registered. The old OAuth
+// dance (PKCE, buildAuthorizeUrl/exchangeCode, GITHUB_CLIENT_ID) is retired from this path.
+authApp.get("/login", (c) => startAppLogin(c, { callbackUrl }));
 
-// PUBLIC: finish the OAuth dance; create a session only for active org members.
-authApp.get("/callback", async (c) => {
-  const code = c.req.query("code");
-  const state = c.req.query("state");
-  const sealedTx = getCookie(c, OAUTH_TX_COOKIE);
-  deleteCookie(c, OAUTH_TX_COOKIE, { path: "/" });
-  const ret = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE));
-  deleteCookie(c, OAUTH_RETURN_COOKIE, { path: "/" });
-  if (!code || !state || !sealedTx) return c.json({ error: "invalid_request" }, 400);
+// PUBLIC (Phase 3 flip, Task 10): finish the App sign-in — delegates to finishAppLogin.
+// No org gate: the old isAllowed/isActiveOrgMember check is retired from the login path,
+// so any GitHub user who completes the exchange gets a session (isAdmin still gates admin
+// actions elsewhere, e.g. the backfill route). finishAppLogin doesn't care which callback
+// path invoked it (code/state/cookies only), so no parameterization is needed here.
+authApp.get("/callback", (c) => finishAppLogin(c));
 
-  const tx = await hmacUnseal(sealedTx, c.env.COOKIE_SECRET);
-  if (!tx) return c.json({ error: "bad_state" }, 403);
-  const [txState, verifier] = tx.split(".");
-  if (txState !== state) return c.json({ error: "state_mismatch" }, 403);
-
-  const token = await exchangeCode({ env: c.env, code, redirectUri: callbackUrl(c.req.url), verifier });
-  if (!token) return c.json({ error: "exchange_failed" }, 401);
-
-  const ghUser = await getUser(token);
-  if (!ghUser) return c.json({ error: "identity_failed" }, 401);
-  if (!(await isAllowed(c.env, token, ghUser.login))) return c.redirect(`${ret}${ret.includes("?") ? "&" : "?"}denied=1`, 302);
-
-  await run(c.env.DB,
-    `INSERT INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(github_login) DO UPDATE SET name = excluded.name, avatar_url = excluded.avatar_url`,
-    ghUser.login, ghUser.name, ghUser.avatar_url, nowIso());
-
-  const { id } = await createSession(c.env.DB, ghUser.login);
-  await setSessionCookie(c, id, c.env.COOKIE_SECRET);
-  return c.redirect(ret, 302);
-});
+// PUBLIC: the same App user-authorization sign-in as /login + /callback above, kept as an
+// alias under its own registered callback (/auth/app/callback) — useful for verifying the
+// App flow independent of the primary path. See src/auth/app-login.ts.
+authApp.get("/app/login", (c) => startAppLogin(c));
+authApp.get("/app/callback", (c) => finishAppLogin(c));
 
 // GATED (by sessionGate in src/routes.ts): return the principal's profile.
 authApp.get("/me", async (c) => {

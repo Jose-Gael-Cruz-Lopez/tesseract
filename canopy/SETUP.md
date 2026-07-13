@@ -69,10 +69,15 @@ npm exec wrangler secret put COOKIE_SECRET          # any long random string, e.
 Optional (features degrade gracefully if absent):
 
 ```bash
-npm exec wrangler secret put GITHUB_SERVICE_TOKEN   # GitHub PAT with repo read — live roadmap progress
 npm exec wrangler secret put GEMINI_API_KEY         # Google Gemini key — PR/issue summaries (else excerpt fallback)
 npm exec wrangler secret put GITHUB_WEBHOOK_SECRET  # HMAC secret if you wire the GitHub webhook (/webhook/github)
 ```
+
+Live roadmap progress (the scheduled recompute + the admin backfill) no longer uses a
+standalone service token — it authenticates per connected repo via the GitHub App's own
+installation tokens (`GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`; see the GitHub App setup
+docs for connect-your-repos). Absent an App install for a repo, those two features simply
+no-op / 503 for it — everything else still works.
 
 ## 6. Set your repo + who can log in (`wrangler.toml` `[vars]`)
 

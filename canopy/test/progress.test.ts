@@ -28,10 +28,15 @@ async function sign(secret: string, body: string): Promise<string> {
   return "sha256=" + [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function seedMilestone(githubRef: string | null, title = "M"): Promise<number> {
+// `repo` defaults to "o/r" — the repo every recomputeAllProgress call in this file
+// targets, so a scoped `WHERE repo = ?` matches the seeded row without every caller
+// needing to pass it explicitly (applyEventProgress's queries aren't repo-scoped, so
+// callers that only exercise that path are unaffected by this default either way).
+async function seedMilestone(githubRef: string | null, title = "M", repo = "o/r"): Promise<number> {
   const res = await run(
     env.DB,
-    `INSERT INTO milestones (title, target_date, status, github_ref, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO milestones (repo, title, target_date, status, github_ref, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    repo,
     title,
     "2026-08-01",
     "in_progress",
@@ -181,20 +186,22 @@ describe("default export scheduled() — the recompute backstop wiring", () => {
   const ctx = { waitUntil() {}, passThroughException() {} } as unknown as ExecutionContext;
   const controller = {} as ScheduledController;
 
-  it("no-ops without GITHUB_SERVICE_TOKEN or GITHUB_REPO (never throws)", async () => {
+  it("no-ops without GITHUB_APP_ID or GITHUB_APP_PRIVATE_KEY (never throws)", async () => {
     await seedMilestone("5"); // would be a recompute candidate if the guard didn't short-circuit
-    const noToken = { ...env, GITHUB_SERVICE_TOKEN: undefined, GITHUB_REPO: "o/r" } as unknown as Env;
-    await worker.scheduled(controller, noToken, ctx);
+    const noAppId = { ...env, GITHUB_APP_ID: undefined, GITHUB_APP_PRIVATE_KEY: "unused-pem" } as unknown as Env;
+    await worker.scheduled(controller, noAppId, ctx);
     expect(await all(env.DB, `SELECT * FROM milestone_progress`)).toHaveLength(0);
 
-    const noRepo = { ...env, GITHUB_SERVICE_TOKEN: "svc-token", GITHUB_REPO: undefined } as unknown as Env;
-    await worker.scheduled(controller, noRepo, ctx);
+    const noKey = { ...env, GITHUB_APP_ID: "12345", GITHUB_APP_PRIVATE_KEY: undefined } as unknown as Env;
+    await worker.scheduled(controller, noKey, ctx);
     expect(await all(env.DB, `SELECT * FROM milestone_progress`)).toHaveLength(0);
   });
 
-  it("with a token and repo set, delegates to recomputeAllProgress (no candidates → no network, no rows)", async () => {
-    const withToken = { ...env, GITHUB_SERVICE_TOKEN: "svc-token", GITHUB_REPO: "o/r" } as unknown as Env;
-    await worker.scheduled(controller, withToken, ctx); // no github_ref milestones seeded → resolves without a real fetch
+  it("with the App configured, delegates to recomputeConnectedRepos (no connected+installed repos → no network, no rows)", async () => {
+    const withApp = { ...env, GITHUB_APP_ID: "12345", GITHUB_APP_PRIVATE_KEY: "unused-pem" } as unknown as Env;
+    // No repos row is connected with an installation_id, so recomputeConnectedRepos's
+    // SELECT returns nothing — the loop body (token mint + GitHub fetch) never runs.
+    await worker.scheduled(controller, withApp, ctx);
     expect(await all(env.DB, `SELECT * FROM milestone_progress`)).toHaveLength(0);
   });
 });

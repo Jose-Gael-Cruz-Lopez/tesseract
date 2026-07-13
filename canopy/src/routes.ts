@@ -44,7 +44,15 @@ app.get("/github/app/callback", async (c) => {
 // the flat defaultRepo routes below until the UI cutover.
 app.route("/r/:owner/:repo", hubApp);
 
+// ADMIN gate on the flat MUTATION routes (this + every POST below through
+// /milestones/:id/complete). Restores the pre-flip invariant: before Task 10 opened
+// /auth/login to any GitHub user, AUTH_ORG="" meant the login gate WAS isAdmin, so every
+// session was an admin — these single-tenant routes leaned on that. Post-flip a session no
+// longer implies admin, so each mutation re-checks isAdmin explicitly (same 403 shape as
+// /admin/backfill). Reads stay session-accessible; the /r/ hub routes keep their own push-gate.
 app.post("/ingest", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const json = await c.req.json().catch(() => null);
   const parsed = IngestPayload.safeParse(json);
   if (!parsed.success) {
@@ -119,11 +127,13 @@ app.get("/proposals", async (c) => c.json({ proposals: await list_proposals(c.en
 
 // Human confirmation (session-gated): promote a staged doc version into the live doc.
 app.post("/doc/:slug/promote", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const body = await c.req.json().catch(() => null);
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
   try {
-    const res = await promote_doc(c.env.DB, c.req.param("slug"), version, c.get("principal").login, defaultRepo(c.env));
+    const res = await promote_doc(c.env.DB, c.req.param("slug"), version, login, defaultRepo(c.env));
     return c.json({ ok: true, ...res });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -133,6 +143,8 @@ app.post("/doc/:slug/promote", async (c) => {
 // Human write-back (session-gated): reject a staged doc version. Soft status flip
 // to 'rejected' so it leaves the proposals queue; the row + body remain.
 app.post("/doc/:slug/reject", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const body = await c.req.json().catch(() => null);
   const version = Number(body?.version);
   if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
@@ -146,6 +158,8 @@ app.post("/doc/:slug/reject", async (c) => {
 
 // Human confirmation (session-gated): ratify an ADR draft.
 app.post("/adr/:id/ratify", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
@@ -159,6 +173,8 @@ app.post("/adr/:id/ratify", async (c) => {
 // Human write-back (session-gated): reject an ADR draft. Soft flip to 'rejected'
 // so it leaves the decisions queue; the row remains.
 app.post("/adr/:id/reject", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
@@ -172,10 +188,12 @@ app.post("/adr/:id/reject", async (c) => {
 // Human write-back (session-gated): discard a triage item. Soft — sets the audit
 // columns + resolved flag so it leaves the queue; never a hard-delete.
 app.post("/needs-triage/:id/discard", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
-    const res = await resolve_triage(c.env.DB, id, c.get("principal").login, "discarded");
+    const res = await resolve_triage(c.env.DB, id, login, "discarded");
     return c.json({ ok: true, ...res });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -186,13 +204,15 @@ app.post("/needs-triage/:id/discard", async (c) => {
 // item's `raw` through the SAME gate for the chosen target type, then resolves it
 // as 'assigned' with assigned_ref. The author is the authenticated principal.
 app.post("/needs-triage/:id/assign", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   const body = (await c.req.json().catch(() => ({}))) as {
     type?: AssignType; section?: string; space?: "sapling" | "canopy"; tags?: string[];
   } | null;
   try {
-    const res = await assign_triage(c.env.DB, id, c.get("principal").login, {
+    const res = await assign_triage(c.env.DB, id, login, {
       type: body?.type,
       section: body?.section,
       space: body?.space,
@@ -216,11 +236,13 @@ app.get("/identity-tasks", async (c) => c.json({ tasks: await list_identity_task
 // then a soft resolve of the task. My Work picks the mapping up at read time,
 // so every already-captured event for this login surfaces with no backfill.
 app.post("/identity-tasks/:login/map", async (c) => {
+  const login = c.get("principal").login; // the admin ACTOR; the mapped subject is c.req.param("login")
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const body = (await c.req.json().catch(() => null)) as { person?: string } | null;
   const person = typeof body?.person === "string" ? body.person.trim() : "";
   if (!person) return c.json({ error: "person (non-empty string) required" }, 400);
   try {
-    const res = await map_identity(c.env.DB, c.req.param("login"), person, c.get("principal").login);
+    const res = await map_identity(c.env.DB, c.req.param("login"), person, login);
     return c.json({ ok: true, ...res });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -259,10 +281,12 @@ app.get("/me/repos", async (c) => {
 
 // Human confirmation (session-gated): promote a staged milestone proposal into a live milestone.
 app.post("/milestone-proposals/:id/promote", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
-    const milestone = await promote_milestone_proposal(c.env.DB, id, c.get("principal").login);
+    const milestone = await promote_milestone_proposal(c.env.DB, id, login);
     return c.json({ ok: true, milestone });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -272,6 +296,8 @@ app.post("/milestone-proposals/:id/promote", async (c) => {
 // Human write-back (session-gated): reject a staged milestone proposal. Soft flip to
 // 'rejected' so it leaves the milestones queue; the row remains. Idempotent.
 app.post("/milestone-proposals/:id/reject", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
@@ -282,20 +308,24 @@ app.post("/milestone-proposals/:id/reject", async (c) => {
   }
 });
 
-// ADMIN action (session-gated + admin-gated): server-side GitHub backfill.
-// A computed/authored direct writer in the promote class — humans (admins)
-// trigger it — but every captured event still funnels through the ingestEvent
-// gate fn. Non-admins get 403; a missing service token/repo → 503 with the error.
+// ADMIN action (session-gated + admin-gated): server-side GitHub backfill for the
+// single-tenant flat deployment's configured GITHUB_REPO. A computed/authored direct
+// writer in the promote class — humans (admins) trigger it — but every captured event
+// still funnels through the ingestEvent gate fn. Non-admins get 403; an unconnected
+// repo / one with no installation → 503 with the error. (The hub equivalent —
+// POST /r/:owner/:repo/admin/backfill, push-gated — lives in src/hub.ts.)
 app.post("/admin/backfill", async (c) => {
   const login = c.get("principal").login;
   if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const res = await runBackfill(c.env, login);
+  const res = await runBackfill(c.env, login, defaultRepo(c.env));
   if (!res.ok) return c.json({ error: res.error }, 503);
   return c.json(res);
 });
 
 // Human confirmation (session-gated): flip a live milestone to 'done'.
 app.post("/milestones/:id/complete", async (c) => {
+  const login = c.get("principal").login;
+  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   try {
