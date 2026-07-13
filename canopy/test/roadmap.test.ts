@@ -175,10 +175,11 @@ describe("roadmap HTTP routes (session-gated)", () => {
     expect(body.milestones[0].progress).toEqual({ closed: 4, total: 6, computed_at: expect.any(String) });
   });
 
-  it("POST /milestones/:id/complete flips status for an authenticated principal", async () => {
+  it("POST /milestones/:id/complete flips status for an admin principal", async () => {
     const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
     const m = await promote_milestone_proposal(env.DB, pid, "andres");
-    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await cookieFor("andres") } }, env);
+    // admin-gated mutation (Task 10 critfix): "admin-user" is the ADMIN_LOGINS entry in vitest.config.ts.
+    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await cookieFor("admin-user") } }, env);
     expect(res.status).toBe(200);
     const row = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, m.id);
     expect(row?.status).toBe("done");
@@ -186,9 +187,24 @@ describe("roadmap HTTP routes (session-gated)", () => {
 
   it("POST /milestone-proposals/:id/promote materializes a live milestone", async () => {
     const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "upcoming", change_summary: "s", confidence: "high" }, "andres");
-    const res = await app.request(`/milestone-proposals/${pid}/promote`, { method: "POST", headers: { cookie: await cookieFor("andres") } }, env);
+    const res = await app.request(`/milestone-proposals/${pid}/promote`, { method: "POST", headers: { cookie: await cookieFor("admin-user") } }, env);
     expect(res.status).toBe(200);
     expect(await all<MilestoneRow>(env.DB, `SELECT * FROM milestones`)).toHaveLength(1);
+  });
+
+  // Task 10 critfix — the flat mutation routes are admin-gated now that /auth/login is open to
+  // any GitHub user. This is the representative NEGATIVE: a valid but NON-admin session is 403'd
+  // and mutates nothing. Fail-when-broken: delete the isAdmin gate on /milestones/:id/complete
+  // and this 403 becomes a 200 (the milestone flips to done).
+  it("POST /milestones/:id/complete is 403 for a NON-admin session and does not mutate", async () => {
+    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
+    const m = await promote_milestone_proposal(env.DB, pid, "andres");
+    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await cookieFor("not-admin") } }, env);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "admin only" });
+    // Fails closed: the milestone was NOT completed.
+    const row = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, m.id);
+    expect(row?.status).toBe("in_progress");
   });
 });
 

@@ -81,7 +81,9 @@ describe("GET /identity-tasks", () => {
 
 describe("POST /identity-tasks/:login/map", () => {
   it("maps the login, resolves the task, and drops it from the pending list", async () => {
-    const cookie = await authedCookie("andres");
+    // POST /identity-tasks/:login/map is admin-gated (Task 10 critfix); "admin-user" is the
+    // ADMIN_LOGINS entry in vitest.config.ts. GET /identity-tasks above stays any-session.
+    const cookie = await authedCookie("admin-user");
     await ingestEvent(env.DB, prEvent(1, "mystery-dev", "t", "2026-07-01T10:00:00Z"), "github-webhook");
 
     const res = await post("/identity-tasks/mystery-dev/map", cookie, { person: "Casey" });
@@ -93,11 +95,12 @@ describe("POST /identity-tasks/:login/map", () => {
     expect(tasks.length).toBe(0); // leaves the queue
     const row = await first<IdentityTaskRow>(env.DB, `SELECT * FROM identity_tasks WHERE login = 'mystery-dev'`);
     expect(row?.status).toBe("resolved"); // soft — the row remains
-    expect(row?.resolved_by).toBe("andres");
+    expect(row?.resolved_by).toBe("admin-user"); // actor = the authenticated (admin) principal
   });
 
   it("400 on a missing/empty person and on an unknown login", async () => {
-    const cookie = await authedCookie("andres");
+    // admin cookie so the request clears the admin gate and reaches the 400 validation.
+    const cookie = await authedCookie("admin-user");
     await ingestEvent(env.DB, prEvent(1, "mystery-dev", "t", "2026-07-01T10:00:00Z"), "github-webhook");
     expect((await post("/identity-tasks/mystery-dev/map", cookie, {})).status).toBe(400);
     expect((await post("/identity-tasks/mystery-dev/map", cookie, { person: "   " })).status).toBe(400);
@@ -115,7 +118,7 @@ describe("POST /identity-tasks/:login/map", () => {
   // resolves login→person at READ time, so one people row surfaces all of the
   // login's already-captured events with no backfill job.
   it("retroactively surfaces already-captured events in My Work — no backfill", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user"); // admin-gated map route (Task 10 critfix)
     // Computed relative to the real clock (not fixed 2026-07-01/02 dates) so this
     // test never goes red once the real date passes getMyWork's 14-day recency
     // window. Do not pass getMyWork's opts.now here — that parameter is being

@@ -69,9 +69,13 @@ async function postIngest(
   );
 }
 
+// POST /ingest is admin-gated (Task 10 critfix — flat mutation routes require isAdmin now
+// that login is open to any GitHub user). "admin-user" is the ADMIN_LOGINS entry pinned in
+// vitest.config.ts, so every happy-path request below signs in as it. (Agent ingestion is
+// unaffected: agents ingest over the bearer-gated MCP record_session tool, not this route.)
 describe("live POST /ingest route", () => {
   it("200 with IngestResult counts and rows land in D1", async () => {
-    const cookie = await authedCookie("agent-user");
+    const cookie = await authedCookie("admin-user");
 
     // This hits the live route (src/routes.ts `app.post("/ingest", ...)`),
     // exercising IngestPayload.safeParse and routing through consume().
@@ -106,12 +110,12 @@ describe("live POST /ingest route", () => {
 
     const feed = await all<FeedRow>(env.DB, `SELECT * FROM feed`);
     expect(feed.length).toBe(1);
-    expect(feed[0].author).toBe("agent-user"); // author = authenticated principal, not advisory
+    expect(feed[0].author).toBe("admin-user"); // author = authenticated principal, not advisory
     expect(feed[0].summary).toBe("shipped route test");
   });
 
   it("replay: same session.id returns all-unchanged with zero new rows", async () => {
-    const cookie = await authedCookie("agent-user");
+    const cookie = await authedCookie("admin-user");
     const payload = makePayload("ingest-route-replay-S2");
 
     // First POST.
@@ -152,7 +156,7 @@ describe("live POST /ingest route", () => {
   });
 
   it("400 when the payload fails IngestPayload.safeParse (invalid JSON shape)", async () => {
-    const cookie = await authedCookie("agent-user");
+    const cookie = await authedCookie("admin-user");
     // Missing required `session` field — safeParse will fail.
     const res = await postIngest({ not_valid: true }, cookie);
     expect(res.status).toBe(400);
@@ -162,7 +166,7 @@ describe("live POST /ingest route", () => {
   });
 
   it("narrows the contract: a payload still carrying milestone_proposals/focus (legacy keys, the latter's table now dropped entirely) is 200'd (stripped by zod), and writes zero rows to the milestone_proposals table", async () => {
-    const cookie = await authedCookie("agent-user");
+    const cookie = await authedCookie("admin-user");
     const payload = {
       session: {
         id: "ingest-route-narrow-S1",
