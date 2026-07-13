@@ -51,13 +51,3 @@ export async function getUser(token: string): Promise<{ login: string; name: str
   const data = (await res.json()) as { login?: string; name?: string | null; avatar_url?: string | null };
   return data.login ? { login: data.login, name: data.name ?? null, avatar_url: data.avatar_url ?? null } : null;
 }
-
-/** True only if the token's owner is an ACTIVE member of `org`. */
-export async function isActiveOrgMember(token: string, org: string): Promise<boolean> {
-  const res = await fetch(`https://api.github.com/user/memberships/orgs/${org}`, {
-    headers: { authorization: `Bearer ${token}`, accept: GH_API, "user-agent": USER_AGENT },
-  });
-  if (!res.ok) return false; // 404 => not a member
-  const data = (await res.json()) as { state?: string };
-  return data.state === "active"; // a pending invite does not count
-}
