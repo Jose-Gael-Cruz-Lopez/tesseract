@@ -282,14 +282,16 @@ app.post("/milestone-proposals/:id/reject", async (c) => {
   }
 });
 
-// ADMIN action (session-gated + admin-gated): server-side GitHub backfill.
-// A computed/authored direct writer in the promote class — humans (admins)
-// trigger it — but every captured event still funnels through the ingestEvent
-// gate fn. Non-admins get 403; a missing service token/repo → 503 with the error.
+// ADMIN action (session-gated + admin-gated): server-side GitHub backfill for the
+// single-tenant flat deployment's configured GITHUB_REPO. A computed/authored direct
+// writer in the promote class — humans (admins) trigger it — but every captured event
+// still funnels through the ingestEvent gate fn. Non-admins get 403; an unconnected
+// repo / one with no installation → 503 with the error. (The hub equivalent —
+// POST /r/:owner/:repo/admin/backfill, push-gated — lives in src/hub.ts.)
 app.post("/admin/backfill", async (c) => {
   const login = c.get("principal").login;
   if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const res = await runBackfill(c.env, login);
+  const res = await runBackfill(c.env, login, defaultRepo(c.env));
   if (!res.ok) return c.json({ error: res.error }, 503);
   return c.json(res);
 });
