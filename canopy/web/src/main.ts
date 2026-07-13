@@ -908,12 +908,14 @@ if (new URLSearchParams(location.search).get("denied") === "1") {
       state.me = me;
       state.displayName = me.name ?? me.login;
       state.view = "app";
-      // DORMANT hub-list (Phase 3, Task 6): only force the hubs screen when the
-      // ?hubs query flag is present. Without it, boot is byte-for-byte the
-      // existing flat-screen path — a later task flips this to the real default.
-      const hubsRequested = new URLSearchParams(location.search).has("hubs");
+      // Hub-list default (Phase 3, Task 10 flip): land on "hubs" whenever there's no
+      // active repo — state.activeRepo starts null every boot (no repo-restoration
+      // mechanism exists yet), so today this unconditionally defaults to "hubs"; once a
+      // repo is remembered across reloads, a returning user deep-links straight to their
+      // screen via the URL hash instead. Replaces the Task 6 ?hubs query-flag gate, which
+      // forced "hubs" only when that flag was present.
       // Restore the screen from the URL hash (reload stays put) instead of always My Work.
-      state.screen = hubsRequested ? "hubs" : screenFromHash();
+      state.screen = state.activeRepo === null ? "hubs" : screenFromHash();
       loadForScreen(state.screen);
       // Boot-time loads for the sidebar triage badges — the counts must be
       // right on every screen, not just after visiting Review/Maintenance.

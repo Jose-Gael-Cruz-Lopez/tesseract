@@ -26,13 +26,22 @@ function appCallbackUrl(reqUrl: string): string {
   return callbackUrl(reqUrl).replace(/\/auth\/callback$/, "/auth/app/callback");
 }
 
-export async function startAppLogin(c: Context<AppEnv>): Promise<Response> {
+/**
+ * Start the App user-authorization dance. `opts.callbackUrl` picks which registered
+ * callback path the authorize redirect targets — default is `/auth/app/callback`
+ * (this function's own alias path). `/auth/login` (Task 10 flip) passes routes.ts's
+ * `callbackUrl` instead, so IT authorizes with `/auth/callback`. Token exchange
+ * (exchangeUserCode) sends no redirect_uri, so the two paths never need to match each
+ * other — each just has to be ONE of the App's registered callback URLs, and both are.
+ */
+export async function startAppLogin(c: Context<AppEnv>, opts?: { callbackUrl?: (reqUrl: string) => string }): Promise<Response> {
   if (!c.env.GITHUB_APP_CLIENT_ID) return c.json({ error: "app_not_configured" }, 503);
   const state = randomToken(16);
   const sealed = await hmacSeal(state, c.env.COOKIE_SECRET);
   setCookie(c, TX, sealed, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
   setCookie(c, RET, safeReturnPath(c.req.query("return")), { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
-  return c.redirect(buildAppAuthorizeUrl({ clientId: c.env.GITHUB_APP_CLIENT_ID, redirectUri: appCallbackUrl(c.req.url), state }), 302);
+  const redirectUri = (opts?.callbackUrl ?? appCallbackUrl)(c.req.url);
+  return c.redirect(buildAppAuthorizeUrl({ clientId: c.env.GITHUB_APP_CLIENT_ID, redirectUri, state }), 302);
 }
 
 export async function finishAppLogin(c: Context<AppEnv>): Promise<Response> {
