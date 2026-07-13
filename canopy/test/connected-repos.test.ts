@@ -3,20 +3,10 @@ import { describe, it, expect } from "vitest";
 import { listAccessibleConnectedRepos } from "../src/tools/connected";
 import { run, nowIso } from "../src/db";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 import type { Env } from "../src/env";
 
 const LOGIN = "alice";
-
-// Mirrors cookieFor in roadmap.test.ts / hub-routes.test.ts / dashboard-route.test.ts.
-async function cookieFor(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
 
 describe("listAccessibleConnectedRepos", () => {
   it("returns the intersection of GitHub-accessible and connected repos, enforcing the collaborator boundary from the GitHub side", async () => {
@@ -54,8 +44,8 @@ describe("listAccessibleConnectedRepos", () => {
 });
 
 // The real HTTP surface, wired through the flat session-gated app (no injected
-// opts — exercises the actual getUserToken + repos-table wiring). Mirrors the
-// cookieFor auth pattern from roadmap.test.ts / hub-routes.test.ts.
+// opts — exercises the actual getUserToken + repos-table wiring). Uses the shared
+// authedCookie helper (test/helpers/session.ts).
 describe("GET /me/repos (session-gated)", () => {
   it("401s without a session", async () => {
     const res = await app.request("/me/repos", {}, env);
@@ -66,7 +56,7 @@ describe("GET /me/repos (session-gated)", () => {
     // No row in user_tokens for LOGIN → getUserToken resolves null → the real
     // (un-injected) route path short-circuits to an empty list without ever
     // reaching the network (accessibleRepos is never called).
-    const res = await app.request("/me/repos", { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    const res = await app.request("/me/repos", { headers: { cookie: await authedCookie(LOGIN) } }, env);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { repos: Array<{ repo: string; can_push: boolean }>; appSlug: string | null };
     expect(body.repos).toEqual([]);

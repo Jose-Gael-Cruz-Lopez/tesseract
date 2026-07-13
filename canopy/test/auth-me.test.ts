@@ -1,16 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
-
-async function authedCookie(login: string, avatarUrl?: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, ?, ?)`
-  ).bind(login, login, avatarUrl ?? null, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
+import { authedCookie } from "./helpers/session";
 
 describe("GET /auth/me", () => {
   it("returns login, name, org, and null avatar_url when not set", async () => {

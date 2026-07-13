@@ -4,8 +4,7 @@ import { propose_doc_update, stage_adr, promote_doc, ratify_adr } from "../src/t
 import { first, defaultRepo } from "../src/db";
 import type { DocRow, DocVersionRow, AdrRow } from "@shared/rows";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 
 const base = { slug: "architecture", section: "reference", title: "Architecture", confidence: "high" as const };
 
@@ -60,14 +59,6 @@ describe("ratify_adr", () => {
     await expect(ratify_adr(env.DB, id)).rejects.toThrow();
   });
 });
-
-async function authedCookie(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
 
 describe("promote/ratify HTTP routes (session-gated)", () => {
   it("POST /doc/:slug/promote promotes for an admin principal", async () => {

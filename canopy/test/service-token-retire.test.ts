@@ -5,8 +5,7 @@ import { run, first, nowIso } from "../src/db";
 import type { MilestoneProgressRow } from "@shared/rows";
 import { app } from "../src/routes";
 import { _hubTestHooks, _resetHubTestHooks } from "../src/hub";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 
 // Task 9: retire the single app-level GITHUB_SERVICE_TOKEN in favor of per-connected-repo
 // GitHub App installation tokens for the scheduled progress recompute + the admin backfill.
@@ -42,14 +41,6 @@ describe("POST /r/:owner/:repo/admin/backfill (push-gated hub route)", () => {
   const LOGIN = "octocat";
   const REPO = "octo/hub-backfill";
 
-  async function cookieFor(login: string): Promise<string> {
-    await env.DB.prepare(
-      `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-    ).bind(login, login, "2026-01-01T00:00:00Z").run();
-    const { id } = await createSession(env.DB, login);
-    return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-  }
-
   async function connect(repo: string, installationId: number | null): Promise<void> {
     await run(
       env.DB,
@@ -69,7 +60,7 @@ describe("POST /r/:owner/:repo/admin/backfill (push-gated hub route)", () => {
     _hubTestHooks.listRepos = [{ repo: REPO, can_push: false }]; // read-only collaborator
     const res = await app.request(
       `/r/octo/hub-backfill/admin/backfill`,
-      { method: "POST", headers: { cookie: await cookieFor(LOGIN) } },
+      { method: "POST", headers: { cookie: await authedCookie(LOGIN) } },
       env
     );
     expect(res.status).toBe(403);
@@ -81,7 +72,7 @@ describe("POST /r/:owner/:repo/admin/backfill (push-gated hub route)", () => {
     _hubTestHooks.listRepos = [{ repo: REPO, can_push: true }];
     const res = await app.request(
       `/r/octo/hub-backfill/admin/backfill`,
-      { method: "POST", headers: { cookie: await cookieFor(LOGIN) } },
+      { method: "POST", headers: { cookie: await authedCookie(LOGIN) } },
       env
     );
     // The route passes no fetchImpl/installationTokenImpl (it's a real HTTP surface),
@@ -101,7 +92,7 @@ describe("POST /r/:owner/:repo/admin/backfill (push-gated hub route)", () => {
     _hubTestHooks.listRepos = [{ repo: REPO, can_push: true }]; // reachable on GitHub, but never connected
     const res = await app.request(
       `/r/octo/hub-backfill/admin/backfill`,
-      { method: "POST", headers: { cookie: await cookieFor(LOGIN) } },
+      { method: "POST", headers: { cookie: await authedCookie(LOGIN) } },
       env
     );
     expect(res.status).toBe(404);

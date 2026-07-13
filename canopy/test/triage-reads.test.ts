@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 import {
   route_triage,
   stage_adr,
@@ -15,14 +14,6 @@ import {
   list_adrs,
   list_milestone_proposals,
 } from "../src/tools/reads";
-
-async function authedCookie(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
 
 // ---------------------------------------------------------------------------
 // 2. list_needs_triage
