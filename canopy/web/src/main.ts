@@ -893,41 +893,37 @@ mount.addEventListener("input", (e) => {
 });
 
 // ── boot: detect session via /auth/me ────────────────────────────────────────
-if (new URLSearchParams(location.search).get("denied") === "1") {
-  // Non-member: /auth/callback redirected here after org check failed
-  state.view = "auth";
-  state.authStep = "nonmember";
-  rerender();
-} else {
-  // Show "verifying" while we check if a session cookie exists
-  state.view = "auth";
-  state.authStep = "verifying";
-  rerender();
-  getMe()
-    .then((me) => {
-      state.me = me;
-      state.displayName = me.name ?? me.login;
-      state.view = "app";
-      // Hub-list default (Phase 3, Task 10 flip): land on "hubs" whenever there's no
-      // active repo — state.activeRepo starts null every boot (no repo-restoration
-      // mechanism exists yet), so today this unconditionally defaults to "hubs"; once a
-      // repo is remembered across reloads, a returning user deep-links straight to their
-      // screen via the URL hash instead. Replaces the Task 6 ?hubs query-flag gate, which
-      // forced "hubs" only when that flag was present.
-      // Restore the screen from the URL hash (reload stays put) instead of always My Work.
-      state.screen = state.activeRepo === null ? "hubs" : screenFromHash();
-      loadForScreen(state.screen);
-      // Boot-time loads for the sidebar triage badges — the counts must be
-      // right on every screen, not just after visiting Review/Maintenance.
-      loadProposals();
-      loadDraftAdrs();
-      loadNeedsTriage();
-      loadIdentityTasks();
-    })
-    .catch(() => {
-      // Unauthorized or any error → show login
-      state.view = "auth";
-      state.authStep = "login";
-      rerender();
-    });
-}
+// Show "verifying" while we check if a session cookie exists. (The old ?denied=1 →
+// nonmember boot branch, from the retired org-gate redirect, is gone — nothing
+// produces that query param anymore. The "nonmember" authStep itself is still live,
+// reachable from the login screen's "Preview the non-member screen" link.)
+state.view = "auth";
+state.authStep = "verifying";
+rerender();
+getMe()
+  .then((me) => {
+    state.me = me;
+    state.displayName = me.name ?? me.login;
+    state.view = "app";
+    // Hub-list default (Phase 3, Task 10 flip): land on "hubs" whenever there's no
+    // active repo — state.activeRepo starts null every boot (no repo-restoration
+    // mechanism exists yet), so today this unconditionally defaults to "hubs"; once a
+    // repo is remembered across reloads, a returning user deep-links straight to their
+    // screen via the URL hash instead. Replaces the Task 6 ?hubs query-flag gate, which
+    // forced "hubs" only when that flag was present.
+    // Restore the screen from the URL hash (reload stays put) instead of always My Work.
+    state.screen = state.activeRepo === null ? "hubs" : screenFromHash();
+    loadForScreen(state.screen);
+    // Boot-time loads for the sidebar triage badges — the counts must be
+    // right on every screen, not just after visiting Review/Maintenance.
+    loadProposals();
+    loadDraftAdrs();
+    loadNeedsTriage();
+    loadIdentityTasks();
+  })
+  .catch(() => {
+    // Unauthorized or any error → show login
+    state.view = "auth";
+    state.authStep = "login";
+    rerender();
+  });
