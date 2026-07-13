@@ -111,23 +111,31 @@ function latestIssueSnapshotSql(count: number): string {
 /**
  * The webhook-side write: derive this issue event's implication for every
  * milestone it can affect, and upsert an absolute progress row for each.
+ * `repo` is the delivery's own repo (repoFromDelivery, resolved by the caller) —
+ * BOTH milestone lookups below are scoped to it (WHERE ... AND repo = ?). This is
+ * the multi-tenant isolation boundary for this writer: milestone numbers and
+ * issue numbers are only unique WITHIN a repo, so an unscoped lookup could match
+ * a DIFFERENT repo's same-numbered milestone by coincidence and stamp that
+ * repo's cache with this event's counts (issue #14). Mirrors the same boundary
+ * recomputeAllProgress already enforces via its own WHERE repo = ?.
  *
  * (a) Milestone-number ref: progressFromIssueEvent(payload) reads the issue's
  *     own milestone counts (open + closed = total) — authoritative, no query needed.
- * (b) Array ref: for every milestone whose github_ref is a JSON array containing
- *     this event's issue number, recount from the LATEST captured snapshot of
- *     each array member (total = array length; closed = how many of those
- *     latest snapshots have state:"closed").
+ * (b) Array ref: for every milestone in `repo` whose github_ref is a JSON array
+ *     containing this event's issue number, recount from the LATEST captured
+ *     snapshot of each array member (total = array length; closed = how many of
+ *     those latest snapshots have state:"closed").
  *
  * Never throws on a malformed payload — both branches simply no-op.
  */
-export async function applyEventProgress(db: DB, payload: unknown): Promise<void> {
+export async function applyEventProgress(db: DB, payload: unknown, repo: string): Promise<void> {
   const derived = progressFromIssueEvent(payload);
   if (derived) {
     const matches = await all<MilestoneRow>(
       db,
-      `SELECT * FROM milestones WHERE github_ref = ?`,
-      JSON.stringify(derived.milestoneNumber)
+      `SELECT * FROM milestones WHERE github_ref = ? AND repo = ?`,
+      JSON.stringify(derived.milestoneNumber),
+      repo
     );
     for (const m of matches) {
       await upsertProgress(db, m.id, derived.closed, derived.total, "event");
@@ -140,7 +148,7 @@ export async function applyEventProgress(db: DB, payload: unknown): Promise<void
       : undefined;
   if (typeof issueNumber !== "number") return;
 
-  const candidates = await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE github_ref IS NOT NULL`);
+  const candidates = await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE github_ref IS NOT NULL AND repo = ?`, repo);
   for (const m of candidates) {
     let ref: unknown;
     try {

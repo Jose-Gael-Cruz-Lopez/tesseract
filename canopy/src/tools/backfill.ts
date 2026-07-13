@@ -282,8 +282,10 @@ export async function runBackfill(
       const res = await ingestEvent(env.DB, ev, principalLogin, repo);
       if (res.outcome === "written") {
         captured++;
-        // Mirror handleGithubWebhook's progress seam for newly-written issues.
-        await applyEventProgress(env.DB, payload);
+        // Mirror handleGithubWebhook's progress seam for newly-written issues —
+        // repo-scoped the same way (issue #14): `repo` is this call's own target
+        // repo (the function's own param), never another repo's.
+        await applyEventProgress(env.DB, payload, repo);
       } else {
         unchanged++;
       }
