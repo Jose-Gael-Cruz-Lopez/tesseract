@@ -7,6 +7,7 @@ import { buildAuthorizeUrl, exchangeCode, getUser } from "./github";
 import { createSession, setSessionCookie, readSessionCookie, deleteSession, clearSessionCookie } from "./session";
 import { mintToken } from "./tokens";
 import { first, run, nowIso } from "../db";
+import { startAppLogin, finishAppLogin } from "./app-login";
 
 const OAUTH_TX_COOKIE = "oauth_tx";
 const OAUTH_RETURN_COOKIE = "oauth_return";
@@ -85,6 +86,12 @@ authApp.get("/callback", async (c) => {
   await setSessionCookie(c, id, c.env.COOKIE_SECRET);
   return c.redirect(ret, 302);
 });
+
+// PUBLIC (Phase 3, additive): the GitHub App user-authorization sign-in, alongside the
+// OAuth login above. No PKCE (state cookie is the only CSRF guard) and no org gate — the
+// App's own permissions govern access per-hub later. See src/auth/app-login.ts.
+authApp.get("/app/login", (c) => startAppLogin(c));
+authApp.get("/app/callback", (c) => finishAppLogin(c));
 
 // GATED (by sessionGate in src/routes.ts): return the principal's profile.
 authApp.get("/me", async (c) => {
