@@ -3,6 +3,7 @@ import type { DB } from "../db";
 import type { Env } from "../env";
 import { authorizeRepo } from "./access";
 import { accessibleRepos, type AccessibleRepo } from "./app";
+import type { AppEnv } from "./principal";
 
 // The per-repo hub gate (Phase 3): authorize the signed-in principal for one repo's hub,
 // then stash the repo (+ push flag) on the context for the handlers mounted behind it.
@@ -46,7 +47,13 @@ export function makeRepoGate(deps: {
   };
 }
 
-/** The repo the gate authorized for this request, for handlers mounted behind it. */
-export function repoOf(c: Context): string {
+/**
+ * The repo the gate authorized for this request, for handlers mounted behind it.
+ * Honest about `AppEnv.Variables.repo` being optional at the type level — every
+ * hub.ts handler is mounted behind the gate above, which always sets it before
+ * `next()`, but callers outside that guarantee must not treat this as non-nullable
+ * without checking.
+ */
+export function repoOf(c: Context<AppEnv>): string | undefined {
   return c.get("repo");
 }
