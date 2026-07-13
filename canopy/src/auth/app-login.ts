@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { AppEnv } from "./principal";
 import { randomToken, hmacSeal, hmacUnseal } from "./crypto";
-import { exchangeUserCode } from "./app";
+import { exchangeUserCode, type UserTokens } from "./app";
 import { getUser } from "./github";
 import { storeUserToken } from "./user-token";
 import { createSession, setSessionCookie } from "./session";
@@ -44,7 +44,7 @@ export async function startAppLogin(c: Context<AppEnv>, opts?: { callbackUrl?: (
   return c.redirect(buildAppAuthorizeUrl({ clientId: c.env.GITHUB_APP_CLIENT_ID, redirectUri, state }), 302);
 }
 
-export async function finishAppLogin(c: Context<AppEnv>): Promise<Response> {
+export async function finishAppLogin(c: Context<AppEnv>, opts?: { fetchImpl?: typeof fetch }): Promise<Response> {
   const code = c.req.query("code");
   const state = c.req.query("state");
   const sealedTx = getCookie(c, TX);
@@ -55,8 +55,20 @@ export async function finishAppLogin(c: Context<AppEnv>): Promise<Response> {
   const txState = await hmacUnseal(sealedTx, c.env.COOKIE_SECRET);
   if (txState !== state) return c.json({ error: "state_mismatch" }, 403);
 
-  const tokens = await exchangeUserCode(c.env, code);       // user-to-server token (+ refresh)
-  const ghUser = await getUser(tokens.token);
+  // exchangeUserCode THROWS on a bad/expired/already-consumed code — which happens on the
+  // normal web (the user refreshes the callback page, back-buttons into it, or GitHub
+  // replays), not just on abuse. Since /auth/callback (the primary login callback) now
+  // routes here, an unwrapped throw would surface as a Hono 500 on the busiest auth path.
+  // getUser can likewise throw on a network fault. Fail closed with a clean 401 (matching
+  // the retired OAuth handler's exchange_failed shape) and — critically — no session.
+  let tokens: UserTokens;
+  let ghUser: Awaited<ReturnType<typeof getUser>>;
+  try {
+    tokens = await exchangeUserCode(c.env, code, { fetchImpl: opts?.fetchImpl }); // user-to-server token (+ refresh)
+    ghUser = await getUser(tokens.token);
+  } catch {
+    return c.json({ error: "exchange_failed" }, 401);
+  }
   if (!ghUser) return c.json({ error: "identity_failed" }, 401);
 
   await storeUserToken(c.env.DB, ghUser.login, tokens);      // so repoGate can read their access

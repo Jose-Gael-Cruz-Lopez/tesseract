@@ -1,8 +1,10 @@
 import { env } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
-import { buildAppAuthorizeUrl } from "../src/auth/app-login";
+import { Hono } from "hono";
+import { buildAppAuthorizeUrl, finishAppLogin } from "../src/auth/app-login";
 import { authApp } from "../src/auth/routes";
 import { app } from "../src/routes";
+import type { AppEnv } from "../src/auth/principal";
 import { hmacSeal } from "../src/auth/crypto";
 import type { Env } from "../src/env";
 
@@ -93,6 +95,48 @@ describe("GET /auth/app/callback", () => {
   // `fetch` directly with no injectable fetchImpl seam (same constraint noted in
   // auth-routes.test.ts for the OAuth /callback's non-member-redirect case), and the Miniflare
   // worker-sandbox fetch cannot be stubbed from the test thread. Covered by the Task 11 e2e.
+});
+
+describe("finishAppLogin: a bad/expired/replayed code fails closed with 401, not 500", () => {
+  // finishAppLogin takes an optional { fetchImpl } that threads into exchangeUserCode, so a
+  // test can drive the token exchange without the real network. exchangeUserCode THROWS on a
+  // bad code (GitHub replies 200 with `{ error: "bad_verification_code" }` and no
+  // access_token) — the real hazard now that /auth/callback routes here (a user refreshing
+  // the callback page replays an already-consumed code). Both App OAuth secrets are set so the
+  // config check passes and the throw genuinely comes from the exchange, not "not configured".
+  const exchangeEnv: Env = { ...env, GITHUB_APP_CLIENT_ID: "Iv1.testclient", GITHUB_APP_CLIENT_SECRET: "test-app-secret" } as Env;
+
+  it("returns 401 exchange_failed (never a 500) and sets NO session cookie when the code is rejected", async () => {
+    let exchangeCalled = false;
+    // Mimic GitHub's bad-code reply: HTTP 200 with an error body and no access_token, which
+    // makes oauthToken (src/auth/app.ts) throw at the `!body.access_token` guard.
+    const badCodeFetch: typeof fetch = async () => {
+      exchangeCalled = true;
+      return new Response(JSON.stringify({ error: "bad_verification_code" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    // A throwaway app wires finishAppLogin with the injected fetchImpl, then .request() runs
+    // the whole handler (the /callback route itself calls finishAppLogin(c) with no opts).
+    const seamApp = new Hono<AppEnv>();
+    seamApp.get("/callback", (c) => finishAppLogin(c, { fetchImpl: badCodeFetch }));
+
+    // A valid sealed tx cookie whose state matches the query, so the flow reaches the exchange.
+    const sealed = await hmacSeal("state-abc", "test-cookie-secret");
+    const res = await seamApp.request(
+      "/callback?code=replayed-code&state=state-abc",
+      { headers: { cookie: `app_oauth_tx=${sealed}` } },
+      exchangeEnv
+    );
+
+    expect(res.status).toBe(401); // NOT 500 — the whole point of the try/catch
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("exchange_failed");
+    expect(exchangeCalled).toBe(true); // proves we reached the exchange (config check passed)
+    // Fails closed: no session was opened.
+    expect(res.headers.get("set-cookie") ?? "").not.toContain("session=");
+  });
 });
 
 describe("PUBLIC_PATHS: /auth/app/login and /auth/app/callback bypass sessionGate", () => {
