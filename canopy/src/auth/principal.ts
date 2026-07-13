@@ -32,7 +32,7 @@ export async function isAllowed(env: Env, token: string, login: string): Promise
 }
 
 // The only routes reachable without a session. Everything else is gated.
-const PUBLIC_PATHS = new Set(["/auth/login", "/auth/callback"]);
+const PUBLIC_PATHS = new Set(["/auth/login", "/auth/callback", "/auth/app/login", "/auth/app/callback"]);
 
 export async function resolveSessionPrincipal(c: Context<AppEnv>): Promise<Principal | null> {
   const id = await readSessionCookie(c, c.env.COOKIE_SECRET);
