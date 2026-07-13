@@ -164,9 +164,12 @@ target-date order merged with the cached progress. No live GitHub, no per-user t
 
 **Progress** is a stored cache (`milestone_progress`), written as ABSOLUTE `closed`/`total` (so delivery
 order is irrelevant — the last write wins) by two direct writers: the webhook (event-derived, on issue
-events) and the `scheduled()` cron backstop (`recomputeAllProgress`, `GITHUB_SERVICE_TOKEN`, off the
-render path). `github_ref` is bare (a milestone number OR a JSON array of issue numbers) resolved against
-`GITHUB_REPO` — only by those two writers, never at render.
+events) and the `scheduled()` cron backstop (`recomputeConnectedRepos` → `recomputeAllProgress` per
+connected repo, each authed by its OWN GitHub App installation token — `GITHUB_SERVICE_TOKEN` retired —
+off the render path). `recomputeAllProgress` is itself repo-scoped (`WHERE repo = ?`): one repo's
+installation token can never read or write a different repo's milestones. `github_ref` is bare (a
+milestone number OR a JSON array of issue numbers) resolved against the milestone's own `repo` — only by
+those two writers, never at render.
 
 **My Work** (`GET /me/dashboard`, MCP `get_my_work` → `getMyWork`) is a D1-only projection over captured
 events: two separate lists — `previousActivity` (summarized merged/closed PRs where the person is the
@@ -200,8 +203,13 @@ that renders a "No summary recorded" placeholder. Stored as columns on `pr_summa
 
 Secrets (`wrangler secret put …`; local: `.dev.vars`): `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
 `COOKIE_SECRET`, `GITHUB_WEBHOOK_SECRET` (HMAC for the webhook — absent → the surface 401s),
-`GITHUB_SERVICE_TOKEN` (app-level token for the scheduled progress recompute — absent → `scheduled()`
-no-ops), `GEMINI_API_KEY` (Google Gemini key for capture-time PR/issue summaries — absent → the excerpt
-fallback). Vars (`[vars]` in `wrangler.toml`): `GITHUB_REPO` (e.g. `SaplingLearn/sapling`). Bindings: `DB`
-(D1), `ASSETS` (static). Capture-time summaries call Gemini over REST (`GEMINI_API_KEY`), never at render —
-not a Cloudflare binding, so there is no `[ai]` block. `[triggers] crons` drives the progress recompute backstop.
+`GEMINI_API_KEY` (Google Gemini key for capture-time PR/issue summaries — absent → the excerpt
+fallback). GitHub App (Phase 3, connect-your-repos): `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` (+
+`GITHUB_APP_CLIENT_ID` / `_CLIENT_SECRET` / `GITHUB_APP_SLUG`) mint per-installation tokens
+(`src/auth/app.ts`'s `installationToken`) for the scheduled progress recompute (`scheduled()` →
+`recomputeConnectedRepos`) and the admin backfill (`runBackfill`) — `GITHUB_SERVICE_TOKEN` (the old
+app-level token) is retired; absent App config, `scheduled()` no-ops and backfill 503s per repo. Vars
+(`[vars]` in `wrangler.toml`): `GITHUB_REPO` (e.g. `SaplingLearn/sapling`, the flat/single-tenant
+deployment's default repo). Bindings: `DB` (D1), `ASSETS` (static). Capture-time summaries call Gemini
+over REST (`GEMINI_API_KEY`), never at render — not a Cloudflare binding, so there is no `[ai]` block.
+`[triggers] crons` drives the progress recompute backstop.
