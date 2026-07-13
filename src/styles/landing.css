@@ -9,6 +9,14 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity .6s ease;   /* crossfade out to reveal the sign-in screen beneath */
+}
+
+/* Fade the video overlay out to reveal the sign-in screen rendered underneath it. */
+.landing.is-leaving {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .landing-video {

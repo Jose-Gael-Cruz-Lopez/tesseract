@@ -1,7 +1,11 @@
 // Landing intro: a full-screen video shown to signed-out visitors. It autoplays
-// muted (so browsers don't block it), then hands off to the auth flow when it
+// muted (so browsers don't block it), then CROSSFADES to the auth flow when it
 // finishes — or immediately when the visitor clicks Skip. A blocked autoplay or a
 // load error never strands the visitor: both fall through to `onDone`.
+//
+// The video is a fixed overlay on <body> (not `root`), so `onDone` can render the
+// sign-in screen underneath it; the overlay then fades out to reveal it — a smooth
+// crossfade, not an abrupt swap.
 
 export function mountLanding(root, { onDone }) {
   root.innerHTML = '';
@@ -21,7 +25,11 @@ export function mountLanding(root, { onDone }) {
   const finish = () => {
     if (done) return;
     done = true;
+    // Render the sign-in screen underneath the overlay first, then fade the video out
+    // to reveal it — a smooth crossfade. Remove the overlay once the fade completes.
     onDone();
+    requestAnimationFrame(() => wrap.classList.add('is-leaving'));
+    setTimeout(() => wrap.remove(), 700); // matches the .6s CSS opacity transition + buffer
   };
 
   video.addEventListener('ended', finish);
@@ -46,7 +54,9 @@ export function mountLanding(root, { onDone }) {
   skip.addEventListener('click', finish);
 
   wrap.append(video, sound, skip);
-  root.appendChild(wrap);
+  // Overlay on <body> (not root) so onDone() can render the sign-in screen underneath;
+  // the fade-out then reveals it for a crossfade.
+  document.body.appendChild(wrap);
 
   // Explicit play() for Safari, which doesn't always honor the autoplay attribute.
   video.play().catch(() => {
