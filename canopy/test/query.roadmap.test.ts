@@ -110,3 +110,49 @@ describe("query() learns the roadmap (plan + milestones via FTS)", () => {
     expect(await roadmapFtsCount()).toBe(0);
   });
 });
+
+// Issue #11 / 0027: roadmap_fts used to carry ONE global ref='plan' row, last-
+// writer-wins across every repo — a second repo's write_plan silently clobbered
+// the first repo's indexed narrative. roadmap_fts now carries a repo column and
+// each repo indexes its own 'plan:<repo>' row, so query()'s roadmap FTS pass can
+// scope the MATCH by repo directly (mirroring the existing milestone/doc scoping).
+describe("roadmap_fts plan-narrative FTS is per-repo (0027, issue #11)", () => {
+  it("two repos' plan narratives coexist as distinct rows in roadmap_fts (no overwrite)", async () => {
+    await write_plan(env.DB, { narrative: "The zephyr rollout ships this quarter.", milestones: [] }, AUTHOR, "o/a");
+    await write_plan(env.DB, { narrative: "The quokka migration ships next quarter.", milestones: [] }, AUTHOR, "o/b");
+
+    const rows = await all<{ ref: string; repo: string; body: string }>(
+      env.DB,
+      `SELECT ref, repo, body FROM roadmap_fts WHERE ref LIKE 'plan:%' ORDER BY repo`
+    );
+    expect(rows).toEqual([
+      { ref: "plan:o/a", repo: "o/a", body: "The zephyr rollout ships this quarter." },
+      { ref: "plan:o/b", repo: "o/b", body: "The quokka migration ships next quarter." },
+    ]);
+  });
+
+  it("a repo-scoped search finds its OWN narrative and is isolated from another repo's narrative", async () => {
+    // o/b writes SECOND — under the old global-singleton index this is exactly
+    // the last-writer-wins case: o/b's write would clobber the shared FTS row.
+    await write_plan(env.DB, { narrative: "The zephyr rollout ships this quarter.", milestones: [] }, AUTHOR, "o/a");
+    await write_plan(env.DB, { narrative: "The quokka migration ships next quarter.", milestones: [] }, AUTHOR, "o/b");
+
+    // o/a's own term, scoped to o/a, finds o/a's own narrative.
+    const own = await query(env.DB, { q: "zephyr", types: ["milestone"], include_staged: true }, "o/a");
+    const ownPlan = own.primary.find((p) => p.id === "plan");
+    expect(ownPlan).toBeDefined();
+    expect(ownPlan!.body).toBe("The zephyr rollout ships this quarter.");
+
+    // o/b's term, scoped to o/a, returns NOTHING — o/b's narrative must not leak
+    // into o/a's results, whether as a false match or as leaked/mismatched content.
+    const other = await query(env.DB, { q: "quokka", types: ["milestone"], include_staged: true }, "o/a");
+    expect(other.primary.some((p) => p.id === "plan")).toBe(false);
+    expect(other.pointers.some((p) => p.id === "plan")).toBe(false);
+
+    // Sanity: scoped to o/b, the SAME "quokka" search DOES find o/b's own narrative.
+    const owner = await query(env.DB, { q: "quokka", types: ["milestone"], include_staged: true }, "o/b");
+    const ownerPlan = owner.primary.find((p) => p.id === "plan");
+    expect(ownerPlan).toBeDefined();
+    expect(ownerPlan!.body).toBe("The quokka migration ships next quarter.");
+  });
+});

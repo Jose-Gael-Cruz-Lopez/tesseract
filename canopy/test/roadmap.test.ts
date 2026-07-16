@@ -8,8 +8,7 @@ import { fetchMilestoneProgress, upsertProgress } from "../src/tools/progress";
 import { get_plan, write_plan } from "../src/tools/plan";
 import { promote_milestone_proposal, complete_milestone, stage_milestone_proposal } from "../src/tools/writes";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildCanopyMcpServer } from "../src/mcp";
@@ -145,14 +144,6 @@ describe("promote_milestone_proposal + complete_milestone", () => {
   });
 });
 
-async function cookieFor(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
-
 describe("roadmap HTTP routes (session-gated)", () => {
   it("GET /roadmap reads the plan store — narrative + milestones + cached progress, no live GitHub — and 401s without a session", async () => {
     const { milestones } = await write_plan(
@@ -166,7 +157,7 @@ describe("roadmap HTTP routes (session-gated)", () => {
     const unauth = await app.request("/roadmap", {}, env);
     expect(unauth.status).toBe(401);
 
-    const res = await app.request("/roadmap", { headers: { cookie: await cookieFor("andres") } }, env);
+    const res = await app.request("/roadmap", { headers: { cookie: await authedCookie("andres") } }, env);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Awaited<ReturnType<typeof get_plan>>;
     expect(body.narrative).toBe("Q3 push");
@@ -179,7 +170,7 @@ describe("roadmap HTTP routes (session-gated)", () => {
     const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
     const m = await promote_milestone_proposal(env.DB, pid, "andres");
     // admin-gated mutation (Task 10 critfix): "admin-user" is the ADMIN_LOGINS entry in vitest.config.ts.
-    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await cookieFor("admin-user") } }, env);
+    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await authedCookie("admin-user") } }, env);
     expect(res.status).toBe(200);
     const row = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, m.id);
     expect(row?.status).toBe("done");
@@ -187,7 +178,7 @@ describe("roadmap HTTP routes (session-gated)", () => {
 
   it("POST /milestone-proposals/:id/promote materializes a live milestone", async () => {
     const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "upcoming", change_summary: "s", confidence: "high" }, "andres");
-    const res = await app.request(`/milestone-proposals/${pid}/promote`, { method: "POST", headers: { cookie: await cookieFor("admin-user") } }, env);
+    const res = await app.request(`/milestone-proposals/${pid}/promote`, { method: "POST", headers: { cookie: await authedCookie("admin-user") } }, env);
     expect(res.status).toBe(200);
     expect(await all<MilestoneRow>(env.DB, `SELECT * FROM milestones`)).toHaveLength(1);
   });
@@ -199,7 +190,7 @@ describe("roadmap HTTP routes (session-gated)", () => {
   it("POST /milestones/:id/complete is 403 for a NON-admin session and does not mutate", async () => {
     const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
     const m = await promote_milestone_proposal(env.DB, pid, "andres");
-    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await cookieFor("not-admin") } }, env);
+    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await authedCookie("not-admin") } }, env);
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: "admin only" });
     // Fails closed: the milestone was NOT completed.

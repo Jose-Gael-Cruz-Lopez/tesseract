@@ -7,23 +7,14 @@ import { write_plan } from "../src/tools/plan";
 import { propose_doc_update, stage_milestone_proposal, route_triage } from "../src/tools/writes";
 import { ingestEvent } from "../src/consumer";
 import type { CapturedEvent } from "@shared/contract";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 
 // Phase 3 (GitHub App / connect-your-repos): the hub router mounted at
 // /r/:owner/:repo, gated per-request by repoGate. Auths via a real session
-// cookie (mirrors cookieFor in roadmap.test.ts et al.) — vitest.config.ts pins
+// cookie (authedCookie, test/helpers/session.ts) — vitest.config.ts pins
 // DEV_LOGIN to "" so the sessionGate dev bypass never engages in tests.
 const REPO = "octo/hub";
 const LOGIN = "octocat";
-
-async function cookieFor(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
 
 async function connect(repo: string) {
   await run(env.DB, `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, ?, ?, 'connected')`, repo, nowIso(), LOGIN, 1);
@@ -35,7 +26,7 @@ async function connect(repo: string) {
 async function hubGet(path: string, login: string = LOGIN): Promise<Response> {
   _hubTestHooks.getUserToken = async () => "user-tok";
   _hubTestHooks.listRepos = [{ repo: "octo/hub", can_push: true }, { repo: "octo/other", can_push: true }];
-  return app.request(path, { headers: { cookie: await cookieFor(login) } }, env);
+  return app.request(path, { headers: { cookie: await authedCookie(login) } }, env);
 }
 
 // A live (promoted) doc seeded directly: a promoted doc keeps its body in `docs` (so the
@@ -76,7 +67,7 @@ describe("hub roadmap route", () => {
     _hubTestHooks.getUserToken = async () => "user-tok";
     _hubTestHooks.listRepos = [{ repo: REPO, can_push: true }];
 
-    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await authedCookie(LOGIN) } }, env);
     expect(res.status).toBe(200);
     const body = await res.json() as { narrative: string };
     expect(body.narrative).toBe("octo hub plan");
@@ -85,14 +76,14 @@ describe("hub roadmap route", () => {
   it("404s an unconnected repo (no existence leak)", async () => {
     _hubTestHooks.getUserToken = async () => "user-tok";
     _hubTestHooks.listRepos = [{ repo: REPO, can_push: true }];
-    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await authedCookie(LOGIN) } }, env);
     expect(res.status).toBe(404);
   });
 
   it("401s when the user has no stored token", async () => {
     await connect(REPO);
     _hubTestHooks.getUserToken = async () => null;
-    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    const res = await app.request(`/r/octo/hub/roadmap`, { headers: { cookie: await authedCookie(LOGIN) } }, env);
     expect(res.status).toBe(401);
   });
 });
@@ -108,7 +99,7 @@ describe("hub read routes", () => {
     _hubTestHooks.getUserToken = async () => "user-tok";
     _hubTestHooks.listRepos = [{ repo: "octo/hub", can_push: true }, { repo: "octo/other", can_push: true }];
 
-    const res = await app.request(`/r/octo/hub/feed`, { headers: { cookie: await cookieFor(LOGIN) } }, env);
+    const res = await app.request(`/r/octo/hub/feed`, { headers: { cookie: await authedCookie(LOGIN) } }, env);
     expect(res.status).toBe(200);
     const { feed } = await res.json() as { feed: Array<{ body: string }> };
     expect(feed.some((f) => f.body === "hub-only")).toBe(true);
@@ -229,7 +220,7 @@ async function hubPost(path: string, opts?: { login?: string; canPush?: boolean;
     path,
     {
       method: "POST",
-      headers: { cookie: await cookieFor(login), "content-type": "application/json" },
+      headers: { cookie: await authedCookie(login), "content-type": "application/json" },
       body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
     },
     env

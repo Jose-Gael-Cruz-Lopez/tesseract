@@ -288,8 +288,12 @@ async function summarizeIssueSeam(db: DB, summarizer: Summarizer<IssueSummary> |
 
 // Task 5: apply this newly-captured issue event's implication(s) to the
 // milestone_progress cache (absolute overwrite — see applyEventProgress).
-async function progressSeam(db: DB, payload: unknown): Promise<void> {
-  await applyEventProgress(db, payload);
+// `repo` is the delivery's own repo (already resolved by the caller via
+// repoFromDelivery) — threaded straight through so applyEventProgress's
+// milestone lookups stay scoped to it and never cross into another repo's
+// same-numbered milestone (issue #14).
+async function progressSeam(db: DB, payload: unknown, repo: string): Promise<void> {
+  await applyEventProgress(db, payload, repo);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +355,7 @@ export async function handleGithubWebhook(
         const summarizer = opts?.summarizer ?? (env.GEMINI_API_KEY ? geminiPrSummarizer(env.GEMINI_API_KEY) : null);
         await summarizePrSeam(env.DB, summarizer, ev, repo);
       } else {
-        await progressSeam(env.DB, payload);
+        await progressSeam(env.DB, payload, repo);
         const issueSummarizer = opts?.issueSummarizer ?? (env.GEMINI_API_KEY ? geminiIssueSummarizer(env.GEMINI_API_KEY) : null);
         await summarizeIssueSeam(env.DB, issueSummarizer, ev, repo);
       }

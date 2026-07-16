@@ -28,10 +28,11 @@ async function sign(secret: string, body: string): Promise<string> {
   return "sha256=" + [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// `repo` defaults to "o/r" — the repo every recomputeAllProgress call in this file
-// targets, so a scoped `WHERE repo = ?` matches the seeded row without every caller
-// needing to pass it explicitly (applyEventProgress's queries aren't repo-scoped, so
-// callers that only exercise that path are unaffected by this default either way).
+// `repo` defaults to "o/r" — the repo every recomputeAllProgress call (and most
+// applyEventProgress calls) in this file targets, so a scoped `WHERE repo = ?`
+// matches the seeded row without every caller needing to pass it explicitly.
+// Callers exercising a DIFFERENT repo (issue #14's isolation test below, and the
+// webhook end-to-end test whose fixture carries no `repository` field) override it.
 async function seedMilestone(githubRef: string | null, title = "M", repo = "o/r"): Promise<number> {
   const res = await run(
     env.DB,
@@ -58,7 +59,13 @@ function stubFetch(map: Record<string, unknown>): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-function issuePayload(number: number, state: "open" | "closed", action: string) {
+function issuePayload(
+  number: number,
+  state: "open" | "closed",
+  action: string,
+  milestone: { number: number; open_issues: number; closed_issues: number } | null = null,
+  updatedAt = "2026-07-01T10:00:00Z"
+) {
   return {
     action,
     issue: {
@@ -66,11 +73,11 @@ function issuePayload(number: number, state: "open" | "closed", action: string) 
       title: `Issue ${number}`,
       html_url: `https://github.com/o/r/issues/${number}`,
       state,
-      updated_at: "2026-07-01T10:00:00Z",
+      updated_at: updatedAt,
       user: { login: "AndresL230" },
       assignees: [],
       labels: [],
-      milestone: null,
+      milestone,
     },
   };
 }
@@ -96,14 +103,14 @@ describe("applyEventProgress — milestone-number ref", () => {
     // Verified fixture values (test/fixtures/gh-issue-closed.json): milestone
     // { number: 3, open_issues: 1, closed_issues: 5 } → closed:5, total:6.
     const id = await seedMilestone("3");
-    await applyEventProgress(env.DB, issueClosed);
+    await applyEventProgress(env.DB, issueClosed, "o/r");
     const row = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, id);
     expect(row).toMatchObject({ closed: 5, total: 6, source: "event" });
   });
 
   it("no-ops when no milestone has a matching github_ref", async () => {
     await seedMilestone("99");
-    await applyEventProgress(env.DB, issueClosed);
+    await applyEventProgress(env.DB, issueClosed, "o/r");
     expect(await all(env.DB, `SELECT * FROM milestone_progress`)).toHaveLength(0);
   });
 });
@@ -114,13 +121,57 @@ describe("applyEventProgress — array ref", () => {
 
     const [event7] = eventsFromDelivery("issues", issuePayload(7, "closed", "closed"));
     const [event8] = eventsFromDelivery("issues", issuePayload(8, "open", "opened"));
-    await ingestEvent(env.DB, event7, "github-webhook");
-    await ingestEvent(env.DB, event8, "github-webhook");
+    // The recount now scopes its events snapshot query by repo (issue #14), so the
+    // captured snapshots must live in the same repo as the milestone ("o/r").
+    await ingestEvent(env.DB, event7, "github-webhook", "o/r");
+    await ingestEvent(env.DB, event8, "github-webhook", "o/r");
 
-    await applyEventProgress(env.DB, issuePayload(7, "closed", "closed"));
+    await applyEventProgress(env.DB, issuePayload(7, "closed", "closed"), "o/r");
 
     const row = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, id);
     expect(row).toMatchObject({ closed: 1, total: 2, source: "event" });
+  });
+});
+
+// Issue #14: applyEventProgress must scope its milestone lookups by the
+// delivery's own repo — milestone numbers collide across repos in multi-tenant,
+// so an unscoped lookup could stamp a DIFFERENT repo's same-numbered milestone
+// with this event's counts.
+describe("applyEventProgress — repo scoping (issue #14)", () => {
+  it("a same-numbered milestone in another repo is untouched", async () => {
+    const idA = await seedMilestone("5", "M", "o/a");
+    const idB = await seedMilestone("5", "M", "o/b");
+
+    const payload = issuePayload(42, "closed", "closed", { number: 5, open_issues: 2, closed_issues: 3 });
+    await applyEventProgress(env.DB, payload, "o/a");
+
+    const rowA = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idA);
+    expect(rowA).toMatchObject({ closed: 3, total: 5, source: "event" });
+
+    // The real negative: o/b's same-numbered milestone must be untouched — no
+    // milestone_progress row at all (not merely a different value).
+    const rowB = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idB);
+    expect(rowB).toBeNull();
+  });
+
+  it("array-ref recount reads only THIS repo's issue snapshots (not another repo's same-numbered issue)", async () => {
+    const idA = await seedMilestone("[42]", "M", "o/a");
+
+    // The SAME issue number 42 is captured in BOTH repos. o/b's snapshot is LATER,
+    // so without repo scoping it wins the latest-snapshot ORDER BY (occurred_at
+    // DESC) and its "open" state would drive o/a's milestone to closed=0 — the
+    // cross-tenant contamination this scopes out.
+    const [snapA] = eventsFromDelivery("issues", issuePayload(42, "closed", "closed", null, "2026-07-01T10:00:00Z"));
+    const [snapB] = eventsFromDelivery("issues", issuePayload(42, "open", "opened", null, "2026-07-02T10:00:00Z"));
+    await ingestEvent(env.DB, snapA, "github-webhook", "o/a");
+    await ingestEvent(env.DB, snapB, "github-webhook", "o/b");
+
+    await applyEventProgress(env.DB, issuePayload(42, "closed", "closed"), "o/a");
+
+    // Only o/a's own snapshot (issue 42 closed) is counted → closed=1, NOT o/b's
+    // later "open" snapshot (which would yield closed=0).
+    const rowA = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idA);
+    expect(rowA).toMatchObject({ closed: 1, total: 1, source: "event" });
   });
 });
 
@@ -163,7 +214,10 @@ describe("webhook end-to-end — the progress seam", () => {
   const SECRET = "test-webhook-secret"; // matches vitest.config.ts binding
 
   it("issue-closed fixture through handleGithubWebhook writes the milestone_progress cache row", async () => {
-    const id = await seedMilestone("3");
+    // issueClosed carries no `repository` field, so repoFromDelivery derives ""
+    // for this delivery — seed the milestone under that same repo so the
+    // (now repo-scoped) lookup in applyEventProgress actually matches it.
+    const id = await seedMilestone("3", "M", "");
     const body = JSON.stringify(issueClosed);
     const sig = await sign(SECRET, body);
     const res = await handleGithubWebhook(

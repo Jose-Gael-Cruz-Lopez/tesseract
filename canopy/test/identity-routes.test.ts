@@ -1,22 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { app } from "../src/routes";
-import { createSession } from "../src/auth/session";
-import { hmacSeal } from "../src/auth/crypto";
+import { authedCookie } from "./helpers/session";
 import { all, first } from "../src/db";
 import { ingestEvent } from "../src/consumer";
 import { getMyWork } from "../src/tools/mywork";
 import type { IdentityTaskWithSample } from "../src/tools/reads";
 import type { IdentityTaskRow, PersonRow } from "@shared/rows";
 import type { CapturedEvent } from "@shared/contract";
-
-async function authedCookie(login: string): Promise<string> {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
-  ).bind(login, login, "2026-01-01T00:00:00Z").run();
-  const { id } = await createSession(env.DB, login);
-  return `session=${await hmacSeal(id, "test-cookie-secret")}`;
-}
 
 const post = (path: string, cookie: string, body?: unknown) =>
   app.request(

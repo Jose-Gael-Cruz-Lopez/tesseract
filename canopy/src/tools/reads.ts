@@ -236,7 +236,7 @@ interface Assembled {
 // A raw candidate from one type's FTS (or browse) pass, before hydration.
 interface Candidate {
   type: QueryType;
-  key: string;      // doc slug | feed id | adr id (as text) | roadmap ref ('milestone:<id>' | 'plan')
+  key: string;      // doc slug | feed id | adr id (as text) | roadmap ref ('milestone:<id>' | 'plan:<repo>')
   score: number;    // normalized so higher = better
   snippet: string;  // fts5 snippet() or a browse body slice
 }
@@ -390,22 +390,30 @@ export async function query(db: DB, req: QueryRequest, repo?: string): Promise<Q
   // section/space filters are doc-only, so milestone drops out under docsOnly.
   if (types.includes("milestone") && !docsOnly) {
     if (match) {
+      // roadmap_fts carries its own repo column (0027, own-content FTS just like
+      // docs_fts) — scope the MATCH itself, same shape as the docs pass above,
+      // rather than relying only on a post-hoc filter at hydration.
+      const clauses = ["roadmap_fts MATCH ?"];
+      const params: unknown[] = [match];
+      if (scoped) { clauses.push("repo = ?"); params.push(repo); }
       const rows = await all<{ key: string; rank: number; snip: string }>(
         db,
         `SELECT ref AS key, bm25(roadmap_fts, 1.0, 5.0, 1.0) AS rank,
                 snippet(roadmap_fts, -1, ${SNIPPET}) AS snip
-         FROM roadmap_fts WHERE roadmap_fts MATCH ? ORDER BY rank LIMIT ${fetchCap}`,
-        match
+         FROM roadmap_fts WHERE ${clauses.join(" AND ")} ORDER BY rank LIMIT ${fetchCap}`,
+        ...params
       );
       for (const r of rows) candidates.push({ type: "milestone", key: String(r.key), score: -r.rank, snippet: r.snip });
     } else {
       // Browse: the plan row first (only when it carries a narrative), then
       // milestones by recency (updated_at, then created_at). Both scope by repo when
-      // given; unscoped, the one non-empty plan row IS "the plan" (single-repo-safe).
+      // given; unscoped, one arbitrary non-empty plan row surfaces (LIMIT 1 — browse-
+      // mode multi-tenant aggregation across ALL repos' plans is a separate, pre-
+      // existing concern, not what 0027 fixes: it fixes the FTS MATCH index below).
       const planWhere = scoped ? "repo = ? AND narrative != ''" : "narrative != ''";
       const planRow = await first<PlanRow>(db, `SELECT * FROM plan WHERE ${planWhere} LIMIT 1`, ...rp);
       if (planRow && planRow.narrative.trim() !== "") {
-        candidates.push({ type: "milestone", key: "plan", score: 0, snippet: "" });
+        candidates.push({ type: "milestone", key: `plan:${planRow.repo}`, score: 0, snippet: "" });
       }
       const mWhere = scoped ? "WHERE repo = ?" : "";
       const rows = await all<{ key: number }>(
@@ -457,26 +465,41 @@ export async function query(db: DB, req: QueryRequest, repo?: string): Promise<Q
     for (const a of await all<AdrRow>(db, `SELECT * FROM adrs WHERE id IN (${ph})`, ...adrKeys)) adrMap.set(String(a.id), a);
   }
 
-  // Roadmap hydration: milestone ids (from 'milestone:<id>' refs) + the plan flag.
+  // Roadmap hydration: milestone ids (from 'milestone:<id>' refs) + the set of
+  // repos whose plan row was hit (from 'plan:<repo>' refs, 0027 — each repo now
+  // indexes its OWN plan row, so this is a set of repos, not a single flag).
   const milestoneIds = candidates
     .filter((c) => c.type === "milestone" && c.key.startsWith("milestone:"))
     .map((c) => Number(c.key.slice("milestone:".length)));
-  const needPlan = candidates.some((c) => c.type === "milestone" && c.key === "plan");
+  const planRepos = [...new Set(
+    candidates
+      .filter((c) => c.type === "milestone" && c.key.startsWith("plan:"))
+      .map((c) => c.key.slice("plan:".length))
+  )];
 
   const milestoneMap = new Map<string, MilestoneRow>();
   if (milestoneIds.length) {
     const ph = milestoneIds.map(() => "?").join(", ");
-    // roadmap_fts carries no repo, so a scoped query's milestone FTS hits are filtered
-    // here: out-of-repo ids never enter the map and drop out in assembly (`if (!m)`).
+    // roadmap_fts now carries repo (0027) so a scoped MATCH pass never returns an
+    // out-of-repo milestone in the first place; this join-back stays as a
+    // defense-in-depth backstop (and remains the ONLY filter for the browse-mode
+    // path above, which queries milestones directly rather than via roadmap_fts).
     const scope = scoped ? " AND repo = ?" : "";
     for (const m of await all<MilestoneRow>(db, `SELECT * FROM milestones WHERE id IN (${ph})${scope}`, ...milestoneIds, ...rp)) {
       milestoneMap.set(`milestone:${m.id}`, m);
     }
   }
   const progressMap = milestoneIds.length ? await getProgress(db) : new Map<number, MilestoneProgressRow>();
-  const planRow = needPlan
-    ? await first<PlanRow>(db, `SELECT * FROM plan WHERE ${scoped ? "repo = ? AND " : ""}narrative != '' LIMIT 1`, ...rp)
-    : null;
+  const planMap = new Map<string, PlanRow>();
+  if (planRepos.length) {
+    const ph = planRepos.map(() => "?").join(", ");
+    // Same defense-in-depth shape as milestoneMap above: re-scoping here means an
+    // out-of-repo 'plan:<repo>' candidate can never resolve to another repo's row.
+    const scope = scoped ? " AND repo = ?" : "";
+    for (const p of await all<PlanRow>(db, `SELECT * FROM plan WHERE repo IN (${ph})${scope}`, ...planRepos, ...rp)) {
+      planMap.set(p.repo, p);
+    }
+  }
 
   // Browse mode carries no per-row score, so order is by the merged recency from
   // step 1; FTS mode already has a normalized score. Sort once by score desc and,
@@ -540,15 +563,19 @@ export async function query(db: DB, req: QueryRequest, repo?: string): Promise<Q
         score: c.score, snippet: c.snippet || browseSnippet(body),
       };
     } else {
-      // milestone: either the plan singleton (ref 'plan') or a milestone row.
-      // Both are direct/authored writes, so always authority "live".
-      if (c.key === "plan") {
-        if (!planRow) continue;
+      // milestone: either a per-repo plan row (ref 'plan:<repo>', 0027) or a
+      // milestone row. Both are direct/authored writes, so always authority "live".
+      if (c.key.startsWith("plan:")) {
+        const p = planMap.get(c.key.slice("plan:".length));
+        if (!p) continue;
+        // The public id stays the literal "plan" — unchanged external result
+        // shape. 'plan:<repo>' is only an internal hydration key: a scoped
+        // caller ever sees at most its own one plan row.
         a = {
           type: "milestone", id: "plan", title: "Roadmap plan", section: null, space: null,
-          body: planRow.narrative, authority: "live", current_version: null, pending_version: null,
-          staged_body: null, confidence: null, updated_at: planRow.updated_at, updated_by: planRow.updated_by,
-          score: c.score, snippet: c.snippet || browseSnippet(planRow.narrative),
+          body: p.narrative, authority: "live", current_version: null, pending_version: null,
+          staged_body: null, confidence: null, updated_at: p.updated_at, updated_by: p.updated_by,
+          score: c.score, snippet: c.snippet || browseSnippet(p.narrative),
         };
       } else {
         const m = milestoneMap.get(c.key);

@@ -2,9 +2,34 @@ import { app } from "./routes";
 import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
 import { resolveBearerPrincipal } from "./auth/principal";
+import { authorizeRepoAccess } from "./auth/repo-gate";
+import { getUserToken } from "./auth/user-token";
+import type { AccessibleRepo } from "./auth/app";
 import { corsHeaders, handlePreflight } from "./cors";
 import { bootstrapRepo } from "./db";
 import type { Env } from "./env";
+
+// Test seam for the /mcp/:owner/:repo authorization path (Phase 3, issue #10):
+// mirrors src/hub.ts's _hubTestHooks. When set, these override the live wiring the
+// gate builds from env. Production leaves them undefined → the real getUserToken +
+// accessibleRepos run. Tests set them to avoid real GitHub + token storage.
+export const _mcpTestHooks: {
+  getUserToken?: (login: string) => Promise<string | null>;
+  listRepos?: AccessibleRepo[] | ((token: string) => Promise<AccessibleRepo[]>);
+} = {};
+
+export function _resetMcpTestHooks(): void {
+  _mcpTestHooks.getUserToken = undefined;
+  _mcpTestHooks.listRepos = undefined;
+}
+
+const jsonError = (error: string, status: number): Response =>
+  new Response(JSON.stringify({ error }), { status, headers: { "content-type": "application/json" } });
+
+// Matches /mcp/:owner/:repo — exactly two more non-empty path segments after /mcp —
+// mirroring the /r/:owner/:repo hub routes. Bare /mcp (no owner/repo) is the flat,
+// defaultRepo(env) surface and must keep working unchanged.
+const MCP_REPO_PATH = /^\/mcp\/([^/]+)\/([^/]+)$/;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -16,17 +41,31 @@ export default {
     // register GITHUB_REPO and rewrite the transient repo='' sentinel on legacy rows.
     await bootstrapRepo(env, env.DB);
     // Static assets are served by the assets binding before this handler runs.
-    if (url.pathname === "/mcp") {
+    const repoMatch = MCP_REPO_PATH.exec(url.pathname);
+    if (url.pathname === "/mcp" || repoMatch) {
       // Bearer ONLY. On missing/invalid credentials: bare 401, NO WWW-Authenticate,
       // NO OAuth discovery/metadata — Claude Code must use the configured header.
       const principal = await resolveBearerPrincipal(request, env);
-      if (!principal) {
-        return new Response(JSON.stringify({ error: "unauthorized" }), {
-          status: 401,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return handleMcp(request, env, ctx, principal);
+      if (!principal) return jsonError("unauthorized", 401);
+
+      if (!repoMatch) return handleMcp(request, env, ctx, principal);
+
+      // /mcp/:owner/:repo (Phase 3, additive): authorize exactly like the hub gate
+      // (repoGate) — connected + collaborator — but for the bearer/agent surface. A
+      // denial never leaks existence: an unconnected repo and one the principal can't
+      // reach both 404 the same way.
+      const repo = `${repoMatch[1]}/${repoMatch[2]}`;
+      const listRepos = _mcpTestHooks.listRepos;
+      const auth = await authorizeRepoAccess({
+        db: env.DB,
+        login: principal.login,
+        repo,
+        getUserToken: _mcpTestHooks.getUserToken ?? ((login) => getUserToken(env.DB, env, login)),
+        ...(listRepos ? { listRepos: typeof listRepos === "function" ? listRepos : async () => listRepos } : {}),
+      });
+      if (!auth.allowed) return jsonError(auth.error, auth.status);
+
+      return handleMcp(request, env, ctx, principal, repo);
     }
     // Third auth class: GitHub webhook deliveries, HMAC-verified over the raw
     // body against GITHUB_WEBHOOK_SECRET. Never touches sessionGate.
