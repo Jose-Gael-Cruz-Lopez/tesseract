@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { propose_doc_update, stage_adr, promote_doc, ratify_adr } from "../src/tools/writes";
-import { first, defaultRepo } from "../src/db";
+import { first } from "../src/db";
 import type { DocRow, DocVersionRow, AdrRow } from "@shared/rows";
-import { app } from "../src/routes";
-import { authedCookie } from "./helpers/session";
 
 const base = { slug: "architecture", section: "reference", title: "Architecture", confidence: "high" as const };
 
@@ -60,36 +58,7 @@ describe("ratify_adr", () => {
   });
 });
 
-describe("promote/ratify HTTP routes (session-gated)", () => {
-  it("POST /doc/:slug/promote promotes for an admin principal", async () => {
-    // The promote route is wired to defaultRepo(env), so create the doc there too.
-    await propose_doc_update(env.DB, { ...base, body: "# v1", change_summary: "first", repo: defaultRepo(env) }, "andres");
-    // admin-gated (Task 10 critfix): "admin-user" is the ADMIN_LOGINS entry in vitest.config.ts.
-    const cookie = await authedCookie("admin-user");
-    const res = await app.request(
-      "/doc/architecture/promote",
-      { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ version: 1 }) },
-      env
-    );
-    expect(res.status).toBe(200);
-    const doc = await first<DocRow>(env.DB, `SELECT * FROM docs WHERE slug = ?`, "architecture");
-    expect(doc?.current_version).toBe(1);
-  });
-
-  it("POST /adr/:id/ratify is rejected with 401 without a session", async () => {
-    const id = await stage_adr(env.DB, { title: "t", context: "c", decision: "d", rationale: "r", confidence: "high" }, "andres");
-    const res = await app.request(`/adr/${id}/ratify`, { method: "POST" }, env);
-    expect(res.status).toBe(401);
-    const adr = await first<AdrRow>(env.DB, `SELECT * FROM adrs WHERE id = ?`, id);
-    expect(adr?.status).toBe("draft"); // unchanged
-  });
-
-  it("POST /adr/:id/ratify ratifies for an admin principal", async () => {
-    const id = await stage_adr(env.DB, { title: "t", context: "c", decision: "d", rationale: "r", confidence: "high" }, "andres");
-    const cookie = await authedCookie("admin-user");
-    const res = await app.request(`/adr/${id}/ratify`, { method: "POST", headers: { cookie } }, env);
-    expect(res.status).toBe(200);
-    const adr = await first<AdrRow>(env.DB, `SELECT * FROM adrs WHERE id = ?`, id);
-    expect(adr?.status).toBe("ratified");
-  });
-});
+// The promote/ratify HTTP surface lives ONLY under /r/:owner/:repo now (issue #9
+// removed the flat mutation routes): the hub positives are in hub-routes.test.ts
+// ("a push-authorized collaborator CAN promote a doc / ratify an ADR …"), the
+// flat 404s in flat-mutations-removed.test.ts. This file keeps the writer units.
