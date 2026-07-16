@@ -53,10 +53,15 @@ export async function write_plan(
   for (const m of input.milestones) {
     const github_ref = githubRefJson(m.github_ref);
     if (m.id !== undefined) {
+      // `AND repo = ?` scopes the id-keyed update to the caller's own repo — the
+      // same tenant boundary the hub enforces via milestoneRepo() on
+      // /milestones/:id/complete. A cross-repo id matches 0 rows and falls into
+      // the SAME `no such milestone` error as a nonexistent id, so the response
+      // never doubles as a cross-tenant milestone-id existence oracle.
       const res = await run(
         db,
         `UPDATE milestones SET title = ?, description = ?, phase = ?, target_date = ?, status = ?, github_ref = ?, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND repo = ?`,
         m.title,
         m.description ?? null,
         m.phase ?? null,
@@ -64,7 +69,8 @@ export async function write_plan(
         m.status,
         github_ref,
         now,
-        m.id
+        m.id,
+        repo
       );
       if ((res.meta.changes ?? 0) === 0) throw new Error(`no such milestone: ${m.id}`);
     } else {

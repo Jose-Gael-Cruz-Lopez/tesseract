@@ -6,7 +6,7 @@ import worker, { _mcpTestHooks, _resetMcpTestHooks } from "../src/index";
 import { mintToken } from "../src/auth/tokens";
 import { storeUserToken } from "../src/auth/user-token";
 import { run, first, nowIso, defaultRepo } from "../src/db";
-import type { PlanRow } from "@shared/rows";
+import type { MilestoneRow, PlanRow } from "@shared/rows";
 import type { Env } from "../src/env";
 
 // Issue #20: on /mcp/:owner/:repo the authored/promote-class plan write
@@ -116,6 +116,48 @@ describe("/mcp/:owner/:repo — update_plan authorizes on per-repo canPush, not 
     const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ?`, REPO);
     expect(plan?.narrative).toBe("pushed by a collaborator");
     expect(plan?.updated_by).toBe(AGENT);
+  });
+
+  it("CANNOT update another repo's milestone by id — the write is tenant-scoped, the id-existence oracle is closed, the foreign row is untouched", async () => {
+    // A milestone living in octo/b — a tenant the caller is NOT authorized on.
+    const OTHER = "octo/b";
+    await run(
+      env.DB,
+      `INSERT INTO milestones (repo, title, description, phase, target_date, status, github_ref, created_at, created_by, updated_at)
+       VALUES (?, 'other-tenant milestone', 'original description', 'phase-1', '2026-12-01', 'upcoming', NULL, ?, ?, ?)`,
+      OTHER,
+      nowIso(),
+      "someone-else",
+      nowIso()
+    );
+    const seeded = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE repo = ?`, OTHER);
+    expect(seeded).not.toBeNull();
+
+    // A push collaborator on octo/a (NOT a global admin) legitimately holds update_plan there…
+    const raw = await seedCollaborator(AGENT, true);
+    const client = await mcpClient(`/mcp/${REPO}`, raw);
+    try {
+      // …but aiming it at octo/b's milestone id must fail with the SAME
+      // `no such milestone` shape a nonexistent id produces (no existence leak).
+      const res = await callTool(client, "update_plan", {
+        narrative: "cross-tenant attempt",
+        milestones: [{
+          id: seeded!.id,
+          title: "hijacked",
+          description: "overwritten",
+          target_date: "2020-01-01",
+          status: "done",
+        }],
+      });
+      expect(res.isError).toBeTruthy();
+      expect(res.text).toContain(`no such milestone: ${seeded!.id}`);
+    } finally {
+      await client.close();
+    }
+
+    // octo/b's row is byte-for-byte untouched.
+    const after = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, seeded!.id);
+    expect(after).toEqual(seeded);
   });
 });
 
