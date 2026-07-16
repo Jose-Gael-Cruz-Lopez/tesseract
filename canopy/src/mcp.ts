@@ -46,10 +46,17 @@ async function runTool(fn: () => Promise<unknown>) {
  * unscoped, while /mcp/:owner/:repo's explicit repo now isolates them too
  * (closing what would otherwise be a cross-tenant read leak on those tools).
  *
+ * `canPush` (issue #20) is the per-repo push flag authorizeRepoAccess computed for
+ * the /mcp/:owner/:repo entry point. It only matters when `repo` is given: the
+ * authored/promote-class write (update_plan) is then gated on it — consistent with
+ * the hub routes' requirePush — instead of global isAdmin, so a global admin who
+ * is only a read collaborator on the repo cannot write its plan. The flat /mcp
+ * path never passes it and keeps gating on isAdmin, byte-for-byte unchanged.
+ *
  * A fresh McpServer per request is required (SDK 1.26+ guards against reuse), so
  * this must NOT be hoisted to global scope.
  */
-export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: string): McpServer {
+export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: string, canPush?: boolean): McpServer {
   const server = new McpServer({ name: "canopy", version: "1.0.0" });
   // Only for tools that already unconditionally read/wrote at defaultRepo(env)
   // before #10 (see doc comment above) — an explicit repo overrides it.
@@ -161,11 +168,16 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
     async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal, writeRepo)),
   );
 
-  // ADMIN-only: the plan write surface — non-admin principals don't even see the tool
+  // The plan write surface — unauthorized principals don't even see the tool
   // (conditional registration means it's absent from tools/list and calling it by
   // name errors tool-not-found, since a fresh server is built per request with the
-  // principal already in scope).
-  if (isAdmin(env, principal.login)) {
+  // principal already in scope). Authorization is per-surface (issue #20): the
+  // repo-scoped /mcp/:owner/:repo path gates this authored/promote-class write on
+  // the repo gate's per-repo canPush (like the hub routes' requirePush) — global
+  // admins with only read access are excluded; the flat /mcp path keeps the
+  // global-isAdmin gate unchanged.
+  const canWritePlan = repo !== undefined ? canPush === true : isAdmin(env, principal.login);
+  if (canWritePlan) {
     server.tool(
       "update_plan",
       "ADMIN plan write: replace the roadmap narrative and create/update milestones (including status 'done') in one direct, non-destructively versioned write — same authored-write class as promote, NOT the ingestion gate. Milestones not listed are untouched. Use via the update-plan skill.",
@@ -194,16 +206,18 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
  * each tool falls back when it's omitted). Left undefined by the flat /mcp entry
  * point (index.ts, no owner/repo in the path) so that surface is byte-for-byte
  * unchanged; the multi-tenant /mcp/:owner/:repo entry point (index.ts, authorized
- * like the hub gate) passes its gated repo explicitly.
+ * like the hub gate) passes its gated repo explicitly, plus the per-repo `canPush`
+ * that gate computed so the plan write authorizes on it (issue #20).
  */
 export function handleMcp(
   request: Request,
   env: Env,
   ctx: ExecutionContext,
   principal: Principal,
-  repo?: string
+  repo?: string,
+  canPush?: boolean
 ): Promise<Response> {
-  const server = buildCanopyMcpServer(env, principal, repo);
+  const server = buildCanopyMcpServer(env, principal, repo, canPush);
   // createMcpHandler wraps @modelcontextprotocol/sdk over Streamable HTTP, stateless
   // (no McpAgent/DO). route is the REQUEST's own pathname, not a hardcoded "/mcp":
   // createMcpHandler 404s internally whenever url.pathname !== route, and this same

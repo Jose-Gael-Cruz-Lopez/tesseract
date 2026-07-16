@@ -65,7 +65,9 @@ export default {
       });
       if (!auth.allowed) return jsonError(auth.error, auth.status);
 
-      return handleMcp(request, env, ctx, principal, repo);
+      // Thread the gate's per-repo canPush through so update_plan (the authored/
+      // promote-class MCP write) authorizes on it — NOT global isAdmin (issue #20).
+      return handleMcp(request, env, ctx, principal, repo, auth.canPush);
     }
     // Third auth class: GitHub webhook deliveries, HMAC-verified over the raw
     // body against GITHUB_WEBHOOK_SECRET. Never touches sessionGate.
