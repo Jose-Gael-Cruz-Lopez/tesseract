@@ -2,8 +2,8 @@
 import { beforeEach, test, expect, vi } from 'vitest';
 import { devProvider } from '../src/dev/dev-provider.js';
 import { mountDevPage } from '../src/dev/dev-page.js';
-import { mountDevSidebar } from '../src/dev/dev-sidebar.js';
-import { mountDevHubPicker, hubInstallUrl } from '../src/dev/dev-hub.js';
+import { mountDevSidebar, mountDevSidebarChrome } from '../src/dev/dev-sidebar.js';
+import { mountDevHubPicker, hubInstallUrl, shouldClearDevHub } from '../src/dev/dev-hub.js';
 import { buildDevGraph } from '../src/dev/dev-graph.js';
 
 // marked + dompurify are real in the browser but dompurify returns "" under
@@ -130,4 +130,54 @@ test('hub picker error state offers retry instead of connect guidance', () => {
 test('hubInstallUrl falls back to the GitHub installations page without an app slug', () => {
   expect(hubInstallUrl(null)).toBe('https://github.com/settings/installations');
   expect(hubInstallUrl('canopy-app')).toBe('https://github.com/apps/canopy-app/installations/new');
+});
+
+test('shouldClearDevHub clears only when a successful non-empty list excludes the hub', () => {
+  const okList = (repos) => ({ ok: true, status: 200, data: { repos } });
+  // Positively excluded by a real list → clear.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/other' }]), 'acme/widgets')).toBe(true);
+  // Still present in the list → keep.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/widgets' }]), 'acme/widgets')).toBe(false);
+  // No hub selected → nothing to clear.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/other' }]), '')).toBe(false);
+});
+
+test('shouldClearDevHub never wipes the hub on a degraded or failed /me/repos', () => {
+  // canopy's /me/repos returns 200 { repos: [] } on EVERY server-side failure
+  // (missing/expired user token, GitHub outage) — an empty 200 is
+  // indistinguishable from degradation and must not wipe the persisted hub.
+  expect(shouldClearDevHub({ ok: true, status: 200, data: { repos: [] } }, 'acme/widgets')).toBe(false);
+  // Same for a malformed payload, an HTTP failure, and a network failure.
+  expect(shouldClearDevHub({ ok: true, status: 200, data: {} }, 'acme/widgets')).toBe(false);
+  expect(shouldClearDevHub({ ok: false, status: 401, error: 'http 401' }, 'acme/widgets')).toBe(false);
+  expect(shouldClearDevHub({ ok: false, status: 0, error: 'network' }, 'acme/widgets')).toBe(false);
+});
+
+test('mountDevSidebarChrome keeps mode switch, settings, and log out reachable without a graph', () => {
+  // The no-hub states (picker / connect-a-repo / hubs-unavailable) mount only
+  // this chrome — it must offer the way back to Knowledge mode on its own,
+  // since mode='developer' is persisted and reloads land straight in the picker.
+  const container = document.createElement('aside');
+  document.body.appendChild(container);
+  const setMode = vi.fn();
+  const openSettings = vi.fn();
+  const logOut = vi.fn();
+  mountDevSidebarChrome(container, { setMode, openSettings, logOut });
+
+  const label = container.querySelector('.dev-sb-label');
+  expect(label).not.toBeNull();
+  label.click();
+  const items = [...document.querySelectorAll('.pop-root .sb-menu-item')];
+  expect(items.map((i) => i.textContent)).toEqual(['Knowledge', '✓ Developer', 'Developer settings', 'Log out']);
+  items[0].click();
+  expect(setMode).toHaveBeenCalledWith('knowledge');
+
+  label.click();
+  [...document.querySelectorAll('.pop-root .sb-menu-item')].find((i) => i.textContent === 'Developer settings').click();
+  expect(openSettings).toHaveBeenCalledWith('developer');
+
+  label.click();
+  [...document.querySelectorAll('.pop-root .sb-menu-item')].find((i) => i.textContent === 'Log out').click();
+  expect(logOut).toHaveBeenCalled();
+  document.body.innerHTML = '';
 });

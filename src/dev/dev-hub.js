@@ -16,6 +16,20 @@ export function hubInstallUrl(appSlug) {
     : 'https://github.com/settings/installations';
 }
 
+// Re-validation guard for the persisted hub selection against a /me/repos result
+// ({ ok, data } from canopy-api). True ONLY when a successful AND non-empty hub
+// list positively excludes the hub. An empty list never invalidates: canopy's
+// /me/repos returns 200 { repos: [] } on every server-side failure too (missing/
+// expired user token, GitHub outage — it never 500s), so client-side an empty
+// list is indistinguishable from degradation and must not wipe the selection.
+// Keeping a stale hub is safe — the /r/ repo gate 404s its reads and the sphere
+// surfaces that.
+export function shouldClearDevHub(res, hub) {
+  if (!hub || !res || !res.ok) return false;
+  const repos = Array.isArray(res.data?.repos) ? res.data.repos : [];
+  return repos.length > 0 && !repos.some((r) => r.repo === hub);
+}
+
 // repos = [{ repo: 'owner/name', can_push }] (from canopy's GET /me/repos).
 // error → the hub list couldn't be fetched (offline / 401): show a retry state
 // instead of a misleading "connect a repo".

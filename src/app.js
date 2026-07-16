@@ -23,9 +23,9 @@ import { openTeamspace } from './ui/teamspace-modal.js';
 import { openTrash } from './ui/trash.js';
 import { isConfigured, canopyApi } from './dev/canopy-api.js';
 import { devProvider } from './dev/dev-provider.js';
-import { mountDevSidebar } from './dev/dev-sidebar.js';
+import { mountDevSidebar, mountDevSidebarChrome } from './dev/dev-sidebar.js';
 import { mountDevPage } from './dev/dev-page.js';
-import { mountDevHubPicker } from './dev/dev-hub.js';
+import { mountDevHubPicker, shouldClearDevHub } from './dev/dev-hub.js';
 
 const SHELL_HTML = `
   <div class="shell">
@@ -200,6 +200,11 @@ export function mountApp(root, { onLogOut } = {}) {
 
   function mountDeveloper() {
     sidebar = null;
+    // Chrome-only sidebar first: the no-hub states (picker / connect-a-repo /
+    // hubs-unavailable) must never be a dead end — mode switch, Developer
+    // settings, and Log out stay reachable even before a graph exists. The full
+    // sidebar replaces this once the sphere mounts and its graph arrives.
+    mountDevSidebarChrome(sidebarEl, ctx);
     if (!isConfigured()) { showConnectPrompt(); return; }
     // Hub-first (Phase 3): every dev read is scoped to /r/:owner/:repo, so an
     // active hub must exist before the sphere mounts. The hub list comes from
@@ -210,9 +215,11 @@ export function mountApp(root, { onLogOut } = {}) {
       if (seq !== devMountSeq || mode !== 'developer') return;
       devHubs = (res.ok && Array.isArray(res.data?.repos)) ? res.data.repos : [];
       const appSlug = (res.ok && res.data?.appSlug) || null;
-      // Re-validate only against a SUCCESSFUL list — a transient /me/repos failure
-      // must not wipe the selection (the sphere's own reads surface any 401/404).
-      if (res.ok && !devHubs.some((r) => r.repo === store.getDevHub())) store.setDevHub('');
+      // Re-validate only against a SUCCESSFUL and NON-EMPTY list — canopy's
+      // /me/repos degrades to 200 { repos: [] } on server-side failure (missing
+      // user token, GitHub outage), so neither a failed fetch nor an empty list
+      // may wipe the selection (the sphere's own reads surface any 401/404).
+      if (shouldClearDevHub(res, store.getDevHub())) store.setDevHub('');
       if (store.getDevHub()) { mountDevSphere(); return; }
       mountDevHubPicker(globeEl, {
         repos: devHubs,
