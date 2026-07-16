@@ -21,10 +21,11 @@ import { openTemplates } from './ui/templates-modal.js';
 import { openImport } from './ui/import-modal.js';
 import { openTeamspace } from './ui/teamspace-modal.js';
 import { openTrash } from './ui/trash.js';
-import { isConfigured } from './dev/canopy-api.js';
+import { isConfigured, canopyApi } from './dev/canopy-api.js';
 import { devProvider } from './dev/dev-provider.js';
 import { mountDevSidebar } from './dev/dev-sidebar.js';
 import { mountDevPage } from './dev/dev-page.js';
+import { mountDevHubPicker } from './dev/dev-hub.js';
 
 const SHELL_HTML = `
   <div class="shell">
@@ -64,6 +65,7 @@ export function mountApp(root, { onLogOut } = {}) {
   if (mode === 'developer' && !store.isDevAvailable()) mode = 'knowledge';
   let currentId = null;      // knowledge: open page id
   let devNodesById = null;   // developer: leaf-node lookup for globe dot-clicks
+  let devHubs = [];          // developer: connected hubs from /me/repos (for the switcher)
 
   let sidebar;
   let topbar;
@@ -133,7 +135,16 @@ export function mountApp(root, { onLogOut } = {}) {
       store.setMode(next);
       remountMode();
     },
-    refreshDev() { if (mode === 'developer') mountDeveloper(); },
+    refreshDev() { if (mode === 'developer') remountMode(); },
+
+    // ---- Developer hub dimension (which /r/:owner/:repo the sphere reads) ----
+    devHub: () => store.getDevHub(),
+    devHubs: () => devHubs,
+    setDevHub(repo) {
+      if (repo === store.getDevHub()) return;
+      store.setDevHub(repo);
+      if (mode === 'developer') remountMode();
+    },
 
     openSearch: () => openSearch(ctx),
     openSettings: (panel) => openSettings(ctx, panel),
@@ -183,9 +194,38 @@ export function mountApp(root, { onLogOut } = {}) {
     if (deepId && store.getPage(deepId)) ctx.openPage(deepId);
   }
 
+  // Guards the async hub-list fetch: only the newest mountDeveloper() may mount,
+  // so a stale response can't double-mount after a remount or mode switch.
+  let devMountSeq = 0;
+
   function mountDeveloper() {
     sidebar = null;
     if (!isConfigured()) { showConnectPrompt(); return; }
+    // Hub-first (Phase 3): every dev read is scoped to /r/:owner/:repo, so an
+    // active hub must exist before the sphere mounts. The hub list comes from
+    // /me/repos; the persisted selection is re-validated against it so a hub
+    // the user lost access to can't stick.
+    const seq = ++devMountSeq;
+    canopyApi.getMyRepos().then((res) => {
+      if (seq !== devMountSeq || mode !== 'developer') return;
+      devHubs = (res.ok && Array.isArray(res.data?.repos)) ? res.data.repos : [];
+      const appSlug = (res.ok && res.data?.appSlug) || null;
+      // Re-validate only against a SUCCESSFUL list — a transient /me/repos failure
+      // must not wipe the selection (the sphere's own reads surface any 401/404).
+      if (res.ok && !devHubs.some((r) => r.repo === store.getDevHub())) store.setDevHub('');
+      if (store.getDevHub()) { mountDevSphere(); return; }
+      mountDevHubPicker(globeEl, {
+        repos: devHubs,
+        appSlug,
+        error: !res.ok,
+        onPick: (repo) => ctx.setDevHub(repo),
+        onRetry: () => ctx.refreshDev(),
+      });
+    });
+    topbar.setPage(null);
+  }
+
+  function mountDevSphere() {
     const provider = devProvider();
     globe = initGlobe(globeEl, {
       onOpenPage(id) { const node = devNodesById && devNodesById.get(id); if (node) ctx.openDevItem(node); },
@@ -200,7 +240,6 @@ export function mountApp(root, { onLogOut } = {}) {
       }
       mountDevSidebar(sidebarEl, ctx, graph);
     });
-    topbar.setPage(null);
   }
 
   function showConnectPrompt() {

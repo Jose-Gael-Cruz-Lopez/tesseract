@@ -8,6 +8,8 @@ const escapeText = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '
 
 // graph = { hubs: [{ page:{title, icon}, leaves:[{page:{title, devKind, devRef, id}}] }] }
 // ctx.openDevItem(node) opens the item; ctx.setMode switches back to Knowledge.
+// ctx.devHub() / ctx.devHubs() / ctx.setDevHub(repo) drive the active-hub switcher
+// (the dev-side mirror of canopy's admin repo switcher).
 export function mountDevSidebar(container, ctx, graph) {
   container.innerHTML = '';
   const root = el('div', 'dev-sb');
@@ -41,6 +43,33 @@ export function mountDevSidebar(container, ctx, graph) {
     });
   });
   root.appendChild(label);
+
+  // Active-hub switcher: which /r/:owner/:repo hub the sphere reads. Only rendered
+  // when the shell provides the hub dimension (an active hub always exists then).
+  const activeHub = ctx.devHub && ctx.devHub();
+  if (activeHub) {
+    const hubBtn = el('button', 'dev-sb-hub', escapeText(activeHub) + ' ⌄');
+    hubBtn.type = 'button';
+    hubBtn.title = 'Switch hub';
+    hubBtn.addEventListener('click', () => {
+      openPopover(hubBtn, {
+        className: 'sb-ws-pop',
+        build: (pop, close) => {
+          pop.appendChild(el('div', 'sb-menu-label', 'Switch hub'));
+          // A failed /me/repos leaves the list empty — still show the active hub.
+          const hubs = (ctx.devHubs && ctx.devHubs()) || [];
+          for (const r of hubs.length ? hubs : [{ repo: activeHub }]) {
+            const active = r.repo === activeHub;
+            const item = el('button', 'sb-menu-item' + (active ? ' is-active' : ''), (active ? '✓ ' : '') + escapeText(r.repo));
+            item.type = 'button';
+            item.addEventListener('click', () => { close(); ctx.setDevHub && ctx.setDevHub(r.repo); });
+            pop.appendChild(item);
+          }
+        },
+      });
+    });
+    root.appendChild(hubBtn);
+  }
 
   for (const hub of graph.hubs) {
     const group = el('div', 'dev-sb-group');

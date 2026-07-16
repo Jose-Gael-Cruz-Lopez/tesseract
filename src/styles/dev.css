@@ -55,6 +55,24 @@
   color: var(--text-3);
   padding: 6px 12px 10px;
 }
+.dev-sb-hub {
+  display: block;
+  width: calc(100% - 8px);
+  margin: 0 4px 8px;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dev-sb-hub:hover { background: var(--bg-hover); }
 .dev-sb-group { margin-bottom: 6px; }
 .dev-sb-group-head {
   display: flex;
@@ -109,6 +127,53 @@
   border: 0;
   font-size: 14px;
   cursor: pointer;
+}
+
+/* Hub picker (dev-hub.js): choose which /r/:owner/:repo hub the sphere reads. */
+.dev-hub-list {
+  margin-top: 8px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dev-state .dev-hub-option {
+  margin-top: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.dev-state .dev-hub-option:hover { border-color: var(--blue); }
+.dev-hub-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dev-hub-access { font-size: 12px; color: var(--text-3); flex: none; }
+.dev-hub-connect {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--blue);
+  color: var(--text-on-blue);
+  font-size: 14px;
+  text-decoration: none;
 }
 
 /* Developer settings panel */

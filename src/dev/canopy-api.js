@@ -3,8 +3,13 @@
 // URL + token come from the store's dev config. Results are normalized to
 // { ok, status, data } / { ok:false, status, error } — the client never throws
 // on an HTTP status, so the UI can render "unauthorized" / "offline" states.
+//
+// Data reads are hub-scoped (Phase 3): each targets /r/:owner/:repo/… for the
+// store's active hub (getDevHub). The flat single-tenant routes (/docs, /feed,
+// …) are no longer read — without a hub, reads resolve to 'no-hub' so the UI
+// shows the hub picker instead. Only /auth/me and /me/repos stay unscoped.
 
-import { getDevConfig, isDevAvailable } from '../data/store.js';
+import { getDevConfig, getDevHub, isDevAvailable } from '../data/store.js';
 
 export function isConfigured() {
   // Developer reads work when EITHER a token is set (split-dev / remote canopy) OR a
@@ -37,15 +42,25 @@ export function makeCanopyApi(fetchImpl = globalThis.fetch) {
     }
   }
 
+  // Hub-scoped read: prefixes /r/<owner/name> for the active hub. No hub selected
+  // → resolve 'no-hub' without fetching (never fall back to the flat routes).
+  function scoped(path) {
+    const hub = getDevHub();
+    if (!hub) return Promise.resolve({ ok: false, status: 0, error: 'no-hub' });
+    return get('/r/' + hub + path);
+  }
+
   return {
     getMe: () => get('/auth/me'),
-    getDocs: () => get('/docs'),
-    getDoc: (slug) => get('/doc/' + encodeURIComponent(slug)),
-    getFeed: () => get('/feed'),
-    getRoadmap: () => get('/roadmap'),
-    getDashboard: () => get('/me/dashboard'),
-    getTriage: () => get('/needs-triage'),
-    search: (q) => get('/search?q=' + encodeURIComponent(q)),
+    // The signed-in user's connected hubs ({ repos:[{repo, can_push}], appSlug }).
+    getMyRepos: () => get('/me/repos'),
+    getDocs: () => scoped('/docs'),
+    getDoc: (slug) => scoped('/doc/' + encodeURIComponent(slug)),
+    getFeed: () => scoped('/feed'),
+    getRoadmap: () => scoped('/roadmap'),
+    getDashboard: () => scoped('/me/dashboard'),
+    getTriage: () => scoped('/needs-triage'),
+    search: (q) => scoped('/search?q=' + encodeURIComponent(q)),
   };
 }
 

@@ -266,3 +266,15 @@ test('dev canopy config round-trips (url + token)', () => {
   store.setDevConfig({ token: 'canopy_mcp_xyz' }); // partial update keeps url
   expect(store.getDevConfig()).toEqual({ url: 'http://localhost:8787', token: 'canopy_mcp_xyz' });
 });
+
+test('dev active hub round-trips, clears, and persists as a pref', () => {
+  withLocalStorage(memoryStorage(), () => {
+    expect(store.getDevHub()).toBe('');
+    store.setDevHub('acme/widgets');
+    expect(store.getDevHub()).toBe('acme/widgets');
+    // Persisted (a returning developer lands back in the same hub).
+    expect(JSON.parse(globalThis.localStorage.getItem('ms:prefs'))['dev.canopyHub']).toBe('acme/widgets');
+    store.setDevHub('');
+    expect(store.getDevHub()).toBe('');
+  });
+});
