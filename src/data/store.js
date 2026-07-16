@@ -395,3 +395,13 @@ export function setDevConfig({ url, token } = {}) {
   if (token !== undefined) setPref('dev.canopyToken', token);
   return getDevConfig();
 }
+
+// Developer-mode active hub ("owner/name" from canopy's /me/repos). Every dev read is
+// scoped to /r/:owner/:repo, so this is the sphere's tenant dimension. Persisted so a
+// returning developer lands back in the same hub; '' means none selected (hub picker).
+export function getDevHub() {
+  return _prefs['dev.canopyHub'] || '';
+}
+export function setDevHub(repo) {
+  return setPref('dev.canopyHub', repo || '');
+}
