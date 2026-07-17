@@ -18,13 +18,18 @@ export class ApiError extends Error {
 }
 export class NotFound extends Error {}
 
-// The active hub (owner/name) the read functions target. null → flat/no-hub (hub-list).
+// The active hub (owner/name) the read functions target. null → no hub (hub-list).
 let activeRepo: string | null = null;
 export function setActiveRepo(r: string | null): void { activeRepo = r; }
 export function getActiveRepo(): string | null { return activeRepo; }
-// Prefix a hub-scoped path with the active repo when one is selected.
+// Prefix a hub-scoped path with the active repo. There is NO flat fallback
+// (issue #9 review): the flat mutation routes are removed server-side and the
+// flat reads are admin-gated + defaultRepo-scoped, so falling back would just
+// 404/403 — fail fast with a clear message instead. Every consumer below is
+// async, so this throw surfaces as a rejected promise at the call site.
 function scoped(path: string): string {
-  return activeRepo ? `/r/${activeRepo}${path}` : path;
+  if (!activeRepo) throw new ApiError(400, "Select a repo first");
+  return `/r/${activeRepo}${path}`;
 }
 
 export interface Repo { repo: string; can_push: boolean; }
@@ -56,7 +61,7 @@ async function postJson<T>(path: string, body: unknown = {}): Promise<T> {
 
 // ── reads ────────────────────────────────────────────────────────────────────
 export interface FeedQuery { author?: string; tags?: string[]; }
-export function getFeed(q: FeedQuery = {}): Promise<FeedRow[]> {
+export async function getFeed(q: FeedQuery = {}): Promise<FeedRow[]> {
   const p = new URLSearchParams();
   if (q.author) p.set("author", q.author);
   if (q.tags && q.tags.length) p.set("tags", q.tags.join(","));
@@ -64,11 +69,11 @@ export function getFeed(q: FeedQuery = {}): Promise<FeedRow[]> {
   return getJson<{ feed: FeedRow[] }>(scoped(`/feed${qs ? `?${qs}` : ""}`)).then((r) => r.feed);
 }
 
-export function listDocs(): Promise<DocRow[]> {
+export async function listDocs(): Promise<DocRow[]> {
   return getJson<{ docs: DocRow[] }>(scoped("/docs")).then((r) => r.docs);
 }
 
-export function getDoc(slug: string): Promise<{ doc: DocRow; versions: DocVersionRow[] }> {
+export async function getDoc(slug: string): Promise<{ doc: DocRow; versions: DocVersionRow[] }> {
   return getJson<{ doc: DocRow; versions: DocVersionRow[] }>(scoped(`/doc/${encodeURIComponent(slug)}`)).catch((e) => {
     if (e instanceof ApiError && e.status === 404) throw new NotFound(slug);
     throw e;
@@ -95,7 +100,7 @@ export interface QueryResult {
 }
 
 // Human Search: the route forces include_staged:false, so results are live-only.
-export function search(q: string, opts: { types?: QueryType[]; section?: string; space?: string; limit?: number } = {}): Promise<QueryResult> {
+export async function search(q: string, opts: { types?: QueryType[]; section?: string; space?: string; limit?: number } = {}): Promise<QueryResult> {
   const p = new URLSearchParams();
   if (q) p.set("q", q);
   if (opts.types && opts.types.length) p.set("types", opts.types.join(","));
@@ -118,17 +123,17 @@ export interface PlanView {
   updated_by: string | null;
   milestones: MilestoneWithProgress[];
 }
-export function getRoadmap(): Promise<PlanView> {
+export async function getRoadmap(): Promise<PlanView> {
   return getJson<PlanView>(scoped("/roadmap"));
 }
 
-export function listNeedsTriage(): Promise<NeedsTriageRow[]> {
+export async function listNeedsTriage(): Promise<NeedsTriageRow[]> {
   return getJson<{ items: NeedsTriageRow[] }>(scoped("/needs-triage")).then((r) => r.items);
 }
-export function listAdrs(status?: string): Promise<AdrRow[]> {
+export async function listAdrs(status?: string): Promise<AdrRow[]> {
   return getJson<{ adrs: AdrRow[] }>(scoped(`/adrs${status ? `?status=${encodeURIComponent(status)}` : ""}`)).then((r) => r.adrs);
 }
-export function listMilestoneProposals(): Promise<MilestoneProposalRow[]> {
+export async function listMilestoneProposals(): Promise<MilestoneProposalRow[]> {
   return getJson<{ proposals: MilestoneProposalRow[] }>(scoped("/milestone-proposals")).then((r) => r.proposals);
 }
 
@@ -154,7 +159,7 @@ export function adminBackfill(): Promise<{
   return postJson("/admin/backfill", {});
 }
 
-export function getMyDashboard(): Promise<DashboardData> {
+export async function getMyDashboard(): Promise<DashboardData> {
   return getJson<DashboardData>(scoped("/me/dashboard"));
 }
 
@@ -181,7 +186,7 @@ export interface StagedProposal {
   stagedBody: string;
   promotedBody: string;
 }
-export function listStagedProposals(): Promise<StagedProposal[]> {
+export async function listStagedProposals(): Promise<StagedProposal[]> {
   return getJson<{ proposals: StagedProposal[] }>(scoped("/proposals")).then((r) => r.proposals);
 }
 
@@ -209,34 +214,34 @@ export function listIdentityTasks(): Promise<IdentityTask[]> {
 }
 
 // ── confirms (cookie-authed) ─────────────────────────────────────────────────
-export function promoteDoc(slug: string, version: number): Promise<{ ok: true }> {
+export async function promoteDoc(slug: string, version: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/doc/${encodeURIComponent(slug)}/promote`), { version });
 }
-export function ratifyAdr(id: number): Promise<{ ok: true }> {
+export async function ratifyAdr(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/adr/${id}/ratify`));
 }
-export function promoteMilestoneProposal(id: number): Promise<{ ok: true }> {
+export async function promoteMilestoneProposal(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/milestone-proposals/${id}/promote`));
 }
-export function completeMilestone(id: number): Promise<{ ok: true }> {
+export async function completeMilestone(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/milestones/${id}/complete`));
 }
 
 // ── triage write-back (Phase 3): reject / discard / assign-materialize ─────────
-export function rejectDoc(slug: string, version: number): Promise<{ ok: true }> {
+export async function rejectDoc(slug: string, version: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/doc/${encodeURIComponent(slug)}/reject`), { version });
 }
-export function rejectAdr(id: number): Promise<{ ok: true }> {
+export async function rejectAdr(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/adr/${id}/reject`));
 }
-export function rejectMilestoneProposal(id: number): Promise<{ ok: true }> {
+export async function rejectMilestoneProposal(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/milestone-proposals/${id}/reject`));
 }
-export function discardTriage(id: number): Promise<{ ok: true }> {
+export async function discardTriage(id: number): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/needs-triage/${id}/discard`));
 }
 export interface AssignTarget { type?: "doc" | "adr" | "milestone" | "feed"; section?: string; space?: "sapling" | "canopy"; tags?: string[]; }
-export function assignTriage(id: number, target: AssignTarget): Promise<{ ok: true }> {
+export async function assignTriage(id: number, target: AssignTarget): Promise<{ ok: true }> {
   return postJson<{ ok: true }>(scoped(`/needs-triage/${id}/assign`), target);
 }
 

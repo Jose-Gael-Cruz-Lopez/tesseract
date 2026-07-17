@@ -1,6 +1,7 @@
 import { app } from "./routes";
 import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
+import { logEvent } from "./log";
 import { resolveBearerPrincipal } from "./auth/principal";
 import { loginAllowed, evictStaleAbuseState } from "./auth/rate-limit";
 import { authorizeRepoAccess } from "./auth/repo-gate";
@@ -50,7 +51,17 @@ export default {
       // so a token minted while signup was open must stop resolving the moment the
       // list is flipped on. Same bare 401 — a non-listed login learns nothing.
       const principal = await resolveBearerPrincipal(request, env);
-      if (!principal || !loginAllowed(env, principal.login)) return jsonError("unauthorized", 401);
+      if (!principal || !loginAllowed(env, principal.login)) {
+        // One detail-free structured line (issue #22), mirroring the webhook's
+        // pre-auth convention: the request is UNVERIFIED here, so no header/token
+        // material is logged — an attacker controls all of it. Bearer tokens are
+        // the long-lived static credential (canopy_mcp_…): a revoked/leaked token
+        // being probed must land at error level so the auth-failure-spike alert
+        // (docs/runbooks/secrets-and-observability.md) counts it. An allowlist-
+        // disabled login (issue #21) lands here too — same bare 401, learns nothing.
+        logEvent({ event: "mcp_auth", outcome: "unauthorized" });
+        return jsonError("unauthorized", 401);
+      }
 
       if (!repoMatch) return handleMcp(request, env, ctx, principal);
 

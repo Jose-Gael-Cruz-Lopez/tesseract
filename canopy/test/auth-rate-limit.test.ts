@@ -205,9 +205,13 @@ describe("LOGIN_ALLOWLIST — enforced at principal resolution, not only at sign
   });
 
   it("cuts off a bearer token on the session-gated read routes for a non-listed login", async () => {
+    // The flat reads are admin-gated post-#9, so mint for the ADMIN_LOGINS entry
+    // ("admin-user", vitest.config.ts) — the strongest credential the flat surface
+    // honors. The allowlist must sever even that, at principal resolution, before
+    // the admin gate is ever consulted.
     await env.DB.prepare(`INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`)
-      .bind("mallory", "mallory", "2026-01-01T00:00:00Z").run();
-    const { raw } = await mintToken(env.DB, "mallory");
+      .bind("admin-user", "admin-user", "2026-01-01T00:00:00Z").run();
+    const { raw } = await mintToken(env.DB, "admin-user");
     expect((await app.request("/docs", { headers: { authorization: `Bearer ${raw}` } }, env)).status).toBe(200);
     expect((await app.request("/docs", { headers: { authorization: `Bearer ${raw}` } }, listEnv)).status).toBe(401);
   });

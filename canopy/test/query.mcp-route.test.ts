@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildCanopyMcpServer } from "../src/mcp";
 import { app } from "../src/routes";
 import { authedCookie } from "./helpers/session";
+import { defaultRepo } from "../src/db";
 import { propose_doc_update, promote_doc } from "../src/tools/writes";
 import type { QueryResult } from "@shared/contract";
 
@@ -29,8 +30,11 @@ async function callQuery(args: Record<string, unknown>): Promise<QueryResult> {
   }
 }
 
+// The flat /search is admin-gated + defaultRepo-scoped now (issue #9 review; see
+// flat-reads-scoped.test.ts): drive it as the ADMIN_LOGINS entry, with fixtures
+// seeded at defaultRepo(env) so the scoped route can see them.
 async function searchRoute(qs: string): Promise<QueryResult> {
-  const cookie = await authedCookie("human");
+  const cookie = await authedCookie("admin-user");
   const res = await app.request(`/search?${qs}`, { headers: { cookie } }, env);
   expect(res.status).toBe(200);
   const body = (await res.json()) as { result: QueryResult };
@@ -51,7 +55,9 @@ describe("registered MCP query tool + live GET /search route", () => {
 
   it("MCP surfaces staged (agent default include_staged:true); /search does not (human default false)", async () => {
     // An UNPROMOTED doc — found by title (its live body is empty until promotion).
-    await propose_doc_update(env.DB, { slug: "secret-plan", section: "reference", title: "Pelican Plan", body: "the unpromoted pelican details", change_summary: "s", confidence: "high" }, AUTHOR);
+    // Seeded at defaultRepo(env) so the scoped /search sees the slug and withholds it
+    // for being unpromoted — not merely for being out of scope.
+    await propose_doc_update(env.DB, { slug: "secret-plan", section: "reference", title: "Pelican Plan", body: "the unpromoted pelican details", change_summary: "s", confidence: "high", repo: defaultRepo(env) }, AUTHOR);
 
     // Agent via the registered MCP tool: sees it, flagged unpromoted, staged body reached.
     const mcp = await callQuery({ q: "pelican" });
@@ -66,8 +72,8 @@ describe("registered MCP query tool + live GET /search route", () => {
   });
 
   it("/search returns { result } and a promoted doc is visible to humans", async () => {
-    await propose_doc_update(env.DB, { slug: "human-doc", section: "reference", title: "Human Doc", body: "the heron is promoted", change_summary: "s", confidence: "high" }, AUTHOR);
-    await promote_doc(env.DB, "human-doc", 1, AUTHOR);
+    await propose_doc_update(env.DB, { slug: "human-doc", section: "reference", title: "Human Doc", body: "the heron is promoted", change_summary: "s", confidence: "high", repo: defaultRepo(env) }, AUTHOR);
+    await promote_doc(env.DB, "human-doc", 1, AUTHOR, defaultRepo(env));
 
     const result = await searchRoute("q=heron");
     expect(result.meta.engine).toBe("fts5");
@@ -77,10 +83,10 @@ describe("registered MCP query tool + live GET /search route", () => {
   });
 
   it("/search honors the types csv filter", async () => {
-    await propose_doc_update(env.DB, { slug: "owl-doc", section: "reference", title: "Owl Doc", body: "owl content", change_summary: "s", confidence: "high" }, AUTHOR);
-    await promote_doc(env.DB, "owl-doc", 1, AUTHOR);
-    await env.DB.prepare(`INSERT INTO feed (author, summary, body, artifacts, created_at) VALUES (?, 'owl feed', 'owl content', NULL, ?)`)
-      .bind(AUTHOR, "2026-01-01T00:00:00Z").run();
+    await propose_doc_update(env.DB, { slug: "owl-doc", section: "reference", title: "Owl Doc", body: "owl content", change_summary: "s", confidence: "high", repo: defaultRepo(env) }, AUTHOR);
+    await promote_doc(env.DB, "owl-doc", 1, AUTHOR, defaultRepo(env));
+    await env.DB.prepare(`INSERT INTO feed (repo, author, summary, body, artifacts, created_at) VALUES (?, ?, 'owl feed', 'owl content', NULL, ?)`)
+      .bind(defaultRepo(env), AUTHOR, "2026-01-01T00:00:00Z").run();
 
     const docsOnly = await searchRoute("q=owl&types=doc");
     expect(docsOnly.primary.every((p) => p.type === "doc")).toBe(true);

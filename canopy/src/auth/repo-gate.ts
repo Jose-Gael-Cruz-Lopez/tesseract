@@ -1,6 +1,7 @@
 import { type Context, type MiddlewareHandler } from "hono";
 import type { DB } from "../db";
 import type { Env } from "../env";
+import { logEvent } from "../log";
 import { authorizeRepo } from "./access";
 import { accessibleRepos, type AccessibleRepo } from "./app";
 import type { AppEnv } from "./principal";
@@ -36,12 +37,22 @@ export async function authorizeRepoAccess(deps: RepoAuthDeps): Promise<RepoAuthR
   const authorize = deps.authorize ?? authorizeRepo;
   const listRepos = deps.listRepos ?? ((t: string) => accessibleRepos(t));
 
+  // Every decision logs ONE structured line (issue #22). The log carries the repo
+  // the caller ASKED for — that's server-side observability, distinct from the
+  // RESPONSE, which still never leaks whether a denied repo exists.
   const token = await deps.getUserToken(deps.login);
-  if (!token) return { allowed: false, status: 401, error: "reauthorize" };
+  if (!token) {
+    logEvent({ event: "repo_gate", outcome: "deny", login: deps.login, repo: deps.repo, status: 401, reason: "no_user_token" });
+    return { allowed: false, status: 401, error: "reauthorize" };
+  }
 
   const { allowed, canPush } = await authorize(deps.db, deps.login, deps.repo, () => listRepos(token));
-  if (!allowed) return { allowed: false, status: 404, error: "not found" }; // don't leak existence
+  if (!allowed) {
+    logEvent({ event: "repo_gate", outcome: "deny", login: deps.login, repo: deps.repo, status: 404, reason: "not_connected_or_no_access" });
+    return { allowed: false, status: 404, error: "not found" }; // don't leak existence
+  }
 
+  logEvent({ event: "repo_gate", outcome: "allow", login: deps.login, repo: deps.repo, can_push: canPush });
   return { allowed: true, canPush };
 }
 

@@ -12,6 +12,7 @@ import {
   createD1RateLimiter, createD1FailureTracker, clientIp, loginAllowed, tooManyRequests,
   LOGIN_RATE, CALLBACK_RATE, SESSION_RATE, AUTH_FAILURE_LOCKOUT,
 } from "./rate-limit";
+import { logEvent } from "../log";
 
 const TX = "app_oauth_tx";
 const RET = "app_oauth_return";
@@ -39,7 +40,13 @@ function appCallbackUrl(reqUrl: string): string {
  * other — each just has to be ONE of the App's registered callback URLs, and both are.
  */
 export async function startAppLogin(c: Context<AppEnv>, opts?: { callbackUrl?: (reqUrl: string) => string; now?: () => number }): Promise<Response> {
-  if (!c.env.GITHUB_APP_CLIENT_ID) return c.json({ error: "app_not_configured" }, 503);
+  if (!c.env.GITHUB_APP_CLIENT_ID) {
+    // The exact symptom the secret-piping gotcha produces (an EMPTY
+    // GITHUB_APP_CLIENT_ID → login 503) — log it so the incident in
+    // docs/runbooks/secrets-and-observability.md is diagnosable from Workers Logs.
+    logEvent({ event: "signin", outcome: "failure", reason: "app_not_configured" });
+    return c.json({ error: "app_not_configured" }, 503);
+  }
   // Abuse control (issue #21): per-IP cap on sign-in starts. Each start sets cookies
   // and redirects to GitHub — cheap, but now that login is open to any GitHub user,
   // unbounded starts are a scripted-probe surface.
@@ -79,8 +86,10 @@ export async function finishAppLogin(
   const ret = safeReturnPath(getCookie(c, RET));
   deleteCookie(c, RET, { path: "/" });
   // Every failed auth outcome below counts toward the per-IP lockout — the response
-  // shapes are unchanged, they just also feed the failure tracker.
+  // shapes are unchanged, they just also feed the failure tracker (issue #21) and
+  // the structured signin log (issue #22).
   const fail = async (error: string, status: 400 | 401 | 403): Promise<Response> => {
+    logEvent({ event: "signin", outcome: "failure", reason: error });
     await failures.recordFailure(AUTH_FAILURE_LOCKOUT, ip);
     return c.json({ error }, status);
   };
@@ -106,8 +115,12 @@ export async function finishAppLogin(
 
   // Soft-rollout allow-list (issue #21): a non-empty LOGIN_ALLOWLIST restricts who may
   // sign in; empty/absent keeps signup open. Checked before anything is provisioned
-  // for the user. NOT an auth failure — this is an identified user, not a probe.
-  if (!loginAllowed(c.env, ghUser.login)) return c.json({ error: "login_not_allowed" }, 403);
+  // for the user. NOT an auth failure — this is an identified user, not a probe —
+  // so it is logged but never feeds the lockout tracker.
+  if (!loginAllowed(c.env, ghUser.login)) {
+    logEvent({ event: "signin", outcome: "failure", reason: "login_not_allowed", login: ghUser.login });
+    return c.json({ error: "login_not_allowed" }, 403);
+  }
 
   // Session-creation cap (issue #21), keyed by the GitHub account: even a client
   // rotating IPs can't mint unbounded sessions for one login.
@@ -123,5 +136,6 @@ export async function finishAppLogin(
     ghUser.login, ghUser.name, ghUser.avatar_url, nowIso());
   const { id } = await createSession(c.env.DB, ghUser.login);
   await setSessionCookie(c, id, c.env.COOKIE_SECRET);        // NO org gate — any GitHub user
+  logEvent({ event: "signin", outcome: "success", login: ghUser.login });
   return c.redirect(ret, 302);
 }

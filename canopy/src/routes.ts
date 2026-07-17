@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { IngestPayload } from "@shared/contract";
 import type { AppEnv } from "./auth/principal";
 import { sessionGate, isAdmin } from "./auth/principal";
@@ -8,7 +8,7 @@ import { consume } from "./consumer";
 import { defaultRepo, nowIso } from "./db";
 import { runBackfill } from "./tools/backfill";
 import { get_doc, list_docs, get_feed, query, list_needs_triage, list_adrs, list_milestone_proposals, list_proposals, list_identity_tasks } from "./tools/reads";
-import { promote_doc, ratify_adr, promote_milestone_proposal, reject_milestone_proposal, complete_milestone, reject_doc_version, reject_adr, resolve_triage, assign_triage, map_identity, type AssignType } from "./tools/writes";
+import { map_identity } from "./tools/writes";
 import { get_plan } from "./tools/plan";
 import { getMyWork } from "./tools/mywork";
 import type { DashboardData } from "@shared/dashboard";
@@ -40,16 +40,34 @@ app.get("/github/app/callback", async (c) => {
   return c.redirect("/");
 });
 
-// Multi-tenant hub routes (Phase 3): /r/:owner/:repo/* behind repoGate. Coexists with
-// the flat defaultRepo routes below until the UI cutover.
+// Multi-tenant hub routes (Phase 3): /r/:owner/:repo/* behind repoGate. The flat
+// routes below coexist until their own cutover, but only as a locked-down
+// single-tenant surface: the flat mutations are gone (issue #9) — every
+// promote-class write goes through the hub now — and the flat reads are
+// admin-gated + defaultRepo-scoped (issue #9 review, below).
 app.route("/r/:owner/:repo", hubApp);
 
-// ADMIN gate on the flat MUTATION routes (this + every POST below through
-// /milestones/:id/complete). Restores the pre-flip invariant: before Task 10 opened
-// /auth/login to any GitHub user, AUTH_ORG="" meant the login gate WAS isAdmin, so every
-// session was an admin — these single-tenant routes leaned on that. Post-flip a session no
-// longer implies admin, so each mutation re-checks isAdmin explicitly (same 403 shape as
-// /admin/backfill). Reads stay session-accessible; the /r/ hub routes keep their own push-gate.
+// The flat promote/reject/ratify/complete/discard/assign MUTATION routes are REMOVED
+// (Phase B, issue #9 / plan Task 11): they were admin-gated but had no push-gate and no
+// repo-ownership guard, so an id-keyed one could act on any tenant's row once a second
+// repo connected. Their only home is now /r/:owner/:repo/* (src/hub.ts) — push-gated +
+// ownership-guarded. The remaining flat mutations below (/ingest,
+// /identity-tasks/:login/map, /admin/backfill) each carry an explicit isAdmin gate
+// (same 403 shape): /ingest stays reachable for agents still posting flat until MCP is
+// fully repo-routed; identity mapping is cross-repo by design; backfill targets the
+// single-tenant defaultRepo(env).
+//
+// The flat READ surface is admin-gated + defaultRepo-scoped too (issue #9 review):
+// /auth/login is open to ANY GitHub user (Task 10), so a bare session must not read
+// the grandfathered tenant's content — and an unscoped read would disclose every
+// tenant's rows the moment a second repo connects, defeating the security ordering
+// this removal exists for. Multi-tenant reads live under /r/:owner/:repo/*
+// (collaborator-gated, repo-scoped); the flat reads only serve the single-tenant
+// defaultRepo(env) deployment, to its admins.
+function requireFlatAdmin(c: Context<AppEnv>): Response | null {
+  return isAdmin(c.env, c.get("principal").login) ? null : c.json({ error: "admin only" }, 403);
+}
+
 app.post("/ingest", async (c) => {
   const login = c.get("principal").login;
   if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
@@ -64,17 +82,20 @@ app.post("/ingest", async (c) => {
 });
 
 app.get("/docs", async (c) => {
-  const docs = await list_docs(c.env.DB, c.req.query("section"));
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  const docs = await list_docs(c.env.DB, c.req.query("section"), defaultRepo(c.env));
   return c.json({ docs });
 });
 
 app.get("/doc/:slug", async (c) => {
-  const found = await get_doc(c.env.DB, c.req.param("slug"));
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  const found = await get_doc(c.env.DB, c.req.param("slug"), defaultRepo(c.env));
   if (!found) return c.json({ error: "not found" }, 404);
   return c.json(found);
 });
 
 app.get("/feed", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
   const tags = c.req.query("tags");
   const limit = c.req.query("limit");
   const feed = await get_feed(c.env.DB, {
@@ -82,13 +103,14 @@ app.get("/feed", async (c) => {
     tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
     since: c.req.query("since"),
     limit: limit ? Number(limit) : undefined,
-  });
+  }, defaultRepo(c.env));
   return c.json({ feed });
 });
 
 // Human Search backs onto the same query() engine as MCP, but include_staged is
 // false — the human screen surfaces only settled (live) context, never staged.
 app.get("/search", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
   const typesCsv = c.req.query("types");
   const types = typesCsv
     ? (typesCsv.split(",").map((t) => t.trim()).filter((t): t is "doc" | "decision" | "feed" | "milestone" =>
@@ -104,132 +126,52 @@ app.get("/search", async (c) => {
     space,
     include_staged: false,
     limit: limit ? Number(limit) : undefined,
-  });
+  }, defaultRepo(c.env));
   return c.json({ result });
 });
 
 // SEAM: POST /ask — retrieve via query(), synthesize a grounded, slug-citing answer. Out of scope.
 
-app.get("/needs-triage", async (c) => c.json({ items: await list_needs_triage(c.env.DB) }));
+app.get("/needs-triage", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ items: await list_needs_triage(c.env.DB, defaultRepo(c.env)) });
+});
 
-app.get("/adrs", async (c) => c.json({ adrs: await list_adrs(c.env.DB, c.req.query("status")) }));
+app.get("/adrs", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ adrs: await list_adrs(c.env.DB, c.req.query("status"), defaultRepo(c.env)) });
+});
 
-app.get("/milestone-proposals", async (c) => c.json({ proposals: await list_milestone_proposals(c.env.DB) }));
+app.get("/milestone-proposals", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ proposals: await list_milestone_proposals(c.env.DB, defaultRepo(c.env)) });
+});
 
-// ── Review group (session-cookie only, NEVER MCP): Proposals (staged doc
-// versions) + Decisions (ADR drafts) — GET /proposals, GET /adrs, and their
-// promote/ratify/reject resolves. Agent produces, human confirms. ──────────
+// ── Review group (session-cookie only, NEVER MCP): the READ queues — GET
+// /proposals (staged doc versions) + GET /adrs (ADR drafts). Their promote/
+// ratify/reject/discard/assign resolves live ONLY under /r/:owner/:repo/*
+// (src/hub.ts, push-gated). Agent produces, human confirms — in a hub. ──────
 
 // The Proposals queue (Phase 3): staged doc versions newer than their live doc,
 // not rejected, server-joined with both bodies + reconciler metadata. Kills the
 // old web N+1 (audit G9) and is the data source Phase 4's detail pane renders.
-app.get("/proposals", async (c) => c.json({ proposals: await list_proposals(c.env.DB) }));
-
-// Human confirmation (session-gated): promote a staged doc version into the live doc.
-app.post("/doc/:slug/promote", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const body = await c.req.json().catch(() => null);
-  const version = Number(body?.version);
-  if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
-  try {
-    const res = await promote_doc(c.env.DB, c.req.param("slug"), version, login, defaultRepo(c.env));
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human write-back (session-gated): reject a staged doc version. Soft status flip
-// to 'rejected' so it leaves the proposals queue; the row + body remain.
-app.post("/doc/:slug/reject", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const body = await c.req.json().catch(() => null);
-  const version = Number(body?.version);
-  if (!Number.isInteger(version)) return c.json({ error: "version (integer) required" }, 400);
-  try {
-    const res = await reject_doc_version(c.env.DB, c.req.param("slug"), version, defaultRepo(c.env));
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human confirmation (session-gated): ratify an ADR draft.
-app.post("/adr/:id/ratify", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const res = await ratify_adr(c.env.DB, id);
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human write-back (session-gated): reject an ADR draft. Soft flip to 'rejected'
-// so it leaves the decisions queue; the row remains.
-app.post("/adr/:id/reject", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const res = await reject_adr(c.env.DB, id);
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human write-back (session-gated): discard a triage item. Soft — sets the audit
-// columns + resolved flag so it leaves the queue; never a hard-delete.
-app.post("/needs-triage/:id/discard", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const res = await resolve_triage(c.env.DB, id, login, "discarded");
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human write-back (session-gated): assign-materialize a triage item. Re-runs the
-// item's `raw` through the SAME gate for the chosen target type, then resolves it
-// as 'assigned' with assigned_ref. The author is the authenticated principal.
-app.post("/needs-triage/:id/assign", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as {
-    type?: AssignType; section?: string; space?: "sapling" | "canopy"; tags?: string[];
-  } | null;
-  try {
-    const res = await assign_triage(c.env.DB, id, login, {
-      type: body?.type,
-      section: body?.section,
-      space: body?.space,
-      tags: body?.tags,
-    });
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
+app.get("/proposals", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ proposals: await list_proposals(c.env.DB, defaultRepo(c.env)) });
 });
 
 // ── Maintenance group (session-cookie only, NEVER MCP): Unplaced items
-// (/needs-triage + assign/discard above) + Identity (below). ─────────────────
+// (GET /needs-triage; assign/discard resolve under /r/:owner/:repo/* only) +
+// Identity (below — cross-repo by design, so it stays flat). ─────────────────
 
 // Pending unknown-login identity tasks, each with a small LIVE activity sample
 // pulled from `events` at read time — activity is never copied onto the task.
-app.get("/identity-tasks", async (c) => c.json({ tasks: await list_identity_tasks(c.env.DB) }));
+// Admin-gated like the map write below: the samples are cross-repo event titles,
+// which must not be readable by any signed-in GitHub user.
+app.get("/identity-tasks", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ tasks: await list_identity_tasks(c.env.DB) });
+});
 
 // Human placement (session-gated): map a login to a person. The `people`
 // table's ONLY runtime write (a direct authored write, not a gate re-run),
@@ -249,9 +191,12 @@ app.post("/identity-tasks/:login/map", async (c) => {
   }
 });
 
-// Roadmap read (session-gated): admin narrative + milestones in target-date order,
+// Roadmap read (admin-gated): admin narrative + milestones in target-date order,
 // merged with cached progress from the plan store. No live GitHub, no per-user token.
-app.get("/roadmap", async (c) => c.json(await get_plan(c.env.DB, defaultRepo(c.env))));
+app.get("/roadmap", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json(await get_plan(c.env.DB, defaultRepo(c.env)));
+});
 
 // Personal dashboard (session-gated): the signed-in user's two-list My Work —
 // previous activity (summarized merged/closed PRs) + open assigned issues,
@@ -279,35 +224,6 @@ app.get("/me/repos", async (c) => {
   }
 });
 
-// Human confirmation (session-gated): promote a staged milestone proposal into a live milestone.
-app.post("/milestone-proposals/:id/promote", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const milestone = await promote_milestone_proposal(c.env.DB, id, login);
-    return c.json({ ok: true, milestone });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
-// Human write-back (session-gated): reject a staged milestone proposal. Soft flip to
-// 'rejected' so it leaves the milestones queue; the row remains. Idempotent.
-app.post("/milestone-proposals/:id/reject", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const res = await reject_milestone_proposal(c.env.DB, id);
-    return c.json({ ok: true, ...res });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
-});
-
 // ADMIN action (session-gated + admin-gated): server-side GitHub backfill for the
 // single-tenant flat deployment's configured GITHUB_REPO. A computed/authored direct
 // writer in the promote class — humans (admins) trigger it — but every captured event
@@ -320,18 +236,4 @@ app.post("/admin/backfill", async (c) => {
   const res = await runBackfill(c.env, login, defaultRepo(c.env));
   if (!res.ok) return c.json({ error: res.error }, 503);
   return c.json(res);
-});
-
-// Human confirmation (session-gated): flip a live milestone to 'done'.
-app.post("/milestones/:id/complete", async (c) => {
-  const login = c.get("principal").login;
-  if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
-  try {
-    const milestone = await complete_milestone(c.env.DB, id);
-    return c.json({ ok: true, milestone });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
-  }
 });

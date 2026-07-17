@@ -11,6 +11,7 @@ import { defaultRepo } from "./db";
 import { feedEntryFromMcpArgs } from "./mcp-args";
 import { IngestPayload } from "@shared/contract";
 import { write_plan, get_plan, type PlanWrite } from "./tools/plan";
+import { logEvent } from "./log";
 
 const asText = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
@@ -20,12 +21,20 @@ const asText = (value: unknown) => ({ content: [{ type: "text" as const, text: J
 // on its own merits (vocab/confidence/content-hash dedupe still apply).
 const ephemeralLedger = () => ({ sessionId: crypto.randomUUID(), itemIndex: 0 });
 
-async function runTool(fn: () => Promise<unknown>) {
+// Every tool invocation emits ONE structured mcp_tool line (issue #22), scoped to
+// the calling principal and — on /mcp/:owner/:repo — the gated repo (undefined on
+// the flat /mcp path, and dropped from the line). Error messages are the same
+// sanitized strings already returned to the caller; never payload bodies.
+async function runTool(meta: { tool: string; login: string; repo?: string }, fn: () => Promise<unknown>) {
   try {
-    return asText(await fn());
+    const result = asText(await fn());
+    logEvent({ event: "mcp_tool", outcome: "success", tool: meta.tool, login: meta.login, repo: meta.repo });
+    return result;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logEvent({ event: "mcp_tool", outcome: "error", tool: meta.tool, login: meta.login, repo: meta.repo, message });
     return {
-      content: [{ type: "text" as const, text: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) }],
+      content: [{ type: "text" as const, text: JSON.stringify({ error: message }) }],
       isError: true as const,
     };
   }
@@ -61,6 +70,9 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
   // Only for tools that already unconditionally read/wrote at defaultRepo(env)
   // before #10 (see doc comment above) — an explicit repo overrides it.
   const writeRepo = repo ?? defaultRepo(env);
+  // The logged runTool, pre-bound to this request's principal + gated repo so each
+  // registration below only names its tool.
+  const call = (tool: string, fn: () => Promise<unknown>) => runTool({ tool, login: principal.login, repo }, fn);
 
   server.tool(
     "query",
@@ -76,22 +88,22 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
     },
     // Agent default include_staged:true — the agent should see staged/unpromoted
     // context (flagged), unlike the human Search which defaults false.
-    async (args) => runTool(() => query(env.DB, { ...args, q: args.q ?? "", include_staged: args.include_staged ?? true }, repo)),
+    async (args) => call("query", () => query(env.DB, { ...args, q: args.q ?? "", include_staged: args.include_staged ?? true }, repo)),
   );
 
   server.tool("get_doc", "Get a doc and all its versions by slug.", { slug: z.string() }, async ({ slug }) =>
-    runTool(() => get_doc(env.DB, slug, repo))
+    call("get_doc", () => get_doc(env.DB, slug, repo))
   );
 
   server.tool("list_docs", "List docs, optionally filtered by section.", { section: z.string().optional() }, async ({ section }) =>
-    runTool(() => list_docs(env.DB, section, repo))
+    call("list_docs", () => list_docs(env.DB, section, repo))
   );
 
   server.tool(
     "get_feed",
     "Read the feed with optional author/tags/since/limit filters.",
     { author: z.string().optional(), tags: z.array(z.string()).optional(), since: z.string().optional(), limit: z.number().optional() },
-    async (args) => runTool(() => get_feed(env.DB, args, repo))
+    async (args) => call("get_feed", () => get_feed(env.DB, args, repo))
   );
 
   server.tool(
@@ -108,7 +120,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
     async ({ summary, body, tags, prs, commits, issues }) =>
       // Thin adapter: feedEntryFromMcpArgs shapes the args into a FeedEntry
       // (carrying prs/commits/issues), then the gate decides write-vs-triage.
-      runTool(() =>
+      call("append_feed", () =>
         ingestFeedEntry(
           env.DB,
           feedEntryFromMcpArgs({ summary, body, tags, prs, commits, issues }),
@@ -133,28 +145,28 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
       base_version: z.number().optional(),
       force: z.boolean().optional(),
     },
-    async (proposal) => runTool(() => ingestDocProposal(env.DB, proposal, principal.login, writeRepo, ephemeralLedger()))
+    async (proposal) => call("propose_doc_update", () => ingestDocProposal(env.DB, proposal, principal.login, writeRepo, ephemeralLedger()))
   );
 
   server.tool(
     "get_roadmap",
     "Read the roadmap plan: admin narrative + milestones in target-date order with cached progress (no live GitHub).",
     {},
-    async () => runTool(() => get_plan(env.DB, writeRepo))
+    async () => call("get_roadmap", () => get_plan(env.DB, writeRepo))
   );
 
   server.tool(
     "get_my_work",
     "Your personal My Work projection from captured GitHub events (no live GitHub): previous-activity (your 5 most recent summarized merged/closed PRs) and to-do (your open assigned issues). Read-only.",
     {},
-    async () => runTool(() => getMyWork(env.DB, principal.login, repo))
+    async () => call("get_my_work", () => getMyWork(env.DB, principal.login, repo))
   );
 
   server.tool(
     "get_events",
     "Recent captured GitHub events (raw log behind My Work and roadmap progress). Filter by type/subject. Read-only.",
     { type: z.enum(["pr_merged", "pr_closed", "issue"]).optional(), subject: z.string().optional(), limit: z.number().optional() },
-    async (args) => runTool(() => list_events(env.DB, args, repo))
+    async (args) => call("get_events", () => list_events(env.DB, args, repo))
   );
 
   server.tool(
@@ -165,7 +177,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
     // consume() under the bearer principal already in scope. Re-parse with the contract
     // so defaults (empty arrays) are applied and the type is exactly IngestPayload —
     // the SDK already validated against IngestPayload.shape, so this never throws.
-    async (payload) => runTool(() => consume(env.DB, IngestPayload.parse(payload), principal, writeRepo)),
+    async (payload) => call("record_session", () => consume(env.DB, IngestPayload.parse(payload), principal, writeRepo)),
   );
 
   // The plan write surface — unauthorized principals don't even see the tool
@@ -193,7 +205,7 @@ export function buildCanopyMcpServer(env: Env, principal: Principal, repo?: stri
           github_ref: z.union([z.number(), z.array(z.number())]).nullable().optional(),
         })).default([]),
       },
-      async (input) => runTool(() => write_plan(env.DB, input as PlanWrite, principal.login, writeRepo))
+      async (input) => call("update_plan", () => write_plan(env.DB, input as PlanWrite, principal.login, writeRepo))
     );
   }
 
