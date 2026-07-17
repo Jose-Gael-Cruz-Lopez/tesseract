@@ -234,6 +234,16 @@ describe("hub mutation routes (push-gated + repo-ownership guarded)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("a hub mutation without a session is 401 and does not mutate (sessionGate runs before the repo gate)", async () => {
+    await connect("octo/hub");
+    await run(env.DB, `INSERT INTO adrs (title, context, decision, rationale, status, confidence, created_at, created_by, repo) VALUES ('gated adr', 'ctx', 'dec', 'why', 'draft', 'high', ?, 'tester', 'octo/hub')`, nowIso());
+    const row = (await env.DB.prepare(`SELECT last_insert_rowid() AS id`).first()) as { id: number };
+    const res = await app.request(`/r/octo/hub/adr/${row.id}/ratify`, { method: "POST" }, env);
+    expect(res.status).toBe(401);
+    const persisted = await env.DB.prepare(`SELECT status FROM adrs WHERE id = ?`).bind(row.id).first<{ status: string }>();
+    expect(persisted?.status).toBe("draft"); // unchanged
+  });
+
   it("id-keyed mutation 404s a cross-repo id", async () => {
     await connect("octo/hub");
     await run(env.DB, `INSERT INTO adrs (title, context, decision, rationale, status, confidence, created_at, created_by, repo) VALUES ('x', 'ctx', 'dec', 'why', 'draft', 'high', ?, 'tester', 'octo/other')`, nowIso());

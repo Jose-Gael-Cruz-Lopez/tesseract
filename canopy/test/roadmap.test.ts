@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { env } from "cloudflare:test";
-import { all, first, defaultRepo } from "../src/db";
+import { all, first, run, nowIso, defaultRepo } from "../src/db";
+import { _hubTestHooks, _resetHubTestHooks } from "../src/hub";
 import { IngestPayload } from "@shared/contract";
 import { ingestMilestoneProposal, consume } from "../src/consumer";
 import type { MilestoneProposalRow, MilestoneRow, NeedsTriageRow } from "@shared/rows";
@@ -144,7 +145,20 @@ describe("promote_milestone_proposal + complete_milestone", () => {
   });
 });
 
-describe("roadmap HTTP routes (session-gated)", () => {
+// Hub-mutation helpers (issue #9: complete/promote live only under /r/:owner/:repo).
+// Mirrors hub-routes.test.ts: connect the repo, then authorize via the hub test hooks.
+const HUB_REPO = "octo/hub";
+async function connectHub(repo: string) {
+  await run(env.DB, `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, ?, ?, 'connected')`, repo, nowIso(), "andres", 1);
+}
+async function hubPost(path: string, canPush: boolean): Promise<Response> {
+  _hubTestHooks.getUserToken = async () => "user-tok";
+  _hubTestHooks.listRepos = [{ repo: HUB_REPO, can_push: canPush }];
+  return app.request(path, { method: "POST", headers: { cookie: await authedCookie("andres") } }, env);
+}
+
+describe("roadmap HTTP routes (session-gated; flat read admin-gated)", () => {
+  afterEach(() => { _resetHubTestHooks(); });
   it("GET /roadmap reads the plan store — narrative + milestones + cached progress, no live GitHub — and 401s without a session", async () => {
     const { milestones } = await write_plan(
       env.DB,
@@ -157,7 +171,8 @@ describe("roadmap HTTP routes (session-gated)", () => {
     const unauth = await app.request("/roadmap", {}, env);
     expect(unauth.status).toBe(401);
 
-    const res = await app.request("/roadmap", { headers: { cookie: await authedCookie("andres") } }, env);
+    // The flat /roadmap is admin-gated now (issue #9 review; see flat-reads-scoped.test.ts).
+    const res = await app.request("/roadmap", { headers: { cookie: await authedCookie("admin-user") } }, env);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Awaited<ReturnType<typeof get_plan>>;
     expect(body.narrative).toBe("Q3 push");
@@ -166,33 +181,38 @@ describe("roadmap HTTP routes (session-gated)", () => {
     expect(body.milestones[0].progress).toEqual({ closed: 4, total: 6, computed_at: expect.any(String) });
   });
 
-  it("POST /milestones/:id/complete flips status for an admin principal", async () => {
-    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
+  // The complete/promote mutations live ONLY under /r/:owner/:repo now (issue #9 removed
+  // the flat mutation routes — see flat-mutations-removed.test.ts). Each test connects a
+  // hub repo, seeds the rows in it, and authorizes via the hub test hooks (push access).
+  it("POST /r/:owner/:repo/milestones/:id/complete flips status for a push collaborator", async () => {
+    await connectHub(HUB_REPO);
+    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres", null, HUB_REPO);
     const m = await promote_milestone_proposal(env.DB, pid, "andres");
-    // admin-gated mutation (Task 10 critfix): "admin-user" is the ADMIN_LOGINS entry in vitest.config.ts.
-    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await authedCookie("admin-user") } }, env);
+    const res = await hubPost(`/r/${HUB_REPO}/milestones/${m.id}/complete`, true);
     expect(res.status).toBe(200);
     const row = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, m.id);
     expect(row?.status).toBe("done");
   });
 
-  it("POST /milestone-proposals/:id/promote materializes a live milestone", async () => {
-    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "upcoming", change_summary: "s", confidence: "high" }, "andres");
-    const res = await app.request(`/milestone-proposals/${pid}/promote`, { method: "POST", headers: { cookie: await authedCookie("admin-user") } }, env);
+  it("POST /r/:owner/:repo/milestone-proposals/:id/promote materializes a live milestone", async () => {
+    await connectHub(HUB_REPO);
+    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "upcoming", change_summary: "s", confidence: "high" }, "andres", null, HUB_REPO);
+    const res = await hubPost(`/r/${HUB_REPO}/milestone-proposals/${pid}/promote`, true);
     expect(res.status).toBe(200);
     expect(await all<MilestoneRow>(env.DB, `SELECT * FROM milestones`)).toHaveLength(1);
   });
 
-  // Task 10 critfix — the flat mutation routes are admin-gated now that /auth/login is open to
-  // any GitHub user. This is the representative NEGATIVE: a valid but NON-admin session is 403'd
-  // and mutates nothing. Fail-when-broken: delete the isAdmin gate on /milestones/:id/complete
-  // and this 403 becomes a 200 (the milestone flips to done).
-  it("POST /milestones/:id/complete is 403 for a NON-admin session and does not mutate", async () => {
-    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres");
+  // The representative NEGATIVE for the hub's push-gate: a valid session WITHOUT push
+  // access is 403'd and mutates nothing. Fail-when-broken: delete requirePush on
+  // /milestones/:id/complete in src/hub.ts and this 403 becomes a 200 (the milestone
+  // flips to done, failing the persistence assertion).
+  it("POST /r/:owner/:repo/milestones/:id/complete is 403 for a read-only collaborator and does not mutate", async () => {
+    await connectHub(HUB_REPO);
+    const pid = await stage_milestone_proposal(env.DB, { title: "GA", target_date: "2026-09-01", status: "in_progress", change_summary: "s", confidence: "high" }, "andres", null, HUB_REPO);
     const m = await promote_milestone_proposal(env.DB, pid, "andres");
-    const res = await app.request(`/milestones/${m.id}/complete`, { method: "POST", headers: { cookie: await authedCookie("not-admin") } }, env);
+    const res = await hubPost(`/r/${HUB_REPO}/milestones/${m.id}/complete`, false);
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "admin only" });
+    expect(await res.json()).toEqual({ error: "push access required" });
     // Fails closed: the milestone was NOT completed.
     const row = await first<MilestoneRow>(env.DB, `SELECT * FROM milestones WHERE id = ?`, m.id);
     expect(row?.status).toBe("in_progress");

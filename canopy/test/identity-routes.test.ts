@@ -33,8 +33,11 @@ const prEvent = (n: number, login: string, title: string, occurredAt: string): C
 });
 
 describe("GET /identity-tasks", () => {
+  // Admin-gated like the map write (issue #9 review): the samples carry cross-repo
+  // event titles. Gate/leak assertions live in flat-reads-scoped.test.ts; content
+  // tests here run as the ADMIN_LOGINS entry ("admin-user", vitest.config.ts).
   it("lists pending tasks with a small LIVE sample: newest-first, capped at 3, titles extracted from raw", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     for (let i = 1; i <= 4; i++) {
       await ingestEvent(env.DB, prEvent(i, "mystery-dev", `PR number ${i}`, `2026-07-0${i}T10:00:00Z`), "github-webhook");
     }
@@ -54,7 +57,7 @@ describe("GET /identity-tasks", () => {
   });
 
   it("a malformed raw yields title:null instead of failing the list", async () => {
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     await ingestEvent(
       env.DB,
       { ...prEvent(5, "glitchy-dev", "x", "2026-07-05T10:00:00Z"), raw: "not json at all" },
@@ -72,8 +75,9 @@ describe("GET /identity-tasks", () => {
 
 describe("POST /identity-tasks/:login/map", () => {
   it("maps the login, resolves the task, and drops it from the pending list", async () => {
-    // POST /identity-tasks/:login/map is admin-gated (Task 10 critfix); "admin-user" is the
-    // ADMIN_LOGINS entry in vitest.config.ts. GET /identity-tasks above stays any-session.
+    // POST /identity-tasks/:login/map is admin-gated (Task 10 critfix); "admin-user" is
+    // the ADMIN_LOGINS entry in vitest.config.ts. GET /identity-tasks is admin-gated too
+    // (issue #9 review).
     const cookie = await authedCookie("admin-user");
     await ingestEvent(env.DB, prEvent(1, "mystery-dev", "t", "2026-07-01T10:00:00Z"), "github-webhook");
 

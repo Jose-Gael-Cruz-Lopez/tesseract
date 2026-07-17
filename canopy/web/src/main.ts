@@ -77,11 +77,14 @@ function rerender(): void {
   }
 }
 
-// Back/forward or a manually edited hash → switch screens.
+// Back/forward or a manually edited hash → switch screens. guardScreen keeps a
+// manually typed #review/#roadmap/… from landing on a repo-scoped screen while
+// no hub is selected (its reads and writes all require /r/:owner/:repo now).
 window.addEventListener("hashchange", () => {
   if (state.view !== "app") return;
-  const s = screenFromHash();
+  const s = guardScreen(screenFromHash());
   if (s !== state.screen) { state.screen = s; loadForScreen(s); }
+  else rerender(); // re-sync the hash when the guard redirected to the current screen
 });
 
 // Minimal CSS.escape shim for id selectors (heading ids are already slug-safe).
@@ -142,6 +145,15 @@ const SCREENS: Screen[] = ["mywork", "feed", "docs", "roadmap", "review", "maint
 function screenFromHash(): Screen {
   const h = location.hash.replace(/^#/, "") as Screen;
   return SCREENS.includes(h) ? h : "mywork";
+}
+
+// Screens that render or mutate a single repo's data. With no active hub they have
+// no data source (every read/write is hub-scoped — /r/:owner/:repo — since issue #9
+// removed the flat mutations and locked down the flat reads), so navigation to any
+// of them falls through to the hub-list instead of a screen full of dead actions.
+const REPO_SCREENS: ReadonlySet<Screen> = new Set(["mywork", "feed", "docs", "roadmap", "review", "maintenance", "search"]);
+function guardScreen(s: Screen): Screen {
+  return state.activeRepo === null && REPO_SCREENS.has(s) ? "hubs" : s;
 }
 // Kick off the data load for a screen (mirrors the go* dispatch cases).
 function loadForScreen(screen: Screen): void {
@@ -448,6 +460,11 @@ function loadNeedsTriageIfNeeded(): void {
 
 let identityTasksSeq = 0;
 function loadIdentityTasks(): void {
+  // Identity is cross-repo by design and its flat routes (list + map) are
+  // admin-gated server-side (issue #9 review): a non-admin would get a
+  // guaranteed 403, so skip the fetch — Maintenance renders the Identity panel
+  // in its empty state instead of a degraded error.
+  if (!state.me?.admin) return;
   const seq = ++identityTasksSeq;
   state.identityTasks = { status: "loading", data: state.identityTasks.data };
   rerender();
@@ -540,11 +557,31 @@ function fallbackCopy(text: string): boolean {
   }
 }
 
-// Switch the active hub (Phase 3, DORMANT). Every hub-scoped Loadable was
-// fetched for the PREVIOUS repo, so each is reset to idle before landing on My
-// Work — otherwise the *IfNeeded loaders would see non-idle status and skip
-// refetching, rendering stale cross-tenant data the next time each screen is
-// visited. identityTasks is untouched: identity mapping is not hub-scoped.
+// Repo-scoped navigation: with no active hub, land on the hub-list instead. The
+// sidebar hides these entries in that state, but a stale DOM node or a replayed
+// event could still dispatch one — never switch to a screen whose reads and
+// actions have no backing surface.
+function goRepoScreen(screen: Screen, load: () => void): void {
+  if (state.activeRepo === null) { state.screen = "hubs"; loadMyReposIfNeeded(); return; }
+  state.screen = screen;
+  load();
+}
+
+// The sidebar triage-badge loads (Review + Maintenance counts). Hub-scoped like
+// everything else now, so they run only once a repo is active — with no hub there
+// is nothing to count and nothing the badges could link to.
+function loadTriageBadges(): void {
+  loadProposals();
+  loadDraftAdrs();
+  loadNeedsTriage();
+  loadIdentityTasks();
+}
+
+// Switch the active hub (Phase 3). Every hub-scoped Loadable was fetched for the
+// PREVIOUS repo, so each is reset to idle before landing on My Work — otherwise
+// the *IfNeeded loaders would see non-idle status and skip refetching, rendering
+// stale cross-tenant data the next time each screen is visited. identityTasks is
+// reset too so its badge share reloads (identity itself is cross-repo, admin-only).
 function switchRepo(repo: string): void {
   setActiveRepo(repo);
   state.activeRepo = repo;
@@ -560,8 +597,12 @@ function switchRepo(repo: string): void {
   state.needsTriage = { status: "idle", data: [] };
   state.draftAdrs = { status: "idle", data: [] };
   state.proposals = { status: "idle", data: [] };
+  state.identityTasks = { status: "idle", data: [] };
   state.screen = "mywork";
   loadForScreen(state.screen);
+  // The badge counts must be right on every screen of the new hub, not just
+  // after visiting Review/Maintenance.
+  loadTriageBadges();
 }
 
 // ── action dispatch ──────────────────────────────────────────────────────────
@@ -582,14 +623,16 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
         .catch(() => { state.view = "auth"; state.authStep = "login"; rerender(); });
       return;
 
-    // primary navigation
-    case "goMyWork": state.screen = "mywork"; loadMyWorkIfNeeded(); return;
-    case "goFeed": state.screen = "feed"; loadFeedIfNeeded(); return;
-    case "goDocs": state.screen = "docs"; loadDocsIfNeeded(); return;
-    case "goRoadmap": state.screen = "roadmap"; loadRoadmapIfNeeded(); loadFeedIfNeeded(); return;
-    // DORMANT (Phase 3): no sidebar entry yet — reachable via ?hubs at boot, a
-    // manual #hubs hash, or the header switcher's underlying hub list. Kept as
-    // a normal go* case for when a later task wires a nav item to it.
+    // primary navigation — every repo-scoped screen goes through goRepoScreen,
+    // which falls back to the hub-list while no hub is selected (issue #9 review:
+    // those screens' reads and writes are hub-only now).
+    case "goMyWork": goRepoScreen("mywork", loadMyWorkIfNeeded); return;
+    case "goFeed": goRepoScreen("feed", loadFeedIfNeeded); return;
+    case "goDocs": goRepoScreen("docs", loadDocsIfNeeded); return;
+    case "goRoadmap": goRepoScreen("roadmap", () => { loadRoadmapIfNeeded(); loadFeedIfNeeded(); }); return;
+    // The hub-list: the boot default while no repo is selected (its sidebar entry
+    // renders only in that state) — also reachable via a manual #hubs hash or the
+    // header switcher's underlying hub list.
     case "goHubs": state.screen = "hubs"; loadMyReposIfNeeded(); return;
     // Repo switcher: fires from either the hub-card grid (data-arg) or the
     // header <select> (its value) — see the mount "change" listener below.
@@ -603,9 +646,9 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
     // roadmap tab toggle
     case "roadmapNarrative": state.roadmapTab = "narrative"; break;
     case "roadmapTimeline": state.roadmapTab = "timeline"; break;
-    case "goReview": state.screen = "review"; loadProposalsIfNeeded(); loadDraftAdrsIfNeeded(); return;
-    case "goMaintenance": state.screen = "maintenance"; loadNeedsTriageIfNeeded(); loadIdentityTasksIfNeeded(); loadFeedIfNeeded(); return;
-    case "goSearch": state.screen = "search"; loadSearchIfNeeded(); return;
+    case "goReview": goRepoScreen("review", () => { loadProposalsIfNeeded(); loadDraftAdrsIfNeeded(); }); return;
+    case "goMaintenance": goRepoScreen("maintenance", () => { loadNeedsTriageIfNeeded(); loadIdentityTasksIfNeeded(); loadFeedIfNeeded(); }); return;
+    case "goSearch": goRepoScreen("search", loadSearchIfNeeded); return;
     case "goSettings": state.screen = "settings"; break;
     case "goGuide": state.screen = "guide"; break;
 
@@ -909,17 +952,15 @@ getMe()
     // active repo — state.activeRepo starts null every boot (no repo-restoration
     // mechanism exists yet), so today this unconditionally defaults to "hubs"; once a
     // repo is remembered across reloads, a returning user deep-links straight to their
-    // screen via the URL hash instead. Replaces the Task 6 ?hubs query-flag gate, which
-    // forced "hubs" only when that flag was present.
-    // Restore the screen from the URL hash (reload stays put) instead of always My Work.
-    state.screen = state.activeRepo === null ? "hubs" : screenFromHash();
+    // screen via the URL hash instead (guardScreen still forces "hubs" until the repo
+    // restore actually lands). Replaces the Task 6 ?hubs query-flag gate.
+    state.screen = state.activeRepo === null ? "hubs" : guardScreen(screenFromHash());
     loadForScreen(state.screen);
-    // Boot-time loads for the sidebar triage badges — the counts must be
-    // right on every screen, not just after visiting Review/Maintenance.
-    loadProposals();
-    loadDraftAdrs();
-    loadNeedsTriage();
-    loadIdentityTasks();
+    // Sidebar triage badges: hub-scoped reads, so they load only once a repo is
+    // active (switchRepo fires them). With no hub there is nothing to count —
+    // the old boot-time flat loads pulled every repo's rows and fed badges whose
+    // screens could no longer act (issue #9 review).
+    if (state.activeRepo !== null) loadTriageBadges();
   })
   .catch(() => {
     // Unauthorized or any error → show login

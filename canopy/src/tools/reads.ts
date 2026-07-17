@@ -3,9 +3,11 @@ import type { QueryRequest, QueryResult, QueryPrimary, QueryPointer, Authority }
 import { type DB, first, all } from "../db";
 import { getProgress } from "./progress";
 
-// Every read takes an OPTIONAL `repo`: omit it → no repo filter (single-repo-safe,
-// returns everything); pass one → scope to that repo. Production routes pass
-// defaultRepo(env); tests omit it and read across the sole (repo='') fixture.
+// Every read takes an OPTIONAL `repo`: omit it → no repo filter (returns EVERY
+// repo's rows — cross-tenant); pass one → scope to that repo. Production routes
+// always pass one (hub routes pass repoOf(c); the flat single-tenant routes pass
+// defaultRepo(env) — issue #9 review closed the unscoped read window). Only unit
+// tests omit it, to read across their sole fixture repo.
 export async function get_doc(
   db: DB,
   slug: string,
