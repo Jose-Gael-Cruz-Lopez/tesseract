@@ -28,4 +28,6 @@ export const RESET_STATEMENTS = [
   "DELETE FROM sessions",
   "DELETE FROM mcp_tokens",
   "DELETE FROM users",
+  "DELETE FROM rate_limits",
+  "DELETE FROM auth_failures",
 ];
