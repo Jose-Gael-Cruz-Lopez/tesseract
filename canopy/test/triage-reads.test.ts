@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { app } from "../src/routes";
 import { authedCookie } from "./helpers/session";
+import { defaultRepo } from "../src/db";
 import {
   route_triage,
   stage_adr,
@@ -40,13 +41,17 @@ describe("list_needs_triage", () => {
   });
 });
 
+// The flat GET routes below are admin-gated + defaultRepo-scoped (issue #9 review) —
+// see flat-reads-scoped.test.ts for the gate/scope assertions. Content tests here run
+// as the ADMIN_LOGINS entry ("admin-user", vitest.config.ts) with rows seeded at
+// defaultRepo(env), the only repo the flat surface serves.
 describe("GET /needs-triage", () => {
-  it("returns { items: [...] } with only unresolved items for an authenticated user", async () => {
-    const id1 = await route_triage(env.DB, { raw: "alpha", reason: "out of vocab" });
-    await route_triage(env.DB, { raw: "beta", reason: "low confidence" });
+  it("returns { items: [...] } with only unresolved items for an admin", async () => {
+    const id1 = await route_triage(env.DB, { raw: "alpha", reason: "out of vocab", repo: defaultRepo(env) });
+    await route_triage(env.DB, { raw: "beta", reason: "low confidence", repo: defaultRepo(env) });
     await env.DB.prepare(`UPDATE needs_triage SET resolved = 1 WHERE id = ?`).bind(id1).run();
 
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const res = await app.request("/needs-triage", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
     const body = await res.json() as { items: Array<{ raw: string; resolved: number }> };
@@ -101,11 +106,11 @@ describe("list_adrs", () => {
 
 describe("GET /adrs", () => {
   it("returns { adrs: [...] } for all adrs when no filter", async () => {
-    const id1 = await stage_adr(env.DB, adrBase, "andres");
-    await stage_adr(env.DB, { ...adrBase, title: "Use Hono" }, "andres");
+    const id1 = await stage_adr(env.DB, adrBase, "andres", null, defaultRepo(env));
+    await stage_adr(env.DB, { ...adrBase, title: "Use Hono" }, "andres", null, defaultRepo(env));
     await ratify_adr(env.DB, id1);
 
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const res = await app.request("/adrs", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
     const body = await res.json() as { adrs: Array<{ status: string }> };
@@ -113,11 +118,11 @@ describe("GET /adrs", () => {
   });
 
   it("filters by ?status=draft", async () => {
-    const id1 = await stage_adr(env.DB, adrBase, "andres");
-    await stage_adr(env.DB, { ...adrBase, title: "Use Hono" }, "andres");
+    const id1 = await stage_adr(env.DB, adrBase, "andres", null, defaultRepo(env));
+    await stage_adr(env.DB, { ...adrBase, title: "Use Hono" }, "andres", null, defaultRepo(env));
     await ratify_adr(env.DB, id1);
 
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const res = await app.request("/adrs?status=draft", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
     const body = await res.json() as { adrs: Array<{ status: string }> };
@@ -175,11 +180,11 @@ describe("GET /milestone-proposals", () => {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`
     ).bind("andres", "andres", "2026-01-01T00:00:00Z").run();
-    const id1 = await stage_milestone_proposal(env.DB, proposalBase, "andres");
-    await stage_milestone_proposal(env.DB, { ...proposalBase, title: "Launch v2" }, "andres");
+    const id1 = await stage_milestone_proposal(env.DB, proposalBase, "andres", null, defaultRepo(env));
+    await stage_milestone_proposal(env.DB, { ...proposalBase, title: "Launch v2" }, "andres", null, defaultRepo(env));
     await promote_milestone_proposal(env.DB, id1, "andres");
 
-    const cookie = await authedCookie("andres");
+    const cookie = await authedCookie("admin-user");
     const res = await app.request("/milestone-proposals", { headers: { cookie } }, env);
     expect(res.status).toBe(200);
     const body = await res.json() as { proposals: Array<{ title: string; staged_status: string }> };

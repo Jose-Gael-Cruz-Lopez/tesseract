@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { app } from "../src/routes";
 import { _hubTestHooks, _resetHubTestHooks } from "../src/hub";
 import { authedCookie } from "./helpers/session";
-import { all, first, run, nowIso } from "../src/db";
+import { all, first, run, nowIso, defaultRepo } from "../src/db";
 import type { DocVersionRow, AdrRow, NeedsTriageRow, MilestoneProposalRow } from "@shared/rows";
 import { ingestDocProposal } from "../src/consumer";
 import { propose_doc_update, promote_doc, stage_adr, ratify_adr, route_triage, stage_milestone_proposal, promote_milestone_proposal } from "../src/tools/writes";
@@ -40,7 +40,9 @@ const getJson = async <T>(path: string, cookie: string): Promise<T> => {
   _hubTestHooks.listRepos = [{ repo: REPO, can_push: true }];
   return (await (await app.request(hubPath(path), { headers: { cookie } }, env)).json()) as T;
 };
-// Flat GET (the flat READ surface stays session-gated and untouched by issue #9).
+// Flat GET (the flat READ surface is admin-gated + defaultRepo-scoped since the
+// issue #9 review — see flat-reads-scoped.test.ts — so flat content reads run as
+// the ADMIN_LOGINS entry with rows seeded at defaultRepo(env)).
 const getFlatJson = async <T>(path: string, cookie: string): Promise<T> =>
   (await (await app.request(path, { headers: { cookie } }, env)).json()) as T;
 
@@ -49,16 +51,17 @@ afterEach(() => { _resetHubTestHooks(); });
 
 const docBase = { section: "reference", change_summary: "s", confidence: "high" as const };
 
-// ── GET /proposals: server-joined queue (flat read — unaffected by issue #9) ───
+// ── GET /proposals: server-joined queue (flat read — admin + defaultRepo now) ──
 describe("GET /proposals", () => {
   it("returns staged versions newer than the live doc, joined with both bodies + reconciler metadata", async () => {
-    const cookie = await authedCookie(LOGIN);
+    const cookie = await authedCookie("admin-user");
     // v1 promoted (live), v2 staged as a one-line edit on top (changed/max < 0.5).
+    // Seeded at defaultRepo(env): the flat route only serves that repo now.
     const v1Body = Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n");
     const v2Body = v1Body.replace("line 5", "line FIVE");
-    await ingestDocProposal(env.DB, { ...docBase, slug: "architecture", title: "Architecture", body: v1Body }, "andres");
-    await promote_doc(env.DB, "architecture", 1, "andres");
-    await ingestDocProposal(env.DB, { ...docBase, slug: "architecture", body: v2Body }, "andres");
+    await ingestDocProposal(env.DB, { ...docBase, slug: "architecture", title: "Architecture", body: v1Body }, "andres", defaultRepo(env));
+    await promote_doc(env.DB, "architecture", 1, "andres", defaultRepo(env));
+    await ingestDocProposal(env.DB, { ...docBase, slug: "architecture", body: v2Body }, "andres", defaultRepo(env));
 
     const { proposals } = await getFlatJson<{ proposals: Array<Record<string, unknown>> }>("/proposals", cookie);
     expect(proposals.length).toBe(1);

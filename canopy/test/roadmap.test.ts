@@ -157,7 +157,7 @@ async function hubPost(path: string, canPush: boolean): Promise<Response> {
   return app.request(path, { method: "POST", headers: { cookie: await authedCookie("andres") } }, env);
 }
 
-describe("roadmap HTTP routes (session-gated)", () => {
+describe("roadmap HTTP routes (session-gated; flat read admin-gated)", () => {
   afterEach(() => { _resetHubTestHooks(); });
   it("GET /roadmap reads the plan store — narrative + milestones + cached progress, no live GitHub — and 401s without a session", async () => {
     const { milestones } = await write_plan(
@@ -171,7 +171,8 @@ describe("roadmap HTTP routes (session-gated)", () => {
     const unauth = await app.request("/roadmap", {}, env);
     expect(unauth.status).toBe(401);
 
-    const res = await app.request("/roadmap", { headers: { cookie: await authedCookie("andres") } }, env);
+    // The flat /roadmap is admin-gated now (issue #9 review; see flat-reads-scoped.test.ts).
+    const res = await app.request("/roadmap", { headers: { cookie: await authedCookie("admin-user") } }, env);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Awaited<ReturnType<typeof get_plan>>;
     expect(body.narrative).toBe("Q3 push");

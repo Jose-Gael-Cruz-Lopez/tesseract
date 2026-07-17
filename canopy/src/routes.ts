@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { IngestPayload } from "@shared/contract";
 import type { AppEnv } from "./auth/principal";
 import { sessionGate, isAdmin } from "./auth/principal";
@@ -41,19 +41,33 @@ app.get("/github/app/callback", async (c) => {
 });
 
 // Multi-tenant hub routes (Phase 3): /r/:owner/:repo/* behind repoGate. The flat
-// defaultRepo READS below coexist until their own cutover; the flat mutations are
-// gone (issue #9) — every promote-class write goes through the hub now.
+// routes below coexist until their own cutover, but only as a locked-down
+// single-tenant surface: the flat mutations are gone (issue #9) — every
+// promote-class write goes through the hub now — and the flat reads are
+// admin-gated + defaultRepo-scoped (issue #9 review, below).
 app.route("/r/:owner/:repo", hubApp);
 
 // The flat promote/reject/ratify/complete/discard/assign MUTATION routes are REMOVED
 // (Phase B, issue #9 / plan Task 11): they were admin-gated but had no push-gate and no
 // repo-ownership guard, so an id-keyed one could act on any tenant's row once a second
 // repo connected. Their only home is now /r/:owner/:repo/* (src/hub.ts) — push-gated +
-// ownership-guarded. Reads stay session-accessible on the flat surface. The remaining
-// flat mutations below (/ingest, /identity-tasks/:login/map, /admin/backfill) each carry
-// an explicit isAdmin gate (same 403 shape): /ingest stays reachable for agents still
-// posting flat until MCP is fully repo-routed; identity mapping is cross-repo by design;
-// backfill targets the single-tenant defaultRepo(env).
+// ownership-guarded. The remaining flat mutations below (/ingest,
+// /identity-tasks/:login/map, /admin/backfill) each carry an explicit isAdmin gate
+// (same 403 shape): /ingest stays reachable for agents still posting flat until MCP is
+// fully repo-routed; identity mapping is cross-repo by design; backfill targets the
+// single-tenant defaultRepo(env).
+//
+// The flat READ surface is admin-gated + defaultRepo-scoped too (issue #9 review):
+// /auth/login is open to ANY GitHub user (Task 10), so a bare session must not read
+// the grandfathered tenant's content — and an unscoped read would disclose every
+// tenant's rows the moment a second repo connects, defeating the security ordering
+// this removal exists for. Multi-tenant reads live under /r/:owner/:repo/*
+// (collaborator-gated, repo-scoped); the flat reads only serve the single-tenant
+// defaultRepo(env) deployment, to its admins.
+function requireFlatAdmin(c: Context<AppEnv>): Response | null {
+  return isAdmin(c.env, c.get("principal").login) ? null : c.json({ error: "admin only" }, 403);
+}
+
 app.post("/ingest", async (c) => {
   const login = c.get("principal").login;
   if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
@@ -68,17 +82,20 @@ app.post("/ingest", async (c) => {
 });
 
 app.get("/docs", async (c) => {
-  const docs = await list_docs(c.env.DB, c.req.query("section"));
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  const docs = await list_docs(c.env.DB, c.req.query("section"), defaultRepo(c.env));
   return c.json({ docs });
 });
 
 app.get("/doc/:slug", async (c) => {
-  const found = await get_doc(c.env.DB, c.req.param("slug"));
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  const found = await get_doc(c.env.DB, c.req.param("slug"), defaultRepo(c.env));
   if (!found) return c.json({ error: "not found" }, 404);
   return c.json(found);
 });
 
 app.get("/feed", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
   const tags = c.req.query("tags");
   const limit = c.req.query("limit");
   const feed = await get_feed(c.env.DB, {
@@ -86,13 +103,14 @@ app.get("/feed", async (c) => {
     tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
     since: c.req.query("since"),
     limit: limit ? Number(limit) : undefined,
-  });
+  }, defaultRepo(c.env));
   return c.json({ feed });
 });
 
 // Human Search backs onto the same query() engine as MCP, but include_staged is
 // false — the human screen surfaces only settled (live) context, never staged.
 app.get("/search", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
   const typesCsv = c.req.query("types");
   const types = typesCsv
     ? (typesCsv.split(",").map((t) => t.trim()).filter((t): t is "doc" | "decision" | "feed" | "milestone" =>
@@ -108,17 +126,26 @@ app.get("/search", async (c) => {
     space,
     include_staged: false,
     limit: limit ? Number(limit) : undefined,
-  });
+  }, defaultRepo(c.env));
   return c.json({ result });
 });
 
 // SEAM: POST /ask — retrieve via query(), synthesize a grounded, slug-citing answer. Out of scope.
 
-app.get("/needs-triage", async (c) => c.json({ items: await list_needs_triage(c.env.DB) }));
+app.get("/needs-triage", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ items: await list_needs_triage(c.env.DB, defaultRepo(c.env)) });
+});
 
-app.get("/adrs", async (c) => c.json({ adrs: await list_adrs(c.env.DB, c.req.query("status")) }));
+app.get("/adrs", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ adrs: await list_adrs(c.env.DB, c.req.query("status"), defaultRepo(c.env)) });
+});
 
-app.get("/milestone-proposals", async (c) => c.json({ proposals: await list_milestone_proposals(c.env.DB) }));
+app.get("/milestone-proposals", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ proposals: await list_milestone_proposals(c.env.DB, defaultRepo(c.env)) });
+});
 
 // ── Review group (session-cookie only, NEVER MCP): the READ queues — GET
 // /proposals (staged doc versions) + GET /adrs (ADR drafts). Their promote/
@@ -128,7 +155,10 @@ app.get("/milestone-proposals", async (c) => c.json({ proposals: await list_mile
 // The Proposals queue (Phase 3): staged doc versions newer than their live doc,
 // not rejected, server-joined with both bodies + reconciler metadata. Kills the
 // old web N+1 (audit G9) and is the data source Phase 4's detail pane renders.
-app.get("/proposals", async (c) => c.json({ proposals: await list_proposals(c.env.DB) }));
+app.get("/proposals", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ proposals: await list_proposals(c.env.DB, defaultRepo(c.env)) });
+});
 
 // ── Maintenance group (session-cookie only, NEVER MCP): Unplaced items
 // (GET /needs-triage; assign/discard resolve under /r/:owner/:repo/* only) +
@@ -136,7 +166,12 @@ app.get("/proposals", async (c) => c.json({ proposals: await list_proposals(c.en
 
 // Pending unknown-login identity tasks, each with a small LIVE activity sample
 // pulled from `events` at read time — activity is never copied onto the task.
-app.get("/identity-tasks", async (c) => c.json({ tasks: await list_identity_tasks(c.env.DB) }));
+// Admin-gated like the map write below: the samples are cross-repo event titles,
+// which must not be readable by any signed-in GitHub user.
+app.get("/identity-tasks", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json({ tasks: await list_identity_tasks(c.env.DB) });
+});
 
 // Human placement (session-gated): map a login to a person. The `people`
 // table's ONLY runtime write (a direct authored write, not a gate re-run),
@@ -156,9 +191,12 @@ app.post("/identity-tasks/:login/map", async (c) => {
   }
 });
 
-// Roadmap read (session-gated): admin narrative + milestones in target-date order,
+// Roadmap read (admin-gated): admin narrative + milestones in target-date order,
 // merged with cached progress from the plan store. No live GitHub, no per-user token.
-app.get("/roadmap", async (c) => c.json(await get_plan(c.env.DB, defaultRepo(c.env))));
+app.get("/roadmap", async (c) => {
+  const gate = requireFlatAdmin(c); if (gate) return gate;
+  return c.json(await get_plan(c.env.DB, defaultRepo(c.env)));
+});
 
 // Personal dashboard (session-gated): the signed-in user's two-list My Work —
 // previous activity (summarized merged/closed PRs) + open assigned issues,
