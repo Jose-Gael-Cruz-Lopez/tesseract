@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { env } from "cloudflare:test";
 import type { InstallationRow, RepoAccessRow } from "@shared/rows";
 import type { Env } from "../src/env";
@@ -118,6 +118,54 @@ describe("GitHub App client (auth/app.ts)", () => {
     expect(t1).toBe("ghs_test");
     expect(t2).toBe("ghs_test");
     expect(calls).toBe(1); // minted once, then served from cache
+  });
+});
+
+// Issue #22: fresh mints emit ONE structured installation_token line each way —
+// success on console.log, failure on console.error (with GitHub's status) — and
+// cache hits stay silent so the log reflects actual mint traffic. The lines never
+// carry the token itself.
+describe("installation-token structured logs (issue #22)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const tokenLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => {
+        try {
+          return JSON.parse(String(c[0])) as Record<string, unknown>;
+        } catch {
+          return null; // non-JSON console traffic is not a structured line
+        }
+      })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "installation_token");
+
+  it("a fresh mint logs success once; the cache hit logs nothing more", async () => {
+    _clearInstallationTokenCache();
+    const { appEnv } = await makeAppEnv();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ token: "ghs_test", expires_at: new Date((1_000_000 + 3600) * 1000).toISOString() }), { status: 200 })
+    ) as unknown as typeof fetch;
+
+    await installationToken(appEnv, 77, { fetchImpl, nowSec: 1_000_000 });
+    await installationToken(appEnv, 77, { fetchImpl, nowSec: 1_000_000 }); // cache hit — silent
+    const lines = tokenLines(log);
+    expect(lines).toEqual([{ event: "installation_token", outcome: "success", installation_id: 77 }]);
+    expect(JSON.stringify(lines)).not.toContain("ghs_test"); // never the token value
+  });
+
+  it("a failed mint logs failure with the installation id + GitHub's status, then throws", async () => {
+    _clearInstallationTokenCache();
+    const { appEnv } = await makeAppEnv();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchImpl = (async () => new Response("nope", { status: 502 })) as unknown as typeof fetch;
+
+    await expect(installationToken(appEnv, 78, { fetchImpl, nowSec: 1_000_000 })).rejects.toThrow("mint failed");
+    expect(tokenLines(error)).toEqual([
+      { event: "installation_token", outcome: "failure", installation_id: 78, status: 502 },
+    ]);
   });
 });
 

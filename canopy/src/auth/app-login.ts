@@ -8,6 +8,7 @@ import { storeUserToken } from "./user-token";
 import { createSession, setSessionCookie } from "./session";
 import { safeReturnPath, callbackUrl } from "./routes";
 import { run, nowIso } from "../db";
+import { logEvent } from "../log";
 
 const TX = "app_oauth_tx";
 const RET = "app_oauth_return";
@@ -35,7 +36,13 @@ function appCallbackUrl(reqUrl: string): string {
  * other — each just has to be ONE of the App's registered callback URLs, and both are.
  */
 export async function startAppLogin(c: Context<AppEnv>, opts?: { callbackUrl?: (reqUrl: string) => string }): Promise<Response> {
-  if (!c.env.GITHUB_APP_CLIENT_ID) return c.json({ error: "app_not_configured" }, 503);
+  if (!c.env.GITHUB_APP_CLIENT_ID) {
+    // The exact symptom the secret-piping gotcha produces (an EMPTY
+    // GITHUB_APP_CLIENT_ID → login 503) — log it so the incident in
+    // docs/runbooks/secrets-and-observability.md is diagnosable from Workers Logs.
+    logEvent({ event: "signin", outcome: "failure", reason: "app_not_configured" });
+    return c.json({ error: "app_not_configured" }, 503);
+  }
   const state = randomToken(16);
   const sealed = await hmacSeal(state, c.env.COOKIE_SECRET);
   setCookie(c, TX, sealed, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 });
@@ -51,9 +58,15 @@ export async function finishAppLogin(c: Context<AppEnv>, opts?: { fetchImpl?: ty
   deleteCookie(c, TX, { path: "/" });
   const ret = safeReturnPath(getCookie(c, RET));
   deleteCookie(c, RET, { path: "/" });
-  if (!code || !state || !sealedTx) return c.json({ error: "invalid_request" }, 400);
+  if (!code || !state || !sealedTx) {
+    logEvent({ event: "signin", outcome: "failure", reason: "invalid_request" });
+    return c.json({ error: "invalid_request" }, 400);
+  }
   const txState = await hmacUnseal(sealedTx, c.env.COOKIE_SECRET);
-  if (txState !== state) return c.json({ error: "state_mismatch" }, 403);
+  if (txState !== state) {
+    logEvent({ event: "signin", outcome: "failure", reason: "state_mismatch" });
+    return c.json({ error: "state_mismatch" }, 403);
+  }
 
   // exchangeUserCode THROWS on a bad/expired/already-consumed code — which happens on the
   // normal web (the user refreshes the callback page, back-buttons into it, or GitHub
@@ -67,9 +80,13 @@ export async function finishAppLogin(c: Context<AppEnv>, opts?: { fetchImpl?: ty
     tokens = await exchangeUserCode(c.env, code, { fetchImpl: opts?.fetchImpl }); // user-to-server token (+ refresh)
     ghUser = await getUser(tokens.token);
   } catch {
+    logEvent({ event: "signin", outcome: "failure", reason: "exchange_failed" });
     return c.json({ error: "exchange_failed" }, 401);
   }
-  if (!ghUser) return c.json({ error: "identity_failed" }, 401);
+  if (!ghUser) {
+    logEvent({ event: "signin", outcome: "failure", reason: "identity_failed" });
+    return c.json({ error: "identity_failed" }, 401);
+  }
 
   await storeUserToken(c.env.DB, ghUser.login, tokens);      // so repoGate can read their access
   await run(c.env.DB,
@@ -78,5 +95,6 @@ export async function finishAppLogin(c: Context<AppEnv>, opts?: { fetchImpl?: ty
     ghUser.login, ghUser.name, ghUser.avatar_url, nowIso());
   const { id } = await createSession(c.env.DB, ghUser.login);
   await setSessionCookie(c, id, c.env.COOKIE_SECRET);        // NO org gate — any GitHub user
+  logEvent({ event: "signin", outcome: "success", login: ghUser.login });
   return c.redirect(ret, 302);
 }

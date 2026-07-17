@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { env } from "cloudflare:test";
 import { all, run, nowIso } from "../src/db";
 import type { EventRow } from "@shared/rows";
@@ -250,5 +250,87 @@ describe("webhook → issue summarize wiring", () => {
     await postWebhook("issues", issueAssigned, env, { issueSummarizer: stub });
     const progress = await all(env.DB, `SELECT * FROM milestone_progress`);
     expect(progress.length).toBe(1); // issueAssigned carries a milestone — progressSeam still wrote it
+  });
+});
+
+// Issue #22: every delivery emits exactly one structured `webhook` line — processed/
+// ignored on console.log, unauthorized on console.error (level "error" in Workers
+// Logs, what the auth-failure-spike alert counts). The unauthorized line carries NO
+// delivery detail: pre-HMAC, headers and body are attacker-controlled.
+describe("webhook structured logs (issue #22)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const webhookLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => {
+        try {
+          return JSON.parse(String(c[0])) as Record<string, unknown>;
+        } catch {
+          return null; // non-JSON console traffic is not a structured line
+        }
+      })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "webhook");
+
+  it("a captured pull_request delivery → one processed line with github_event/repo/counts", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    // The stock fixture carries no repository block; spread one in so the line's
+    // repo field (the delivery's own tenant) is exercised.
+    const payload = { ...prMerged, repository: { full_name: "acme/app" } };
+    expect((await postWebhook("pull_request", payload)).status).toBe(200);
+    expect(webhookLines(log)).toEqual([
+      { event: "webhook", outcome: "processed", github_event: "pull_request", repo: "acme/app", captured: 1, unchanged: 0 },
+    ]);
+  });
+
+  it("a repo-less legacy delivery omits the repo field (never logs an empty string)", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect((await postWebhook("pull_request", prMerged)).status).toBe(200);
+    expect(webhookLines(log)).toEqual([
+      { event: "webhook", outcome: "processed", github_event: "pull_request", captured: 1, unchanged: 0 },
+    ]);
+  });
+
+  it("a verified-but-uncaptured event (ping) → one ignored line naming the event", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const body = JSON.stringify({ zen: "Keep it simple." });
+    const sig = await sign(SECRET, body);
+    const res = await handleGithubWebhook(
+      req(body, { "x-github-event": "ping", "x-hub-signature-256": sig }),
+      env
+    );
+    expect(res.status).toBe(200);
+    expect(webhookLines(log)).toEqual([{ event: "webhook", outcome: "ignored", github_event: "ping" }]);
+  });
+
+  it("an installation delivery → one processed line with github_event + handled", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const body = JSON.stringify({
+      action: "created",
+      installation: { id: 100, account: { login: "octocat", type: "User" } },
+      repositories: [{ full_name: "octocat/app" }],
+      sender: { login: "octocat" },
+    });
+    const sig = await sign(SECRET, body);
+    const res = await handleGithubWebhook(
+      req(body, { "x-github-event": "installation", "x-hub-signature-256": sig }),
+      env
+    );
+    expect(res.status).toBe(200);
+    expect(webhookLines(log)).toEqual([
+      { event: "webhook", outcome: "processed", github_event: "installation", handled: true },
+    ]);
+  });
+
+  it("a bad signature → one unauthorized line on console.error, with NO delivery detail", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const body = JSON.stringify(prMerged);
+    const res = await handleGithubWebhook(
+      req(body, { "x-github-event": "pull_request", "x-hub-signature-256": "sha256=deadbeef" }),
+      env
+    );
+    expect(res.status).toBe(401);
+    expect(webhookLines(error)).toEqual([{ event: "webhook", outcome: "unauthorized" }]);
   });
 });

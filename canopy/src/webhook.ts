@@ -1,6 +1,7 @@
 import type { CapturedEvent } from "@shared/contract";
 import type { Env } from "./env";
 import { type DB, nowIso } from "./db";
+import { logEvent } from "./log";
 import { ingestEvent } from "./consumer";
 import { handleInstallationEvent } from "./auth/connect";
 import { type Summarizer, type PrSummary, type IssueSummary, geminiPrSummarizer, geminiIssueSummarizer, storePrSummary, storeIssueSummary } from "./tools/summarize";
@@ -310,6 +311,10 @@ export async function handleGithubWebhook(
   const rawBody = await request.text();
   const sig = request.headers.get("x-hub-signature-256");
   if (!env.GITHUB_WEBHOOK_SECRET || !(await verifyGithubSignature(env.GITHUB_WEBHOOK_SECRET, rawBody, sig))) {
+    // The delivery is UNVERIFIED here, so the log carries no header/body detail —
+    // an attacker controls both. The bare outcome is what the auth-failure-spike
+    // alert (docs/runbooks/secrets-and-observability.md) counts.
+    logEvent({ event: "webhook", outcome: "unauthorized" });
     // Bare 401, NO WWW-Authenticate — same shape as the /mcp bearer failure.
     return json({ error: "unauthorized" }, 401);
   }
@@ -326,11 +331,13 @@ export async function handleGithubWebhook(
       payload = null;
     }
     const res = await handleInstallationEvent(env.DB, eventName, payload, nowIso());
+    logEvent({ event: "webhook", outcome: "processed", github_event: eventName, handled: res.handled });
     return json({ ok: true, ...res });
   }
 
   if (eventName !== "pull_request" && eventName !== "issues") {
     // Verified, but not a surface we capture (ping, push, …).
+    logEvent({ event: "webhook", outcome: "ignored", github_event: eventName });
     return json({ ok: true, ignored: true });
   }
 
@@ -364,6 +371,9 @@ export async function handleGithubWebhook(
     }
   }
 
+  // One line per delivery (not per derived event) keeps volume proportional to
+  // webhook traffic. `repo` is omitted when the payload carried none ("").
+  logEvent({ event: "webhook", outcome: "processed", github_event: eventName, repo: repo || undefined, captured, unchanged });
   return json({ ok: true, captured, unchanged });
 }
 
