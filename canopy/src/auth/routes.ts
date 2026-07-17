@@ -5,6 +5,7 @@ import { readSessionCookie, deleteSession, clearSessionCookie } from "./session"
 import { mintToken } from "./tokens";
 import { first } from "../db";
 import { startAppLogin, finishAppLogin } from "./app-login";
+import { createD1RateLimiter, tooManyRequests, MCP_TOKEN_RATE } from "./rate-limit";
 
 /**
  * A safe same-origin post-login return path. Must be a relative path (starts with
@@ -72,8 +73,13 @@ authApp.post("/logout", async (c) => {
   return c.json({ ok: true });
 });
 
-// GATED: mint a personal MCP bearer token; the raw token is shown ONCE.
+// GATED: mint a personal MCP bearer token; the raw token is shown ONCE. Minting is
+// rate-limited per login (issue #21): tokens are long-lived credentials, so unbounded
+// minting from one session is a real abuse surface now that login is open.
 authApp.post("/mcp-token", async (c) => {
-  const { raw } = await mintToken(c.env.DB, c.get("principal").login);
+  const login = c.get("principal").login;
+  const gate = await createD1RateLimiter(c.env.DB).hit(MCP_TOKEN_RATE, login);
+  if (!gate.allowed) return tooManyRequests(c, gate);
+  const { raw } = await mintToken(c.env.DB, login);
   return c.json({ token: raw });
 });

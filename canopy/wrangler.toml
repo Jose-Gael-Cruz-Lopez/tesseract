@@ -38,6 +38,9 @@ ADMIN_LOGINS = "Jose-Gael-Cruz-Lopez"
 # The GitHub App's URL slug — the "Connect repos" button links to
 # github.com/apps/<slug>/installations/new (Phase 3). Not a secret.
 GITHUB_APP_SLUG = "memo-sphere"
+# Soft-rollout signup gate (issue #21): comma-separated GitHub logins allowed to
+# complete sign-in at /auth/callback. Empty ⇒ open signup (any GitHub user).
+LOGIN_ALLOWLIST = ""
 
 [observability]
 enabled = true
