@@ -2,6 +2,7 @@ import { app } from "./routes";
 import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
 import { resolveBearerPrincipal } from "./auth/principal";
+import { loginAllowed, evictStaleAbuseState } from "./auth/rate-limit";
 import { authorizeRepoAccess } from "./auth/repo-gate";
 import { getUserToken } from "./auth/user-token";
 import type { AccessibleRepo } from "./auth/app";
@@ -45,8 +46,11 @@ export default {
     if (url.pathname === "/mcp" || repoMatch) {
       // Bearer ONLY. On missing/invalid credentials: bare 401, NO WWW-Authenticate,
       // NO OAuth discovery/metadata — Claude Code must use the configured header.
+      // LOGIN_ALLOWLIST (issue #21) is re-checked here too: mcp_tokens never expire,
+      // so a token minted while signup was open must stop resolving the moment the
+      // list is flipped on. Same bare 401 — a non-listed login learns nothing.
       const principal = await resolveBearerPrincipal(request, env);
-      if (!principal) return jsonError("unauthorized", 401);
+      if (!principal || !loginAllowed(env, principal.login)) return jsonError("unauthorized", 401);
 
       if (!repoMatch) return handleMcp(request, env, ctx, principal);
 
@@ -87,6 +91,10 @@ export default {
   // Backstop: recompute per-milestone progress from GitHub on a schedule — a computed
   // direct writer (promote class), never on the render path.
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Evict spent rate-limit / lockout rows (issue #21): every distinct client key
+    // writes a row, so without eviction the tables grow without bound. Runs BEFORE
+    // the App guard below — eviction must not depend on the GitHub App being set up.
+    await evictStaleAbuseState(env.DB);
     // Per-installation tokens now (GITHUB_SERVICE_TOKEN retired). No App configured → no-op.
     if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return;
     const { recomputeConnectedRepos } = await import("./tools/progress");

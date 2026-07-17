@@ -3,9 +3,12 @@ import { describe, it, expect } from "vitest";
 import {
   createD1RateLimiter,
   createD1FailureTracker,
+  evictStaleAbuseState,
+  bucketIp,
   loginAllowed,
   CALLBACK_RATE,
   AUTH_FAILURE_LOCKOUT,
+  MAX_POLICY_WINDOW_MS,
   type RateLimitPolicy,
   type LockoutPolicy,
 } from "../src/auth/rate-limit";
@@ -71,6 +74,69 @@ describe("createD1RateLimiter", () => {
     const denied = await limiter.hit(POLICY, "edge");
     expect(denied.allowed).toBe(false);
     expect(denied.retryAfterSeconds).toBe(1);
+  });
+
+  it("denied hits write nothing — the stored count stays pinned at the limit under a flood", async () => {
+    const clock = fakeClock(ANCHOR);
+    const limiter = createD1RateLimiter(env.DB, { now: clock.now });
+    for (let i = 0; i < POLICY.limit + 5; i++) await limiter.hit(POLICY, "flood");
+    // The first `limit` hits upsert; every denied hit after them must be answered
+    // from a read. If denials wrote, this would be limit + 5 — a D1 write per
+    // attack request, the cost/quota-exhaustion lever from the review.
+    const row = await env.DB.prepare(`SELECT count FROM rate_limits WHERE key = ?`)
+      .bind(`${POLICY.name}:flood`).first<{ count: number }>();
+    expect(row?.count).toBe(POLICY.limit);
+  });
+});
+
+describe("bucketIp — the per-client rate-limit key", () => {
+  it("keys IPv4 addresses and the non-IP fallback as-is", () => {
+    expect(bucketIp("203.0.113.1")).toBe("203.0.113.1");
+    expect(bucketIp("unknown")).toBe("unknown");
+    expect(bucketIp("::ffff:203.0.113.1")).toBe("::ffff:203.0.113.1"); // IPv4-mapped: verbatim, never mis-parsed
+  });
+
+  it("buckets IPv6 by the routed /64 — every interface ID in one /64 shares a key", () => {
+    expect(bucketIp("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(bucketIp("2001:db8:1:2::1")).toBe(bucketIp("2001:db8:1:2:ffff:ffff:ffff:ffff"));
+    expect(bucketIp("2001:db8:1:2::1")).not.toBe(bucketIp("2001:db8:1:3::1")); // a different /64 is a different client
+  });
+
+  it("normalizes compressed, zero-padded, and uppercase forms into the same bucket", () => {
+    expect(bucketIp("2001:0db8:0000:0000:1:2:3:4")).toBe(bucketIp("2001:db8::1:2:3:4"));
+    expect(bucketIp("2001:DB8::1")).toBe(bucketIp("2001:db8::1"));
+    expect(bucketIp("::1")).toBe("0:0:0:0::/64"); // fully-compressed loopback expands cleanly
+  });
+});
+
+describe("evictStaleAbuseState — the scheduled() cron's row eviction", () => {
+  it("deletes rate_limits rows past the longest wired window and keeps live ones", async () => {
+    const clock = fakeClock(ANCHOR);
+    const limiter = createD1RateLimiter(env.DB, { now: clock.now });
+    await limiter.hit(POLICY, "stale");
+    clock.advance(MAX_POLICY_WINDOW_MS + POLICY.windowMs); // the stale row's window is now past every horizon
+    await limiter.hit(POLICY, "fresh");
+    await evictStaleAbuseState(env.DB, { now: clock.now });
+    const keys = (await env.DB.prepare(`SELECT key FROM rate_limits ORDER BY key`).all<{ key: string }>()).results;
+    expect(keys).toEqual([{ key: `${POLICY.name}:fresh` }]);
+  });
+
+  it("deletes auth_failures rows whose window and lockout are both spent, keeps counting and locked ones", async () => {
+    const clock = fakeClock(ANCHOR);
+    const fails = createD1FailureTracker(env.DB, { now: clock.now });
+    // spent: window expires and its (base) lockout elapses long before eviction runs.
+    for (let i = 0; i < AUTH_FAILURE_LOCKOUT.maxFailures; i++) await fails.recordFailure(AUTH_FAILURE_LOCKOUT, "spent-ip");
+    // still-locked: escalate until the lockout outlives the counting window
+    // (5→60s, doubling per failure: 9 failures → 960s > the 900s window).
+    for (let i = 0; i < AUTH_FAILURE_LOCKOUT.maxFailures + 4; i++) await fails.recordFailure(AUTH_FAILURE_LOCKOUT, "locked-ip");
+    clock.advance(AUTH_FAILURE_LOCKOUT.windowMs + 1); // both windows expired; only locked-ip's lock survives
+    await fails.recordFailure(AUTH_FAILURE_LOCKOUT, "counting-ip"); // a fresh in-window record
+    await evictStaleAbuseState(env.DB, { now: clock.now });
+    const keys = (await env.DB.prepare(`SELECT key FROM auth_failures ORDER BY key`).all<{ key: string }>()).results
+      .map((r) => r.key);
+    expect(keys).toEqual([`${AUTH_FAILURE_LOCKOUT.name}:counting-ip`, `${AUTH_FAILURE_LOCKOUT.name}:locked-ip`]);
+    // An active lockout must keep denying after eviction — eviction never widens access.
+    expect((await fails.status(AUTH_FAILURE_LOCKOUT, "locked-ip")).allowed).toBe(false);
   });
 });
 

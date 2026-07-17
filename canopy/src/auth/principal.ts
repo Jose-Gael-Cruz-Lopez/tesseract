@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "../env";
 import { readSessionCookie, getSessionUser } from "./session";
 import { resolveToken } from "./tokens";
+import { loginAllowed } from "./rate-limit";
 
 export interface Principal {
   login: string;
@@ -53,7 +54,11 @@ export const sessionGate: MiddlewareHandler<AppEnv> = async (c, next) => {
   // Session cookie first (humans in canopy's own UI); then a bearer token so the
   // cross-origin dev sphere can read with Authorization: Bearer canopy_mcp_…
   const principal = (await resolveSessionPrincipal(c)) ?? (await resolveBearerPrincipal(c.req.raw, c.env));
-  if (!principal) return c.json({ error: "unauthorized" }, 401);
+  // LOGIN_ALLOWLIST (issue #21) is re-checked here, not only at sign-in: 30-day
+  // sessions and never-expiring mcp_tokens minted while signup was open must stop
+  // working the moment the list is flipped on, or the toggle is no abuse brake.
+  // Same bare 401 as any bad credential — a non-listed login learns nothing.
+  if (!principal || !loginAllowed(c.env, principal.login)) return c.json({ error: "unauthorized" }, 401);
   c.set("principal", principal);
   return next();
 };

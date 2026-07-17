@@ -10,9 +10,15 @@ import type { Env } from "../env";
 // are issue #13's scope, not here.
 //
 // The tables (migration 0028) are origin-level control state keyed by
-// "<policy>:<client>" (client = IP or login) — NOT tenant data, so no `repo`
-// column (the same class as sessions / mcp_tokens). Rows are one per bucket and
-// reused across windows via upsert, so the tables stay small.
+// "<policy>:<client>" (client = IP-derived bucket or login) — NOT tenant data, so
+// no `repo` column (the same class as sessions / mcp_tokens). Rows are one per
+// bucket and reused across windows via upsert; spent rows are evicted by the
+// scheduled() cron (evictStaleAbuseState below), so the tables stay bounded even
+// against a client minting fresh keys. Denied hits are refused on a READ — the
+// upsert only runs when it could change the outcome — so a flood of an already
+// over-limit bucket burns cheap D1 reads, never writes. (Cloudflare WAF/native
+// rate-limiting rules in front of /auth/* remain a worthwhile non-D1 first layer;
+// that's deployment config, not Worker code.)
 
 /** One named fixed-window policy: at most `limit` hits per `windowMs` per key. */
 export interface RateLimitPolicy {
@@ -90,6 +96,18 @@ export function createD1RateLimiter(db: DB, opts: { now?: () => number } = {}): 
     async hit(policy, key) {
       const t = now();
       const windowStart = t - (t % policy.windowMs);
+      const k = `${policy.name}:${key}`;
+      // Deny-before-write: a bucket already at its limit for this window can only be
+      // refused, so answer from a read and skip the upsert. Without this, every denied
+      // request is a guaranteed D1 row-write — a flood of an over-limit key would burn
+      // write quota at attack rate. The counter is monotone within a window (it only
+      // resets on rollover), so this shortcut can never wrongly deny; the atomic upsert
+      // below still makes the exact allow/deny call for every hit that writes.
+      const existing = await first<{ window_start: number; count: number }>(
+        db, `SELECT window_start, count FROM rate_limits WHERE key = ?`, k);
+      if (existing && existing.window_start === windowStart && existing.count >= policy.limit) {
+        return { allowed: false, retryAfterSeconds: retryAfter(windowStart + policy.windowMs, t) };
+      }
       // One atomic upsert: same window → count + 1; a new window resets to 1.
       // (Unqualified columns in DO UPDATE read the existing row; excluded.* the new one.)
       const row = await first<{ count: number }>(
@@ -99,7 +117,7 @@ export function createD1RateLimiter(db: DB, opts: { now?: () => number } = {}): 
            count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END,
            window_start = excluded.window_start
          RETURNING count`,
-        `${policy.name}:${key}`,
+        k,
         windowStart
       );
       const count = row?.count ?? 1;
@@ -155,19 +173,73 @@ export function createD1FailureTracker(db: DB, opts: { now?: () => number } = {}
 /**
  * The rate-limit identity of an unauthenticated client: Cloudflare's
  * CF-Connecting-IP, set on every request that traverses Cloudflare (including
- * wrangler dev). The "unknown" fallback only aggregates non-Cloudflare traffic
- * (e.g. direct sub-app invocations in tests) into one shared bucket — sharing a
- * bucket can only tighten, never widen, access.
+ * wrangler dev), bucketed by `bucketIp`. The "unknown" fallback only aggregates
+ * non-Cloudflare traffic (e.g. direct sub-app invocations in tests) into one
+ * shared bucket — sharing a bucket can only tighten, never widen, access.
  */
 export function clientIp(c: Context): string {
-  return c.req.header("cf-connecting-ip") ?? "unknown";
+  return bucketIp(c.req.header("cf-connecting-ip") ?? "unknown");
 }
 
 /**
- * Soft-rollout signup gate (issue #21), checked at the callback AFTER the user is
- * identified: LOGIN_ALLOWLIST is a comma-separated list of GitHub logins allowed
- * to sign in. Empty/absent ⇒ open signup (any GitHub user) — the Phase B default.
- * Case-insensitive, because GitHub logins are.
+ * Collapse a client address into its rate-limit bucket key. IPv4 addresses (and
+ * the non-IP "unknown" fallback) key as-is. IPv6 clients are bucketed by their
+ * routed /64 prefix: a single host routinely controls an entire /64, so keying by
+ * the full 128-bit address would let one machine mint unbounded distinct buckets —
+ * trivially bypassing every per-IP limit AND growing rate_limits/auth_failures one
+ * permanent-until-evicted row per probe. Compressed ("::") and zero-padded forms
+ * of the same address normalize to the same bucket.
+ */
+export function bucketIp(raw: string): string {
+  // No colon → IPv4 or the "unknown" fallback. A dot alongside colons is an
+  // IPv4-mapped/embedded form (e.g. "::ffff:1.2.3.4") — key it verbatim rather
+  // than mis-parse it (Cloudflare sends plain dotted-quad for IPv4 clients).
+  if (!raw.includes(":") || raw.includes(".")) return raw;
+  const [head = "", tail = ""] = raw.split("::"); // at most one "::" in a valid address
+  const headGroups = head ? head.split(":") : [];
+  const tailGroups = tail ? tail.split(":") : [];
+  const missing = Math.max(0, 8 - headGroups.length - tailGroups.length);
+  const groups = [...headGroups, ...Array<string>(missing).fill("0"), ...tailGroups];
+  const prefix = groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, "") || "0").join(":");
+  return `${prefix}::/64`;
+}
+
+// The longest wired fixed window: a rate_limits row whose window started earlier
+// than this can never influence a decision again (per-policy horizons would be
+// tighter, but one conservative bound keeps eviction a single statement).
+export const MAX_POLICY_WINDOW_MS = Math.max(
+  LOGIN_RATE.windowMs, CALLBACK_RATE.windowMs, SESSION_RATE.windowMs, MCP_TOKEN_RATE.windowMs
+);
+
+/**
+ * Evict spent abuse-control rows — called from the scheduled() cron (src/index.ts),
+ * unconditionally (it must run even where the GitHub App isn't configured). Without
+ * eviction every distinct client key leaves a permanent row, so a host rotating
+ * through addresses (see bucketIp) could grow these tables without bound.
+ * Deletes only state that can no longer influence any decision: rate_limits rows
+ * whose window is fully past every wired policy's horizon, and auth_failures rows
+ * whose counting window expired AND whose lockout (if any) has elapsed.
+ */
+export async function evictStaleAbuseState(db: DB, opts: { now?: () => number } = {}): Promise<void> {
+  const t = (opts.now ?? _rateLimitTestHooks.now ?? Date.now)();
+  await run(db, `DELETE FROM rate_limits WHERE window_start < ?`, t - MAX_POLICY_WINDOW_MS);
+  await run(db,
+    `DELETE FROM auth_failures WHERE window_start < ? AND (locked_until IS NULL OR locked_until <= ?)`,
+    t - AUTH_FAILURE_LOCKOUT.windowMs, t);
+}
+
+/**
+ * Soft-rollout signup gate (issue #21): LOGIN_ALLOWLIST is a comma-separated list
+ * of GitHub logins allowed in. Empty/absent ⇒ open signup (any GitHub user) — the
+ * Phase B default. Case-insensitive, because GitHub logins are. Enforced in TWO
+ * places, and both are required for the toggle to work as an abuse brake:
+ *  - the sign-in callback, AFTER the user is identified (a friendly 403 before
+ *    anything is provisioned), and
+ *  - every principal resolution — sessionGate (session cookie + bearer fallback)
+ *    and the /mcp bearer path in src/index.ts — so flipping the list on ALSO cuts
+ *    off already-minted 30-day sessions and never-expiring mcp_tokens for
+ *    non-listed logins, not just new sign-ins. Cheap: an in-memory string check,
+ *    no extra DB work.
  */
 export function loginAllowed(env: Env, login: string): boolean {
   const allow = (env.LOGIN_ALLOWLIST ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);

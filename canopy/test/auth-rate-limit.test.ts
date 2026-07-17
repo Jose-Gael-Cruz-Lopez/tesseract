@@ -1,10 +1,12 @@
 import { env } from "cloudflare:test";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
+import worker from "../src/index";
 import { app } from "../src/routes";
 import { authApp } from "../src/auth/routes";
 import { finishAppLogin } from "../src/auth/app-login";
 import { hmacSeal } from "../src/auth/crypto";
+import { mintToken } from "../src/auth/tokens";
 import { authedCookie } from "./helpers/session";
 import type { AppEnv } from "../src/auth/principal";
 import type { Env } from "../src/env";
@@ -16,6 +18,7 @@ import {
   SESSION_RATE,
   MCP_TOKEN_RATE,
   AUTH_FAILURE_LOCKOUT,
+  MAX_POLICY_WINDOW_MS,
 } from "../src/auth/rate-limit";
 
 // Route-level coverage for issue #21: the abuse controls as wired into the real
@@ -75,6 +78,19 @@ describe("GET /auth/login — per-IP rate limit", () => {
     // A different client is a different bucket.
     const other = await authApp.request("/login", { headers: { "cf-connecting-ip": "203.0.113.2" } }, appEnv);
     expect(other.status).toBe(302);
+  });
+
+  it("buckets IPv6 clients by /64 — rotating interface IDs within one routed /64 never resets the limit", async () => {
+    for (let i = 0; i < LOGIN_RATE.limit; i++) {
+      const res = await authApp.request("/login", { headers: { "cf-connecting-ip": `2001:db8:1:2::${i + 1}` } }, appEnv);
+      expect(res.status).toBe(302);
+    }
+    // A brand-new interface ID in the SAME /64 — same host in practice, same bucket.
+    const sameSlash64 = await authApp.request("/login", { headers: { "cf-connecting-ip": "2001:db8:1:2:ffff:eeee:dddd:cccc" } }, appEnv);
+    expect(sameSlash64.status).toBe(429);
+    // A different /64 is genuinely a different client.
+    const otherSlash64 = await authApp.request("/login", { headers: { "cf-connecting-ip": "2001:db8:1:3::1" } }, appEnv);
+    expect(otherSlash64.status).toBe(302);
   });
 });
 
@@ -170,6 +186,66 @@ describe("LOGIN_ALLOWLIST — soft-rollout allow-list at the callback", () => {
     const res = await seam.request("/callback?code=c&state=st", { headers: { cookie: await txCookie("st"), "cf-connecting-ip": "192.0.2.22" } }, exchangeEnv);
     expect(res.status).toBe(302);
     expect(res.headers.get("set-cookie") ?? "").toContain("session=");
+  });
+});
+
+// Flipping LOGIN_ALLOWLIST on must be an abuse brake for credentials that ALREADY
+// exist, not just new sign-ins: 30-day sessions and never-expiring mcp_tokens minted
+// during the open-signup window stop resolving the moment their login is off the list.
+describe("LOGIN_ALLOWLIST — enforced at principal resolution, not only at sign-in", () => {
+  const listEnv: Env = { ...env, LOGIN_ALLOWLIST: "alice" } as unknown as Env;
+  const ctx = { waitUntil() {}, passThroughException() {} } as unknown as ExecutionContext;
+
+  it("cuts off an existing session for a non-listed login; a listed login keeps its session", async () => {
+    const mallory = await authedCookie("mallory"); // minted while signup was open
+    expect((await app.request("/auth/me", { headers: { cookie: mallory } }, env)).status).toBe(200);
+    expect((await app.request("/auth/me", { headers: { cookie: mallory } }, listEnv)).status).toBe(401);
+    const alice = await authedCookie("alice");
+    expect((await app.request("/auth/me", { headers: { cookie: alice } }, listEnv)).status).toBe(200);
+  });
+
+  it("cuts off a bearer token on the session-gated read routes for a non-listed login", async () => {
+    await env.DB.prepare(`INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`)
+      .bind("mallory", "mallory", "2026-01-01T00:00:00Z").run();
+    const { raw } = await mintToken(env.DB, "mallory");
+    expect((await app.request("/docs", { headers: { authorization: `Bearer ${raw}` } }, env)).status).toBe(200);
+    expect((await app.request("/docs", { headers: { authorization: `Bearer ${raw}` } }, listEnv)).status).toBe(401);
+  });
+
+  it("cuts off a never-expiring MCP bearer token at /mcp, with the same bare 401 as any bad credential", async () => {
+    await env.DB.prepare(`INSERT OR IGNORE INTO users (github_login, name, created_at) VALUES (?, ?, ?)`)
+      .bind("mallory", "mallory", "2026-01-01T00:00:00Z").run();
+    const { raw } = await mintToken(env.DB, "mallory");
+    const mcpReq = (): Request =>
+      new Request("https://example.com/mcp", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${raw}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+      });
+    const open = await worker.fetch(mcpReq(), env as unknown as Env, ctx);
+    expect(open.status).not.toBe(401); // the token itself is valid while signup is open
+    const blocked = await worker.fetch(mcpReq(), listEnv, ctx);
+    expect(blocked.status).toBe(401);
+    expect(blocked.headers.get("WWW-Authenticate")).toBeNull(); // the bare-401 invariant holds
+  });
+});
+
+describe("scheduled() — stale abuse-state eviction wiring", () => {
+  const ctx = { waitUntil() {}, passThroughException() {} } as unknown as ExecutionContext;
+
+  it("evicts spent rate-limit rows even when the GitHub App is not configured", async () => {
+    const seeded = await authApp.request("/login", { headers: { "cf-connecting-ip": "203.0.113.50" } }, appEnv);
+    expect(seeded.status).toBe(302); // one real hit → one rate_limits row at ANCHOR
+    // The cron fires long after every wired window has passed.
+    _rateLimitTestHooks.now = () => ANCHOR + MAX_POLICY_WINDOW_MS + LOGIN_RATE.windowMs;
+    const noApp = { ...env, GITHUB_APP_ID: undefined, GITHUB_APP_PRIVATE_KEY: undefined } as unknown as Env;
+    await worker.scheduled({} as ScheduledController, noApp, ctx);
+    const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM rate_limits`).first<{ n: number }>();
+    expect(left?.n).toBe(0); // eviction ran BEFORE the App guard short-circuited
   });
 });
 
