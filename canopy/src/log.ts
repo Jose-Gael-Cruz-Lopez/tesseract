@@ -11,8 +11,8 @@
 // exactly once per request/decision (and the installation-token cache hit path
 // doesn't log at all).
 
-/** The five instrumented flows. */
-export type LogEventName = "signin" | "repo_gate" | "installation_token" | "webhook" | "mcp_tool";
+/** The six instrumented flows. */
+export type LogEventName = "signin" | "repo_gate" | "installation_token" | "webhook" | "mcp_tool" | "mcp_auth";
 
 /**
  * Per-flow results. The failure class (`failure` / `deny` / `unauthorized` /
@@ -27,7 +27,7 @@ export type LogOutcome =
   | "ignored"      // webhook (verified, but not a captured surface)
   | "failure"      // signin, installation_token
   | "deny"         // repo_gate (the 401/404 branches)
-  | "unauthorized" // webhook (bad/absent HMAC or unset secret)
+  | "unauthorized" // webhook (bad/absent HMAC or unset secret), mcp_auth (bad/absent bearer)
   | "error";       // mcp_tool (the tool body threw)
 
 const FAILURE_OUTCOMES: ReadonlySet<LogOutcome> = new Set(["failure", "deny", "unauthorized", "error"]);

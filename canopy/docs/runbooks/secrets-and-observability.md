@@ -54,21 +54,34 @@ secret, and payload *values* are never logged; identifiers only.
 | `repo_gate`          | Per-repo hub + `/mcp/:owner/:repo` gate (`src/auth/repo-gate.ts`) | `allow`, `deny`                 | `status` (401/404), `reason`, `can_push`        |
 | `installation_token` | Fresh installation-token mints (`src/auth/app.ts`; cache hits are silent) | `success`, `failure`   | `installation_id`, `status`                     |
 | `webhook`            | Each `/webhook/github` delivery (`src/webhook.ts`)         | `processed`, `ignored`, `unauthorized` | `github_event`, `captured`, `unchanged`         |
+| `mcp_auth`           | Bearer 401 at `/mcp` + `/mcp/:owner/:repo` (`src/index.ts`) | `unauthorized`                        | none — the request is unverified, so the line is deliberately detail-free |
 | `mcp_tool`           | Every MCP tool call (`src/mcp.ts`)                         | `success`, `error`                     | `tool`, `message` (on error)                    |
+
+One deliberate exclusion: the **session-cookie 401** (`sessionGate` — an anonymous
+or expired browser hitting a gated HTTP route) is NOT logged at error level. Fresh
+visitors 401 routinely before sign-in (the SPA probes gated routes on load), so
+logging it would put steady normal traffic at `error` and drown the spike signal.
+The bearer and webhook surfaces have no such routine-anonymous traffic — a 401
+there is always misconfiguration or probing, which is exactly what the alert
+below counts.
 
 Example queries in the Workers Logs UI: filter `level = error` for the failure
 classes; filter the message on `"event":"repo_gate"` (or any event name) to
 follow one flow; group by `message` to spot a spike of one shape.
 
-### Recommended alerting (documentation only — configure by hand in the dashboard)
+### Recommended alerting (configure by hand in the dashboard — tracked in issue #28)
 
-Set these up under **Cloudflare dashboard → Notifications** (none of this is
-provisioned from the repo; do not script it):
+Set these up under **Cloudflare dashboard → Notifications**. Cloudflare
+Notifications are account-level configuration — none of this is (or can be)
+provisioned from the repo via `wrangler`; do not script it. **Status: not yet
+configured** — actually creating the two notifications below is tracked in
+issue #28; when done, record what was configured and when here.
 
 - **Auth-failure spikes** — the failure-class lines above all arrive at log level
   `error`. Watch the error-level log rate for the canopy Worker (Workers Logs →
   filter `level = error`); a sustained spike of `signin` failures,
-  `repo_gate` denies, or `webhook` `unauthorized` lines means either an attack,
+  `repo_gate` denies, or `webhook`/`mcp_auth` `unauthorized` lines means either
+  an attack (including a revoked/leaked `canopy_mcp_` bearer being probed),
   a broken secret (see the gotcha above — `app_not_configured` is the empty
   `GITHUB_APP_CLIENT_ID` signature), or a webhook secret mismatch.
 - **5xx responses** — create a *Workers Alert* notification (available for
@@ -79,4 +92,5 @@ provisioned from the repo; do not script it):
 
 Both alerts are deliberately threshold-based notifications on data the Worker
 already emits — no extra instrumentation, dashboards, or API configuration is
-required (or should be attempted) from this repo.
+required (or should be attempted) from this repo. Issue #28 tracks turning this
+section from "recommended" into "configured".
