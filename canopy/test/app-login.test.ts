@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { Hono } from "hono";
 import { buildAppAuthorizeUrl, finishAppLogin } from "../src/auth/app-login";
 import { authApp } from "../src/auth/routes";
@@ -136,6 +136,58 @@ describe("finishAppLogin: a bad/expired/replayed code fails closed with 401, not
     expect(exchangeCalled).toBe(true); // proves we reached the exchange (config check passed)
     // Fails closed: no session was opened.
     expect(res.headers.get("set-cookie") ?? "").not.toContain("session=");
+  });
+});
+
+// Issue #22: sign-in failures emit one structured `signin` line on console.error
+// (level "error" in Workers Logs — what the auth-failure-spike alert counts), each
+// with a `reason`. app_not_configured is the empty-GITHUB_APP_CLIENT_ID signature the
+// secret-piping runbook (docs/runbooks/secrets-and-observability.md) documents. The
+// success line rides the full-callback path, which is e2e-only here (see the note
+// above about getUser's non-injectable fetch).
+describe("signin structured logs (issue #22)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const signinLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => {
+        try {
+          return JSON.parse(String(c[0])) as Record<string, unknown>;
+        } catch {
+          return null; // non-JSON console traffic is not a structured line
+        }
+      })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "signin");
+
+  it("app_not_configured (the empty-secret login 503) → one signin failure line", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await authApp.request("/app/login", {}, env)).status).toBe(503);
+    expect(signinLines(error)).toEqual([{ event: "signin", outcome: "failure", reason: "app_not_configured" }]);
+  });
+
+  it("a rejected/replayed code → one signin failure line with reason exchange_failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exchangeEnv: Env = { ...env, GITHUB_APP_CLIENT_ID: "Iv1.testclient", GITHUB_APP_CLIENT_SECRET: "test-app-secret" } as Env;
+    const badCodeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ error: "bad_verification_code" }), { status: 200, headers: { "content-type": "application/json" } });
+    const seamApp = new Hono<AppEnv>();
+    seamApp.get("/callback", (c) => finishAppLogin(c, { fetchImpl: badCodeFetch }));
+    const sealed = await hmacSeal("state-abc", "test-cookie-secret");
+    const res = await seamApp.request(
+      "/callback?code=replayed-code&state=state-abc",
+      { headers: { cookie: `app_oauth_tx=${sealed}` } },
+      exchangeEnv
+    );
+    expect(res.status).toBe(401);
+    expect(signinLines(error)).toEqual([{ event: "signin", outcome: "failure", reason: "exchange_failed" }]);
+  });
+
+  it("a missing code/state/tx callback → one signin failure line with reason invalid_request", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await authApp.request("/app/callback", {}, env)).status).toBe(400);
+    expect(signinLines(error)).toEqual([{ event: "signin", outcome: "failure", reason: "invalid_request" }]);
   });
 });
 

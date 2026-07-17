@@ -1,6 +1,7 @@
 import { app } from "./routes";
 import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
+import { logEvent } from "./log";
 import { resolveBearerPrincipal } from "./auth/principal";
 import { authorizeRepoAccess } from "./auth/repo-gate";
 import { getUserToken } from "./auth/user-token";
@@ -46,7 +47,16 @@ export default {
       // Bearer ONLY. On missing/invalid credentials: bare 401, NO WWW-Authenticate,
       // NO OAuth discovery/metadata — Claude Code must use the configured header.
       const principal = await resolveBearerPrincipal(request, env);
-      if (!principal) return jsonError("unauthorized", 401);
+      if (!principal) {
+        // One detail-free structured line (issue #22), mirroring the webhook's
+        // pre-auth convention: the request is UNVERIFIED here, so no header/token
+        // material is logged — an attacker controls all of it. Bearer tokens are
+        // the long-lived static credential (canopy_mcp_…): a revoked/leaked token
+        // being probed must land at error level so the auth-failure-spike alert
+        // (docs/runbooks/secrets-and-observability.md) counts it.
+        logEvent({ event: "mcp_auth", outcome: "unauthorized" });
+        return jsonError("unauthorized", 401);
+      }
 
       if (!repoMatch) return handleMcp(request, env, ctx, principal);
 

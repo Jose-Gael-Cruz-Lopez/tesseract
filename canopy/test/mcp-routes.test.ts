@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -43,7 +43,24 @@ function req(path: string, token?: string): Request {
 }
 
 beforeEach(() => { _resetMcpTestHooks(); });
-afterEach(() => { _resetMcpTestHooks(); });
+afterEach(() => {
+  _resetMcpTestHooks();
+  vi.restoreAllMocks();
+});
+
+// The structured lines a console spy captured for one `event` flow (same helper
+// shape as test/log.test.ts — other console traffic never parses to a match).
+function linesFor(spy: { mock: { calls: unknown[][] } }, event: string): Array<Record<string, unknown>> {
+  return spy.mock.calls
+    .map((c) => {
+      try {
+        return JSON.parse(String(c[0])) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((r): r is Record<string, unknown> => r !== null && r.event === event);
+}
 
 describe("/mcp/:owner/:repo authorization (mirrors repoGate)", () => {
   it("401s with no bearer at all", async () => {
@@ -81,6 +98,47 @@ describe("/mcp/:owner/:repo authorization (mirrors repoGate)", () => {
     _mcpTestHooks.listRepos = [{ repo: "octo/other", can_push: true }]; // octo/a NOT in the access set
     const res = await worker.fetch(req("/mcp/octo/a", raw), env as unknown as Env, ctx);
     expect(res.status).toBe(404);
+  });
+});
+
+// Issue #22 (review follow-up): the bearer 401 is the auth-failure blind spot the
+// spike alert would otherwise miss — canopy_mcp_ tokens are the one long-lived
+// static credential, so a revoked/leaked token being probed MUST produce an
+// error-level structured line. The line is detail-free (the request is unverified;
+// headers/token material are attacker-controlled), mirroring the webhook convention.
+describe("unauthenticated /mcp requests emit one mcp_auth line at error level", () => {
+  function spyConsole() {
+    return {
+      log: vi.spyOn(console, "log").mockImplementation(() => {}),
+      error: vi.spyOn(console, "error").mockImplementation(() => {}),
+    };
+  }
+
+  it("no bearer at /mcp → one detail-free {mcp_auth, unauthorized} line via console.error", async () => {
+    const spies = spyConsole();
+    const res = await worker.fetch(req("/mcp"), env as unknown as Env, ctx);
+    expect(res.status).toBe(401);
+    expect(linesFor(spies.error, "mcp_auth")).toEqual([{ event: "mcp_auth", outcome: "unauthorized" }]);
+    expect(linesFor(spies.log, "mcp_auth")).toEqual([]);
+  });
+
+  it("bad bearer at /mcp/:owner/:repo → one detail-free line (no token material, no repo)", async () => {
+    const spies = spyConsole();
+    const res = await worker.fetch(req("/mcp/octo/a", "canopy_mcp_nope"), env as unknown as Env, ctx);
+    expect(res.status).toBe(401);
+    expect(linesFor(spies.error, "mcp_auth")).toEqual([{ event: "mcp_auth", outcome: "unauthorized" }]);
+    // The unverified request's token must never leak into ANY console line.
+    const allCalls = [...spies.error.mock.calls, ...spies.log.mock.calls].map((c) => String(c[0]));
+    expect(allCalls.some((line) => line.includes("canopy_mcp_nope"))).toBe(false);
+  });
+
+  it("a valid bearer emits NO mcp_auth line", async () => {
+    const raw = await seedUserWithBearer(LOGIN);
+    const spies = spyConsole();
+    const res = await worker.fetch(req("/mcp", raw), env as unknown as Env, ctx);
+    expect(res.status).not.toBe(401);
+    expect(linesFor(spies.error, "mcp_auth")).toEqual([]);
+    expect(linesFor(spies.log, "mcp_auth")).toEqual([]);
   });
 });
 

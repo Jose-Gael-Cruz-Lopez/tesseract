@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { env } from "cloudflare:test";
 import { Hono } from "hono";
 import type { Env } from "../src/env";
@@ -65,5 +65,54 @@ describe("repoGate middleware (auth/repo-gate.ts)", () => {
     const res = await buildApp({ listRepos: async () => [] }).request("/r/acme/app/x", {}, env);
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not found" });
+  });
+});
+
+// Issue #22: every gate decision emits exactly one structured repo_gate line —
+// allows via console.log, denies via console.error (level "error" in Workers Logs,
+// what the auth-failure-spike alert counts). The log names the repo the caller
+// ASKED for; the RESPONSE (asserted above) still never leaks existence.
+describe("repoGate structured logs (issue #22)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const gateLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => {
+        try {
+          return JSON.parse(String(c[0])) as Record<string, unknown>;
+        } catch {
+          return null; // non-JSON console traffic is not a structured line
+        }
+      })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "repo_gate");
+
+  it("allow → one repo_gate line with login/repo/can_push on console.log", async () => {
+    await connect("acme/app");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await buildApp().request("/r/acme/app/x", {}, env)).status).toBe(200);
+    expect(gateLines(log)).toEqual([
+      { event: "repo_gate", outcome: "allow", login: "octocat", repo: "acme/app", can_push: true },
+    ]);
+    expect(gateLines(error)).toEqual([]);
+  });
+
+  it("deny (404, not connected) → one repo_gate deny line on console.error with status + reason", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await buildApp().request("/r/acme/app/x", {}, env)).status).toBe(404);
+    expect(gateLines(error)).toEqual([
+      { event: "repo_gate", outcome: "deny", login: "octocat", repo: "acme/app", status: 404, reason: "not_connected_or_no_access" },
+    ]);
+  });
+
+  it("deny (401, no stored token) → one repo_gate deny line on console.error", async () => {
+    await connect("acme/app");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await buildApp({ getUserToken: async () => null }).request("/r/acme/app/x", {}, env)).status).toBe(401);
+    expect(gateLines(error)).toEqual([
+      { event: "repo_gate", outcome: "deny", login: "octocat", repo: "acme/app", status: 401, reason: "no_user_token" },
+    ]);
   });
 });

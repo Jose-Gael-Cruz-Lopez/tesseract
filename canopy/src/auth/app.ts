@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { logEvent } from "../log";
 
 // GitHub App client (Phase 3): the server-to-server side — sign a short-lived App JWT
 // with the App's private key, and mint/cache per-installation access tokens. These
@@ -81,10 +82,16 @@ export async function installationToken(
       "user-agent": "canopy",
     },
   });
-  if (!res.ok) throw new Error(`installation token mint failed for ${installationId}: ${res.status}`);
+  // Fresh mints log ONE line each way (issue #22); cache hits above stay silent so
+  // the log reflects actual GitHub mint traffic, not every read.
+  if (!res.ok) {
+    logEvent({ event: "installation_token", outcome: "failure", installation_id: installationId, status: res.status });
+    throw new Error(`installation token mint failed for ${installationId}: ${res.status}`);
+  }
   const body = (await res.json()) as { token: string; expires_at: string };
   const expiresAt = Math.floor(new Date(body.expires_at).getTime() / 1000);
   tokenCache.set(installationId, { token: body.token, expiresAt });
+  logEvent({ event: "installation_token", outcome: "success", installation_id: installationId });
   return body.token;
 }
 
