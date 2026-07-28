@@ -29,6 +29,34 @@ empty `GITHUB_WEBHOOK_SECRET`-adjacent misconfiguration makes every delivery
 doubt, re-pipe the value — `secret put` overwrites idempotently. The full secret
 inventory lives in `CLAUDE.md` (Env / bindings) and `src/env.ts`.
 
+### In the dashboard, "Variable" is NOT "Secret"
+
+Workers → canopy → Settings → **Variables and Secrets** offers two types, and the
+wrong one looks like it worked. On 2026-07-28 `GITHUB_WEBHOOK_SECRET` was added as
+a plaintext **Variable**; every webhook delivery kept returning 401.
+
+Three separate problems with that:
+
+1. **It conflicts with the secret of the same name.** `wrangler secret list` already
+   showed `GITHUB_WEBHOOK_SECRET` as `secret_text`. With both defined, the Worker
+   kept reading the old secret — so the "fix" changed nothing.
+2. **A dashboard edit needs an explicit Deploy.** Saving the field alone does not
+   publish. The tell is that no new Worker version appears.
+3. **A plaintext Variable is readable in the dashboard**, and `[vars]` in
+   `wrangler.toml` can wipe dashboard-set plaintext variables on the next Workers
+   Builds deploy — so it silently vanishes later and the 401s return with no
+   apparent cause.
+
+**The tell that a value landed:** a secret write always mints a new Worker version.
+
+```
+npx wrangler versions list        # a new entry appears, timestamped just now
+```
+
+If there is no new version, the value was not written — regardless of what the UI
+or `secret list` says. Prefer `npx wrangler secret put NAME` from a real terminal;
+it writes an encrypted secret *and* publishes, in one step.
+
 ## Migration gotcha — merging deploys CODE, never SCHEMA
 
 **A merge to `main` triggers a Workers Builds deploy of the Worker. It does NOT
