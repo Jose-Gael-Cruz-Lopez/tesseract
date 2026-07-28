@@ -227,3 +227,26 @@ describe("runSelfCheck — containment (DoD 15, 16)", () => {
   });
 });
 
+describe("scheduled() isolation — the self-check can never break the cron (DoD 15, 16)", () => {
+  const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
+  const controller = {} as ScheduledController;
+
+  it("runs the self-check and still completes the cron when every probe throws", async () => {
+    _selfCheckTestHooks.fetchImpl = (async () => {
+      throw new Error("every probe explodes");
+    }) as unknown as typeof fetch;
+
+    // Seed an abuse-control row: evictStaleAbuseState runs in the same handler, so its
+    // effect is observable proof the cron completed rather than dying in the check.
+    await env.DB.prepare(`INSERT OR REPLACE INTO rate_limits (key, window_start, count) VALUES (?, 0, 1)`)
+      .bind("selfcheck-cron-probe")
+      .run();
+
+    const noApp = { ...env, GITHUB_APP_ID: undefined, GITHUB_APP_PRIVATE_KEY: undefined } as unknown as Env;
+    await expect(worker.scheduled(controller, noApp, ctx)).resolves.toBeUndefined();
+
+    const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM rate_limits`).first<{ n: number }>();
+    expect(left?.n).toBe(0); // eviction still ran — the self-check did not abort the cron
+  });
+});
+
