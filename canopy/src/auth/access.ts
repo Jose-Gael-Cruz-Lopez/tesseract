@@ -1,4 +1,4 @@
-import { type DB, first, run, nowIso } from "../db";
+import { type DB, first, nowIso } from "../db";
 import type { AccessibleRepo } from "./app";
 
 // The repo-access authorization behind repoGate: is this user allowed to see a repo's
@@ -11,17 +11,28 @@ const DEFAULT_TTL_SEC = 300; // 5 min
 // Replace this user's cached access set with a fresh snapshot — upserts the reachable
 // repos and drops any they've lost (revocation propagates on the next check).
 async function syncAccess(db: DB, login: string, repos: AccessibleRepo[], now: string): Promise<void> {
-  await run(db, `DELETE FROM repo_access WHERE login = ?`, login);
-  for (const r of repos) {
-    await run(
-      db,
-      `INSERT INTO repo_access (login, repo, can_push, checked_at) VALUES (?, ?, ?, ?)`,
-      login,
-      r.repo,
-      r.can_push ? 1 : 0,
-      now
-    );
-  }
+  // ONE atomic batch — D1 runs a batch as a single transaction. This is load-bearing,
+  // not tidiness: opening a hub fires several requests in parallel, and on the first
+  // open (or once the TTL lapses) every one of them sees a stale cache and refreshes
+  // at the same time. As a bare DELETE + loop of plain INSERTs the statements
+  // interleaved, so one request inserted a (login, repo) pair another had already
+  // inserted → PRIMARY KEY violation (0024) → uncaught D1 throw → 500. In production
+  // that made 3 of 4 parallel hub requests fail on every hub open (2026-07-28).
+  //
+  // Batching serializes concurrent refreshes; the upsert additionally makes each
+  // statement idempotent, so even a redelivered/duplicated repo in one snapshot can
+  // only refresh the row rather than abort the whole sync.
+  await db.batch([
+    db.prepare(`DELETE FROM repo_access WHERE login = ?`).bind(login),
+    ...repos.map((r) =>
+      db
+        .prepare(
+          `INSERT INTO repo_access (login, repo, can_push, checked_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT(login, repo) DO UPDATE SET can_push = excluded.can_push, checked_at = excluded.checked_at`
+        )
+        .bind(login, r.repo, r.can_push ? 1 : 0, now)
+    ),
+  ]);
 }
 
 /**
