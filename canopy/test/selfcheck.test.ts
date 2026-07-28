@@ -164,3 +164,35 @@ describe("runSelfCheck — empty means absent (DoD 11)", () => {
   });
 });
 
+describe("runSelfCheck — alerting contract (DoD 12, 13)", () => {
+  const jsonLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => {
+        try {
+          return JSON.parse(String(c[0])) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "selfcheck");
+
+  it("a fail emits exactly one error-level selfcheck line naming the secret", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({ tokenError: "incorrect_client_credentials" }) });
+    const lines = jsonLines(error).filter((l) => l.secret === "GITHUB_APP_CLIENT_SECRET");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ event: "selfcheck", secret: "GITHUB_APP_CLIENT_SECRET" });
+    expect(typeof lines[0].outcome).toBe("string");
+    expect(typeof lines[0].reason).toBe("string");
+  });
+
+  it("degraded and indeterminate never reach console.error", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    // 503 everywhere → indeterminate; GEMINI_API_KEY unset → degraded. No fails.
+    await runSelfCheck(APP_ENV({ GITHUB_WEBHOOK_SECRET: "present" }), {
+      fetchImpl: stubFetch({ tokenStatus: 503, appStatus: 503 }),
+    });
+    expect(jsonLines(error)).toEqual([]);
+  });
+});
+
