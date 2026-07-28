@@ -17,7 +17,7 @@ import { render, initialState } from "../web/src/render";
 import {
   setActiveRepo, ApiError,
   listDocs, getRoadmap, listStagedProposals,
-  promoteDoc, ratifyAdr, completeMilestone, discardTriage, assignTriage,
+  promoteDoc, ratifyAdr, completeMilestone, discardTriage, assignTriage, adminBackfill,
 } from "../web/src/api";
 
 const REPO_NAV_ACTS = ["goMyWork", "goRoadmap", "goFeed", "goDocs", "goSearch", "goReview", "goMaintenance"];
@@ -67,6 +67,9 @@ describe("api scoped(): no flat fallback", () => {
     await expect(completeMilestone(1)).rejects.toThrow("Select a repo first");
     await expect(discardTriage(1)).rejects.toThrow("Select a repo first");
     await expect(assignTriage(1, { type: "doc" })).rejects.toThrow("Select a repo first");
+    // The Sync GitHub backfill joined this list in issue #34 — it used to be the one
+    // mutation still posting flat, which meant syncing defaultRepo(env) from a hub.
+    await expect(adminBackfill()).rejects.toThrow("Select a repo first");
     await expect(promoteDoc("slug", 1)).rejects.toBeInstanceOf(ApiError);
   });
 });
