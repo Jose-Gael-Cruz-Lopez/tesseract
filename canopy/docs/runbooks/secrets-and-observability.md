@@ -189,13 +189,57 @@ issue #28; when done, record what was configured and when here.
   an attack (including a revoked/leaked `canopy_mcp_` bearer being probed),
   a broken secret (see the gotcha above — `app_not_configured` is the empty
   `GITHUB_APP_CLIENT_ID` signature), or a webhook secret mismatch.
-- **5xx responses** — create a *Workers Alert* notification (available for
-  Workers on the account) on failing/erroring requests for the `canopy` Worker,
-  and/or watch the error-rate panel under **Workers & Pages → canopy →
-  Metrics**. A 5xx burst on `/auth/*` is the login path; check the `signin`
-  lines first.
+- **5xx responses** — a 5xx burst on `/auth/*` is the login path; check the
+  `signin` lines first. See the plan caveat immediately below.
 
 Both alerts are deliberately threshold-based notifications on data the Worker
 already emits — no extra instrumentation, dashboards, or API configuration is
 required (or should be attempted) from this repo. Issue #28 tracks turning this
 section from "recommended" into "configured".
+
+### ⚠️ Plan caveat — there is no Workers notification on the free plan
+
+Verified 2026-07-28 by paging the entire **Notifications → Add** catalogue: all
+**53** alert types, and **none of them is for Workers**. Products offered are
+Abuse, Access, Billing, Brand Protection, CASB, Cloudflare Status, Cloudforce
+One, DDoS Protection, Health Checks, Images, Load Balancing, Log Explorer,
+Logpush, Magic Transit, CNI, Pages, Radar, Route Leak Detection, SSL/TLS,
+Client-side security, Security insights, Stream, Traffic Monitoring, Trust &
+Safety, Tunnel, Web Analytics. Pages has "Project updates"; Workers has nothing.
+
+Workers alerting and Log Explorer are **Workers Paid** features, and this account
+is on the free plan ("You're on the free plan with 200K events per day" on the
+Observability tab). So the *Workers Alert* recommended above **cannot be created
+here**. Do not substitute an unrelated notification type to fill the checkbox —
+that yields a green tick and zero coverage, which is the exact failure shape of
+the 2026-07-28 incidents.
+
+### External uptime monitoring (the free-plan substitute)
+
+Poll the login path from outside Cloudflare and alert on anything that is not a
+redirect. This is what actually covers the outage class on the free plan, and it
+has one advantage the native alert structurally lacks: being *outside*
+Cloudflare, it also catches a Cloudflare-side outage.
+
+```
+URL:       https://memo-sphere.com/auth/login
+Interval:  5 minutes
+Expect:    HTTP 302, Location → github.com/login/oauth/authorize
+Alert on:  any 5xx, any timeout, or any non-302
+```
+
+Why this endpoint: it is the exact surface that broke. On 2026-07-17 it returned
+a bare 500 for **~10 days** and nothing noticed; this check would have fired
+within ~5 minutes. It is also cheap and side-effect-light — a poll sets two
+short-lived cookies and redirects, writing at most one reusable `rate_limits`
+row, and at one request per 5 minutes it is nowhere near `LOGIN_RATE`
+(10/min per IP), so the monitor can never rate-limit itself into a false alarm.
+
+Do **not** point the monitor at `/` (static assets — it stayed 200 throughout the
+outage) or at `/auth/callback` (every hit records an auth failure toward the
+lockout tracker).
+
+Complementary, not redundant: `GET /admin/selfcheck` and its 6-hour cron
+(`specs/secret-selfcheck.md`) cover *credential drift*, which an uptime check
+cannot see; the uptime check covers *total surface failure*, which the
+self-check cannot see.
