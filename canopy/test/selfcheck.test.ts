@@ -215,3 +215,15 @@ describe("runSelfCheck — output safety (DoD 17)", () => {
   });
 });
 
+describe("runSelfCheck — containment (DoD 15, 16)", () => {
+  it("a probe that throws yields indeterminate and does not stop the others", async () => {
+    const boom: typeof fetch = (async () => {
+      throw new Error("network exploded");
+    }) as unknown as typeof fetch;
+    const r = await runSelfCheck(APP_ENV(), { fetchImpl: boom });
+    expect(find(r, "GITHUB_APP_CLIENT_SECRET").status).toBe("indeterminate");
+    // Local probes are unaffected by a network fault.
+    expect(find(r, "COOKIE_SECRET").status).toBe("pass");
+  });
+});
+
