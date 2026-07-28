@@ -131,3 +131,29 @@ describe("runSelfCheck — COOKIE_SECRET (DoD 8)", () => {
   });
 });
 
+describe("runSelfCheck — optional and unverifiable secrets (DoD 9, 10)", () => {
+  it("GEMINI_API_KEY absent → degraded, never fail", async () => {
+    const r = await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({}) });
+    expect(find(r, "GEMINI_API_KEY").status).toBe("degraded");
+    expect(r.ok).toBe(true); // degraded must not sink the overall verdict
+  });
+
+  it("GEMINI_API_KEY present → pass, marked unverified (presence only)", async () => {
+    const r = await runSelfCheck(APP_ENV({ GEMINI_API_KEY: "a-key" }), { fetchImpl: stubFetch({}) });
+    expect(find(r, "GEMINI_API_KEY").status).toBe("pass");
+    expect(find(r, "GEMINI_API_KEY").verified).toBe(false);
+  });
+
+  it("GITHUB_WEBHOOK_SECRET present → pass but explicitly NOT verified", async () => {
+    const r = await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({}) });
+    const w = find(r, "GITHUB_WEBHOOK_SECRET");
+    expect(w.status).toBe("pass");
+    expect(w.verified).toBe(false); // presence is not correctness — the whole point
+  });
+
+  it("GITHUB_WEBHOOK_SECRET absent → fail", async () => {
+    const r = await runSelfCheck(APP_ENV({ GITHUB_WEBHOOK_SECRET: "" }), { fetchImpl: stubFetch({}) });
+    expect(find(r, "GITHUB_WEBHOOK_SECRET").status).toBe("fail");
+  });
+});
+
