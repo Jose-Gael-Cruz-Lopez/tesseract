@@ -1,6 +1,6 @@
 import { type DB, run } from "../db";
 import type { Env } from "../env";
-import { appJwt, installationToken } from "./app";
+import { appJwt, ghGetAll, installationToken } from "./app";
 
 // Connect-your-repos: keep the `installations` + `repos` tables in sync with GitHub App
 // installation lifecycle. Driven entirely by the webhook payload (which carries the
@@ -111,9 +111,12 @@ export async function handleInstallationEvent(db: DB, eventName: string, payload
  * Sync one installation directly from the GitHub App API (not a webhook payload): the
  * install callback lands the user here with only an `installation_id`, so we read the
  * account via the App JWT and the repo list via an installation token, then upsert both
- * tables. Single page (per_page=100); pagination beyond 100 repos is a follow-up. The
- * webhook stays the durable source of truth — this just makes the connection appear
- * immediately after install. `fetchImpl`/`nowSec` are injectable for tests.
+ * tables. The webhook stays the durable source of truth — this just makes the connection
+ * appear immediately after install. `fetchImpl`/`nowSec` are injectable for tests.
+ *
+ * The repo list is FULLY paginated (`ghGetAll`) and all-or-nothing: any failed page
+ * throws instead of returning a prefix. That is what makes the returned list safe to
+ * treat as authoritative — see `reconcileInstallationRepos` (issue #33).
  */
 export async function syncInstallationFromApp(
   env: Env,
@@ -136,11 +139,7 @@ export async function syncInstallationFromApp(
 
   // Repo list is an installation-scoped read, authed by a minted installation token.
   const token = await installationToken(env, installationId, opts);
-  const reposRes = await doFetch("https://api.github.com/installation/repositories?per_page=100", {
-    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "user-agent": "canopy" },
-  });
-  if (!reposRes.ok) throw new Error(`installation repositories fetch failed for ${installationId}: ${reposRes.status}`);
-  const { repositories } = (await reposRes.json()) as { repositories: Array<{ full_name: string }> };
+  const repositories = await ghGetAll<{ full_name: string }>(doFetch, "/installation/repositories", token, "repositories");
   const names = repositories.map((r) => r.full_name);
   await connectRepos(db, installationId, names, addedBy, now);
 

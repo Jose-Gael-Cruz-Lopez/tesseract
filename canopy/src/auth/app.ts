@@ -164,7 +164,11 @@ export async function refreshUserToken(
 }
 
 // Paginated GET over a GitHub list endpoint (per_page=100), collecting `key`.
-async function ghGetAll<T>(doFetch: typeof fetch, path: string, token: string, key: string): Promise<T[]> {
+// All-or-nothing by construction: pages accumulate in memory and the first non-2xx
+// THROWS, so a caller either sees the COMPLETE list or an error — never a silent
+// prefix. Issue #33's reconcile leans on exactly that (a truncated list would read as
+// "everything past here is gone"), so don't soften it into a partial return.
+export async function ghGetAll<T>(doFetch: typeof fetch, path: string, token: string, key: string): Promise<T[]> {
   const out: T[] = [];
   for (let page = 1; ; page++) {
     const url = `https://api.github.com${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`;
