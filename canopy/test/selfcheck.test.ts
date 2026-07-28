@@ -94,3 +94,28 @@ describe("runSelfCheck — client-credential probe (DoD 5, 6, 7)", () => {
   });
 });
 
+describe("runSelfCheck — App JWT probe (R2)", () => {
+  // Uses a genuine key so appJwt succeeds and the probe actually reaches GitHub —
+  // otherwise only the throw→indeterminate arm is ever exercised.
+  it("GET /app returning 200 → pass for both App secrets", async () => {
+    const env2 = APP_ENV({ GITHUB_APP_PRIVATE_KEY: await realPrivateKeyPem() });
+    const r = await runSelfCheck(env2, { fetchImpl: stubFetch({ appStatus: 200 }) });
+    expect(find(r, "GITHUB_APP_ID").status).toBe("pass");
+    expect(find(r, "GITHUB_APP_PRIVATE_KEY").status).toBe("pass");
+    expect(find(r, "GITHUB_APP_PRIVATE_KEY").verified).toBe(true);
+  });
+
+  it("GET /app returning 401 → fail (GitHub rejected the JWT)", async () => {
+    const env2 = APP_ENV({ GITHUB_APP_PRIVATE_KEY: await realPrivateKeyPem() });
+    const r = await runSelfCheck(env2, { fetchImpl: stubFetch({ appStatus: 401 }) });
+    expect(find(r, "GITHUB_APP_ID").status).toBe("fail");
+    expect(r.ok).toBe(false);
+  });
+
+  it("GET /app returning 500 → indeterminate, never fail", async () => {
+    const env2 = APP_ENV({ GITHUB_APP_PRIVATE_KEY: await realPrivateKeyPem() });
+    const r = await runSelfCheck(env2, { fetchImpl: stubFetch({ appStatus: 500 }) });
+    expect(find(r, "GITHUB_APP_ID").status).toBe("indeterminate");
+  });
+});
+
