@@ -47,6 +47,39 @@ Three separate problems with that:
    Builds deploy — so it silently vanishes later and the 401s return with no
    apparent cause.
 
+### `pbcopy` / `pbpaste` do NOT work in an automation shell
+
+Clipboard commands run through an automation/`!` shell **silently no-op**. `pbcopy`
+writes nothing and `pbpaste` returns whatever was on the clipboard beforehand — no
+error, no warning. Combined with the empty-secret gotcha above, every failure mode
+in the chain is silent:
+
+| Step | What it looks like | What actually happened |
+| --- | --- | --- |
+| `openssl rand -hex 32 \| pbcopy` | no output — looks fine | clipboard unchanged |
+| `pbpaste \| wc -c` | a plausible number | a *stale* value from before |
+| `printf '%s' "$(pbpaste)" \| wrangler secret put X` | `✨ Success!` | stored the stale junk |
+
+On 2026-07-28 this cost several rounds: the clipboard was stuck on a 17-byte
+fragment for an entire session, so a piped `secret put` cheerfully stored 17 bytes
+of junk as the App client secret.
+
+There is also a plain trap even when the clipboard *does* work: copying the command
+out of a chat or doc **overwrites the secret you just copied**. The instruction and
+the payload compete for the same clipboard.
+
+**Do secret entry in a real terminal, never through `!`:**
+
+```
+openssl rand -hex 32                 # prints locally; never into a transcript
+npx wrangler secret put NAME         # paste at the hidden prompt, Enter
+```
+
+A hidden prompt gives no feedback either, so confirm with `wrangler versions list`
+(below) rather than trusting `Success!`. If a value must be generated and stored,
+generate it in the terminal where you will paste it — do not route it through a
+chat, a file, or a shell you do not control.
+
 **The tell that a value landed:** a secret write always mints a new Worker version.
 
 ```
