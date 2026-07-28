@@ -433,14 +433,22 @@ function header(s: AppState): string {
       <button data-act="roadmapTimeline" style="${rmTabStyle("timeline")}">Timeline${overdueCount ? `<span style="width:6px;height:6px;border-radius:50%;background:var(--red);margin-left:1px"></span>` : ""}</button>
     </div>` : "";
 
-  // ADMIN-only, My Work screen: trigger the server-side GitHub backfill. Rendered
-  // only when /auth/me returned admin:true (outline button, promote-class action).
+  // My Work screen: trigger the server-side GitHub backfill for the ACTIVE hub
+  // (outline button, promote-class action). Rendered on PUSH access to that hub —
+  // the authority the target route enforces (requirePush on POST
+  // /r/:owner/:repo/admin/backfill) — not on /auth/me's admin flag, which gates the
+  // flat single-tenant route and says nothing about a tenant's hub (issue #34).
+  // Mirroring the server both ways: a push collaborator outside ADMIN_LOGINS is
+  // exactly who needs to populate their own hub, and an admin with read-only access
+  // there would only get a 403. No hub ⇒ no can_push match ⇒ hidden, like the rest of
+  // the repo-scoped affordances (#25) — the click would reject pre-fetch anyway.
   // While s.backfillSync is set, the button is disabled (progress itself shows
   // in the modal below — see backfillSyncModal) — a sync can span multiple
   // batched requests (src/tools/backfill.ts caps AI calls per invocation),
   // driven by main.ts.
   const syncing = s.backfillSync !== null;
-  const myworkControls = s.screen === "mywork" && s.me?.admin
+  const canPushActiveHub = s.myRepos.data.some((r) => r.repo === s.activeRepo && r.can_push);
+  const myworkControls = s.screen === "mywork" && canPushActiveHub
     ? `<button data-act="adminBackfill" title="${syncing ? "Sync in progress" : "Fetch all GitHub PRs + issues"}" class="cnpy-outlinebtn" ${syncing ? "disabled" : ""} style="display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:8px;border:1px solid var(--border-strong);font-size:12.5px;font-weight:500;color:var(--fg-70);${syncing ? "opacity:.65;cursor:default" : ""}">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ${syncing ? 'style="animation:cnpy-spin .8s linear infinite"' : ""}><path d="M21 12a9 9 0 1 1-3-6.7L21 8"></path><path d="M21 3v5h-5"></path></svg>
       ${syncing ? "Syncing&hellip;" : "Sync GitHub"}

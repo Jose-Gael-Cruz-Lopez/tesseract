@@ -142,7 +142,7 @@ export function getMe(): Promise<Me> {
   return getJson<Me>("/auth/me");
 }
 
-// ADMIN action: trigger the server-side GitHub backfill for the ACTIVE hub. Scoped
+// ADMIN action, push-gated: trigger the server-side GitHub backfill for the ACTIVE hub. Scoped
 // like every other mutation — the push-gated POST /r/:owner/:repo/admin/backfill
 // (src/hub.ts), which targets repoOf(c). NEVER the flat /admin/backfill (issue #34):
 // that one is isAdmin-gated and backfills defaultRepo(env), so from inside a hub it

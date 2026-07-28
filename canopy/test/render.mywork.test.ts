@@ -269,6 +269,17 @@ describe("render() — My Work screen", () => {
     };
   }
 
+  // The same state INSIDE a hub, with the signed-in user's push access on it — the
+  // authority the Sync button mirrors (issue #34): POST /r/:owner/:repo/admin/backfill
+  // is push-gated, so myRepos.can_push (not me.admin) decides whether the click can work.
+  function stateInHub(data: DashboardData, canPush: boolean, admin = false): ReturnType<typeof initialState> {
+    return {
+      ...stateWithDashboard(data, admin),
+      activeRepo: "octo/hub",
+      myRepos: { status: "ok", data: [{ repo: "octo/hub", can_push: canPush }] },
+    };
+  }
+
   // previousActivity items here use what:null (the "No summary recorded" placeholder,
   // linkifyRefs path) — myWorkView passes the REAL renderMarkdown (DOMPurify) for the
   // structured `what`, and DOMPurify needs DOM globals that aren't present in this
@@ -323,23 +334,32 @@ describe("render() — My Work screen", () => {
     expect(html).toContain("To-do");
   });
 
-  // ── admin-only Sync GitHub button (server-side backfill trigger) ────────────
-  it("renders the Sync GitHub backfill button for an admin me", () => {
+  // ── push-gated Sync GitHub button (server-side backfill trigger) ───────────
+  // Issue #34: the button's authority is push access on the ACTIVE hub, matching
+  // requirePush on POST /r/:owner/:repo/admin/backfill. ADMIN_LOGINS is the flat
+  // route's gate and has nothing to say about a tenant's hub.
+  it("renders the Sync GitHub backfill button for a push collaborator who is NOT an admin", () => {
     const data: DashboardData = { person: "alice", previousActivity: [], todo: [], degraded: false };
-    const html = render(stateWithDashboard(data, true));
+    const html = render(stateInHub(data, true));
     expect(html).toContain('data-act="adminBackfill"');
     expect(html).toContain("Sync GitHub");
   });
 
-  it("does NOT render the Sync GitHub button for a non-admin me", () => {
+  it("does NOT render the Sync GitHub button without push access — even for an admin me", () => {
     const data: DashboardData = { person: "alice", previousActivity: [], todo: [], degraded: false };
-    const html = render(stateWithDashboard(data, false));
+    const html = render(stateInHub(data, false, true));
+    expect(html).not.toContain('data-act="adminBackfill"'); // the hub route would 403 them
+  });
+
+  it("does NOT render the Sync GitHub button with no active hub — there is nothing to sync", () => {
+    const data: DashboardData = { person: "alice", previousActivity: [], todo: [], degraded: false };
+    const html = render(stateWithDashboard(data, true));
     expect(html).not.toContain('data-act="adminBackfill"');
   });
 
   it("shows a disabled Sync button while backfillSync is set", () => {
     const data: DashboardData = { person: "alice", previousActivity: [], todo: [], degraded: false };
-    const s = { ...stateWithDashboard(data, true), backfillSync: { phase: "progress", prSummarizedCount: 66, prsTotal: 146, issueSummarizedCount: 3, issuesTotal: 10 } as const };
+    const s = { ...stateInHub(data, true), backfillSync: { phase: "progress", prSummarizedCount: 66, prsTotal: 146, issueSummarizedCount: 3, issuesTotal: 10 } as const };
     const html = render(s);
     expect(html).toContain("disabled");
     expect(html).toContain("Syncing");
