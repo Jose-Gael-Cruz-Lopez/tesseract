@@ -151,3 +151,16 @@ async function probeClientCredentials(env: Env, doFetch: typeof fetch): Promise<
 }
 
 /** COOKIE_SECRET — purely local: seal a sentinel and unseal it again. */
+async function probeCookieSecret(env: Env): Promise<ProbeOutcome> {
+  if (!present(env.COOKIE_SECRET)) return absent();
+  try {
+    const sealed = await hmacSeal(SENTINEL, env.COOKIE_SECRET);
+    const back = await hmacUnseal(sealed, env.COOKIE_SECRET);
+    if (back === SENTINEL) return { status: "pass", verified: true, note: "seals and unseals correctly", reason: "ok" };
+    return { status: "fail", verified: true, note: "seal/unseal round-trip did not match", reason: "roundtrip_failed" };
+  } catch {
+    return { status: "fail", verified: true, note: "seal/unseal threw", reason: "roundtrip_threw" };
+  }
+}
+
+/** GEMINI_API_KEY — optional by design; absent means degraded summaries, not breakage. */
