@@ -157,3 +157,10 @@ describe("runSelfCheck — optional and unverifiable secrets (DoD 9, 10)", () =>
   });
 });
 
+describe("runSelfCheck — empty means absent (DoD 11)", () => {
+  it("a whitespace-only required secret is fail, never pass", async () => {
+    const r = await runSelfCheck(APP_ENV({ GITHUB_APP_CLIENT_SECRET: "   " }), { fetchImpl: stubFetch({}) });
+    expect(find(r, "GITHUB_APP_CLIENT_SECRET").status).toBe("fail");
+  });
+});
+
