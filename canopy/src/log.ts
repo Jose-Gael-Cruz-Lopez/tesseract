@@ -11,8 +11,15 @@
 // exactly once per request/decision (and the installation-token cache hit path
 // doesn't log at all).
 
-/** The six instrumented flows. */
-export type LogEventName = "signin" | "repo_gate" | "installation_token" | "webhook" | "mcp_tool" | "mcp_auth";
+/** The seven instrumented flows. */
+export type LogEventName =
+  | "signin"
+  | "repo_gate"
+  | "installation_token"
+  | "webhook"
+  | "mcp_tool"
+  | "mcp_auth"
+  | "rate_limit"; // abuse controls degrading open — see failOpen in auth/rate-limit.ts
 
 /**
  * Per-flow results. The failure class (`failure` / `deny` / `unauthorized` /

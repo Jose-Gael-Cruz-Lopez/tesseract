@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { type DB, first, run } from "../db";
 import type { Env } from "../env";
+import { logEvent } from "../log";
 
 // Abuse controls for the open-login surface (issue #21). D1-backed fixed-window
 // counters + an escalating auth-failure lockout, chosen over the Cloudflare
@@ -90,39 +91,79 @@ export function _resetRateLimitTestHooks(): void {
 
 const retryAfter = (untilMs: number, nowMs: number): number => Math.max(1, Math.ceil((untilMs - nowMs) / 1000));
 
+/** The decision every abuse control degrades to when its backing store is unreachable. */
+const ALLOW: RateLimitDecision = { allowed: true, retryAfterSeconds: 0 };
+
+/**
+ * Run one abuse-control D1 operation, degrading OPEN if the backing store is
+ * unreachable — a missing table (migration shipped as code but not applied), a
+ * D1 outage, a transient bind error.
+ *
+ * A rate limiter is not an authenticator. Refusing traffic because the COUNTER
+ * broke converts a non-critical subsystem fault into a total auth outage: on
+ * 2026-07-17 migration 0028 reached prod as code but never as schema, every D1
+ * call here was unwrapped, and because there is no Hono `onError` the throw
+ * surfaced as a bare 500 on EVERY /auth/* route — sign-in was down ~10 days.
+ * (`finishAppLogin` already wraps `exchangeUserCode` for exactly this reason;
+ * these calls sit three lines above it and were missed.)
+ *
+ * So: allow the request, and emit an error-level line — the failure class the
+ * runbook's auth alert already watches (docs/runbooks/secrets-and-observability.md),
+ * so a silently-unmetered surface is loud rather than invisible. The caller's key
+ * is deliberately not logged: it is an IP/login, and the reason field plus the
+ * policy name are enough to diagnose without recording who was hitting it.
+ */
+async function failOpen<T>(policy: string, op: string, fallback: T, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    logEvent({
+      event: "rate_limit",
+      outcome: "error",
+      reason: "backend_error",
+      policy,
+      op,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return fallback;
+  }
+}
+
 export function createD1RateLimiter(db: DB, opts: { now?: () => number } = {}): RateLimiter {
   const now = (): number => (opts.now ?? _rateLimitTestHooks.now ?? Date.now)();
   return {
     async hit(policy, key) {
-      const t = now();
-      const windowStart = t - (t % policy.windowMs);
-      const k = `${policy.name}:${key}`;
-      // Deny-before-write: a bucket already at its limit for this window can only be
-      // refused, so answer from a read and skip the upsert. Without this, every denied
-      // request is a guaranteed D1 row-write — a flood of an over-limit key would burn
-      // write quota at attack rate. The counter is monotone within a window (it only
-      // resets on rollover), so this shortcut can never wrongly deny; the atomic upsert
-      // below still makes the exact allow/deny call for every hit that writes.
-      const existing = await first<{ window_start: number; count: number }>(
-        db, `SELECT window_start, count FROM rate_limits WHERE key = ?`, k);
-      if (existing && existing.window_start === windowStart && existing.count >= policy.limit) {
+      return failOpen(policy.name, "hit", ALLOW, async () => {
+        const t = now();
+        const windowStart = t - (t % policy.windowMs);
+        const k = `${policy.name}:${key}`;
+        // Deny-before-write: a bucket already at its limit for this window can only be
+        // refused, so answer from a read and skip the upsert. Without this, every denied
+        // request is a guaranteed D1 row-write — a flood of an over-limit key would burn
+        // write quota at attack rate. The counter is monotone within a window (it only
+        // resets on rollover), so this shortcut can never wrongly deny; the atomic upsert
+        // below still makes the exact allow/deny call for every hit that writes.
+        const existing = await first<{ window_start: number; count: number }>(
+          db, `SELECT window_start, count FROM rate_limits WHERE key = ?`, k);
+        if (existing && existing.window_start === windowStart && existing.count >= policy.limit) {
+          return { allowed: false, retryAfterSeconds: retryAfter(windowStart + policy.windowMs, t) };
+        }
+        // One atomic upsert: same window → count + 1; a new window resets to 1.
+        // (Unqualified columns in DO UPDATE read the existing row; excluded.* the new one.)
+        const row = await first<{ count: number }>(
+          db,
+          `INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1)
+           ON CONFLICT(key) DO UPDATE SET
+             count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END,
+             window_start = excluded.window_start
+           RETURNING count`,
+          k,
+          windowStart
+        );
+        const count = row?.count ?? 1;
+        if (count <= policy.limit) return { allowed: true, retryAfterSeconds: 0 };
         return { allowed: false, retryAfterSeconds: retryAfter(windowStart + policy.windowMs, t) };
-      }
-      // One atomic upsert: same window → count + 1; a new window resets to 1.
-      // (Unqualified columns in DO UPDATE read the existing row; excluded.* the new one.)
-      const row = await first<{ count: number }>(
-        db,
-        `INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1)
-         ON CONFLICT(key) DO UPDATE SET
-           count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END,
-           window_start = excluded.window_start
-         RETURNING count`,
-        k,
-        windowStart
-      );
-      const count = row?.count ?? 1;
-      if (count <= policy.limit) return { allowed: true, retryAfterSeconds: 0 };
-      return { allowed: false, retryAfterSeconds: retryAfter(windowStart + policy.windowMs, t) };
+      });
     },
   };
 }
@@ -131,41 +172,47 @@ export function createD1FailureTracker(db: DB, opts: { now?: () => number } = {}
   const now = (): number => (opts.now ?? _rateLimitTestHooks.now ?? Date.now)();
   return {
     async status(policy, key) {
-      const t = now();
-      const row = await first<{ locked_until: number | null }>(
-        db,
-        `SELECT locked_until FROM auth_failures WHERE key = ?`,
-        `${policy.name}:${key}`
-      );
-      if (!row?.locked_until || row.locked_until <= t) return { allowed: true, retryAfterSeconds: 0 };
-      return { allowed: false, retryAfterSeconds: retryAfter(row.locked_until, t) };
+      return failOpen(policy.name, "status", ALLOW, async () => {
+        const t = now();
+        const row = await first<{ locked_until: number | null }>(
+          db,
+          `SELECT locked_until FROM auth_failures WHERE key = ?`,
+          `${policy.name}:${key}`
+        );
+        if (!row?.locked_until || row.locked_until <= t) return { allowed: true, retryAfterSeconds: 0 };
+        return { allowed: false, retryAfterSeconds: retryAfter(row.locked_until, t) };
+      });
     },
 
     async recordFailure(policy, key) {
-      const t = now();
-      const k = `${policy.name}:${key}`;
-      // Atomic count: within the window → failures + 1; a stale window starts over
-      // (and wipes any stale lock so an old lockout can't outlive its window).
-      const row = await first<{ failures: number }>(
-        db,
-        `INSERT INTO auth_failures (key, failures, window_start, locked_until) VALUES (?, 1, ?, NULL)
-         ON CONFLICT(key) DO UPDATE SET
-           failures = CASE WHEN ? - window_start < ? THEN failures + 1 ELSE 1 END,
-           locked_until = CASE WHEN ? - window_start < ? THEN locked_until ELSE NULL END,
-           window_start = CASE WHEN ? - window_start < ? THEN window_start ELSE ? END
-         RETURNING failures`,
-        k, t, t, policy.windowMs, t, policy.windowMs, t, policy.windowMs, t
-      );
-      const failures = row?.failures ?? 1;
-      if (failures < policy.maxFailures) return;
-      // Escalating backoff: the base doubles per failure past the threshold, capped.
-      // A separate statement — a lost race slightly under-locks, never over-locks.
-      const lockMs = Math.min(policy.baseLockoutMs * 2 ** (failures - policy.maxFailures), policy.maxLockoutMs);
-      await run(db, `UPDATE auth_failures SET locked_until = ? WHERE key = ?`, t + lockMs, k);
+      return failOpen(policy.name, "recordFailure", undefined, async () => {
+        const t = now();
+        const k = `${policy.name}:${key}`;
+        // Atomic count: within the window → failures + 1; a stale window starts over
+        // (and wipes any stale lock so an old lockout can't outlive its window).
+        const row = await first<{ failures: number }>(
+          db,
+          `INSERT INTO auth_failures (key, failures, window_start, locked_until) VALUES (?, 1, ?, NULL)
+           ON CONFLICT(key) DO UPDATE SET
+             failures = CASE WHEN ? - window_start < ? THEN failures + 1 ELSE 1 END,
+             locked_until = CASE WHEN ? - window_start < ? THEN locked_until ELSE NULL END,
+             window_start = CASE WHEN ? - window_start < ? THEN window_start ELSE ? END
+           RETURNING failures`,
+          k, t, t, policy.windowMs, t, policy.windowMs, t, policy.windowMs, t
+        );
+        const failures = row?.failures ?? 1;
+        if (failures < policy.maxFailures) return;
+        // Escalating backoff: the base doubles per failure past the threshold, capped.
+        // A separate statement — a lost race slightly under-locks, never over-locks.
+        const lockMs = Math.min(policy.baseLockoutMs * 2 ** (failures - policy.maxFailures), policy.maxLockoutMs);
+        await run(db, `UPDATE auth_failures SET locked_until = ? WHERE key = ?`, t + lockMs, k);
+      });
     },
 
     async clear(policy, key) {
-      await run(db, `DELETE FROM auth_failures WHERE key = ?`, `${policy.name}:${key}`);
+      return failOpen(policy.name, "clear", undefined, async () => {
+        await run(db, `DELETE FROM auth_failures WHERE key = ?`, `${policy.name}:${key}`);
+      });
     },
   };
 }

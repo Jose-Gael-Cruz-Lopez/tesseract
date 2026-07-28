@@ -181,7 +181,60 @@ describe("signin structured logs (issue #22)", () => {
       exchangeEnv
     );
     expect(res.status).toBe(401);
-    expect(signinLines(error)).toEqual([{ event: "signin", outcome: "failure", reason: "exchange_failed" }]);
+    expect(signinLines(error)).toEqual([
+      { event: "signin", outcome: "failure", reason: "exchange_failed", detail: "user token error: bad_verification_code" },
+    ]);
+  });
+
+  // Why `detail` exists. On 2026-07-28, prod sign-in failed with `exchange_failed`
+  // and the log line carried nothing else — the bare `catch {}` discarded the cause,
+  // so a WRONG CLIENT SECRET was indistinguishable from a replayed code, and the
+  // busiest auth path had no way to tell an operator which. `detail` closes that gap
+  // WITHOUT widening the response: an unauthenticated caller must still learn only
+  // the failure class. oauthToken builds these messages from the status/error field
+  // only — never the code, token, or secret — so they are safe to log.
+  it("logs the underlying exchange error as `detail`, and never leaks it to the caller", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exchangeEnv: Env = { ...env, GITHUB_APP_CLIENT_ID: "Iv1.testclient", GITHUB_APP_CLIENT_SECRET: "wrong-secret" } as Env;
+    const wrongSecretFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ error: "incorrect_client_credentials" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const seamApp = new Hono<AppEnv>();
+    seamApp.get("/callback", (c) => finishAppLogin(c, { fetchImpl: wrongSecretFetch }));
+    const sealed = await hmacSeal("state-abc", "test-cookie-secret");
+    const res = await seamApp.request(
+      "/callback?code=fresh-code&state=state-abc",
+      { headers: { cookie: `app_oauth_tx=${sealed}` } },
+      exchangeEnv
+    );
+
+    // Public contract unchanged — the caller learns only the class.
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "exchange_failed" });
+
+    // The operator, however, can now tell WHICH failure this was.
+    const [line] = signinLines(error);
+    expect(line.reason).toBe("exchange_failed");
+    expect(String(line.detail)).toContain("incorrect_client_credentials");
+    // The secret must never ride along into the log.
+    expect(JSON.stringify(line)).not.toContain("wrong-secret");
+  });
+
+  it("distinguishes a non-OK token response from an error body", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exchangeEnv: Env = { ...env, GITHUB_APP_CLIENT_ID: "Iv1.testclient", GITHUB_APP_CLIENT_SECRET: "test-app-secret" } as Env;
+    const http500: typeof fetch = async () => new Response("nope", { status: 503 });
+    const seamApp = new Hono<AppEnv>();
+    seamApp.get("/callback", (c) => finishAppLogin(c, { fetchImpl: http500 }));
+    const sealed = await hmacSeal("state-abc", "test-cookie-secret");
+    await seamApp.request(
+      "/callback?code=fresh-code&state=state-abc",
+      { headers: { cookie: `app_oauth_tx=${sealed}` } },
+      exchangeEnv
+    );
+    expect(String(signinLines(error)[0].detail)).toContain("503");
   });
 
   it("a missing code/state/tx callback → one signin failure line with reason invalid_request", async () => {
