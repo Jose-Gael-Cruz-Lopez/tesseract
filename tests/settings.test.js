@@ -34,8 +34,6 @@ const NAV_LABELS = [
   'Language & region',
   'Settings',
   'Members',
-  'Upgrade',
-  'Billing',
   'Security',
   'Identity & provisioning',
   'Connections',
@@ -81,10 +79,10 @@ test('imports', async () => {
 });
 
 describe('nav', () => {
-  test('renders all 12 nav items in order', () => {
+  test('renders all 10 nav items in order', () => {
     openSettings(makeCtx());
     const rows = document.querySelectorAll('.set-nav-row');
-    expect(rows.length).toBe(12);
+    expect(rows.length).toBe(NAV_LABELS.length);
     expect(Array.from(rows).map((r) => r.querySelector('.set-nav-label').textContent)).toEqual(NAV_LABELS);
   });
 
@@ -108,8 +106,8 @@ describe('nav', () => {
     expect(document.body.textContent).toContain('These settings are coming soon.');
   });
 
-  test('the other 8 stub nav items also render "H = label + coming soon"', () => {
-    const stubs = ['My connections', 'Language & region', 'Settings', 'Upgrade', 'Billing', 'Security', 'Identity & provisioning', 'Connections'];
+  test('the other 6 stub nav items also render "H = label + coming soon"', () => {
+    const stubs = ['My connections', 'Language & region', 'Settings', 'Security', 'Identity & provisioning', 'Connections'];
     for (const label of stubs) {
       openSettings(makeCtx());
       const row = navRowByLabel(label);
@@ -312,8 +310,8 @@ describe('modal chrome', () => {
   });
 
   test('opens directly on the requested panel', () => {
-    openSettings(makeCtx(), 'billing');
-    expect(document.querySelector('.set-nav-row.is-active .set-nav-label').textContent).toBe('Billing');
-    expect(document.querySelector('.set-panel-inner h2').textContent).toBe('Billing');
+    openSettings(makeCtx(), 'security');
+    expect(document.querySelector('.set-nav-row.is-active .set-nav-label').textContent).toBe('Security');
+    expect(document.querySelector('.set-panel-inner h2').textContent).toBe('Security');
   });
 });
