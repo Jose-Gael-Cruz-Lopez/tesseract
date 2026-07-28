@@ -36,7 +36,13 @@ export type LogOutcome =
   | "failure"      // signin, installation_token
   | "deny"         // repo_gate (the 401/404 branches)
   | "unauthorized" // webhook (bad/absent HMAC or unset secret), mcp_auth (bad/absent bearer)
-  | "error";       // mcp_tool (the tool body threw)
+  | "error"        // mcp_tool (the tool body threw)
+  // selfcheck only. Deliberately NOT failure-class: `indeterminate` means the probe
+  // could not reach GitHub (an outage must not page about a credential that is fine),
+  // and `degraded` means an OPTIONAL secret is unset by design. Putting either at error
+  // level would make the alert permanently red, and a muted alert is worth nothing.
+  | "indeterminate"
+  | "degraded";
 
 const FAILURE_OUTCOMES: ReadonlySet<LogOutcome> = new Set(["failure", "deny", "unauthorized", "error"]);
 
