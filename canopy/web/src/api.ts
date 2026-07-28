@@ -142,9 +142,15 @@ export function getMe(): Promise<Me> {
   return getJson<Me>("/auth/me");
 }
 
-// ADMIN action: trigger the server-side GitHub backfill (admin-only route). The
-// worker holds the service token and fetches GitHub directly — no webhook secret.
-export function adminBackfill(): Promise<{
+// ADMIN action, push-gated: trigger the server-side GitHub backfill for the ACTIVE hub. Scoped
+// like every other mutation — the push-gated POST /r/:owner/:repo/admin/backfill
+// (src/hub.ts), which targets repoOf(c). NEVER the flat /admin/backfill (issue #34):
+// that one is isAdmin-gated and backfills defaultRepo(env), so from inside a hub it
+// reported success while a DIFFERENT tenant's repo was synced — a wrong-target write.
+// It stays server-side for the single-tenant deployment; the SPA is hub-only. The
+// worker authenticates as the target repo's OWN GitHub App installation and fetches
+// GitHub directly — no token or webhook secret travels from here.
+export async function adminBackfill(): Promise<{
   ok: boolean;
   captured: number;
   unchanged: number;
@@ -156,7 +162,7 @@ export function adminBackfill(): Promise<{
   issues: number;
   issuesToSummarize: number;
 }> {
-  return postJson("/admin/backfill", {});
+  return postJson(scoped("/admin/backfill"), {});
 }
 
 export async function getMyDashboard(): Promise<DashboardData> {
