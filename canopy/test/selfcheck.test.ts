@@ -196,3 +196,22 @@ describe("runSelfCheck — alerting contract (DoD 12, 13)", () => {
   });
 });
 
+describe("runSelfCheck — output safety (DoD 17)", () => {
+  it("never leaks a secret's value, a 4+ char substring of it, or its length", async () => {
+    // Deliberately free of dictionary fragments: the report's own schema uses the field
+    // name "secret" (spec R18), so a sentinel containing "secr" would fail this
+    // assertion no matter how the implementation behaved. This value shares no 4-char
+    // run with the schema, so the assertion tests leakage and nothing else.
+    const value = "zq7xk9vw3mtj5pnr8bdf2hgy4cls6a";
+    const r = await runSelfCheck(APP_ENV({ GITHUB_APP_CLIENT_SECRET: value }), {
+      fetchImpl: stubFetch({ tokenError: "incorrect_client_credentials" }),
+    });
+    const serialized = JSON.stringify(r);
+    expect(serialized).not.toContain(value);
+    for (let i = 0; i + 4 <= value.length; i++) {
+      expect(serialized).not.toContain(value.slice(i, i + 4));
+    }
+    expect(serialized).not.toContain(String(value.length));
+  });
+});
+
