@@ -29,6 +29,32 @@ empty `GITHUB_WEBHOOK_SECRET`-adjacent misconfiguration makes every delivery
 doubt, re-pipe the value — `secret put` overwrites idempotently. The full secret
 inventory lives in `CLAUDE.md` (Env / bindings) and `src/env.ts`.
 
+## Migration gotcha — merging deploys CODE, never SCHEMA
+
+**A merge to `main` triggers a Workers Builds deploy of the Worker. It does NOT
+apply D1 migrations.** `npm run db:migrate:remote` is a separate, manual step, and
+it fails outright if `wrangler` is authenticated to the wrong Cloudflare account
+(there are two; only one can see D1 `53c1314d-…`, the id pinned in
+`wrangler.toml` — `npx wrangler whoami` then `npx wrangler d1 list` is the check).
+
+That combination caused a **~10-day total sign-in outage**: `0028_rate_limits.sql`
+(PR #27) merged and deployed on 2026-07-16, the remote migration silently failed on
+the wrong account, and from 2026-07-17 every `/auth/*` route returned a bare 500 —
+the limiter queried tables that did not exist. CI never caught it because the test
+harness applies every migration. It was found on 2026-07-27 running issue #9's e2e
+checklist. The abuse controls now degrade open rather than 500 (`failOpen`, below),
+so this class of drift is loud instead of fatal — but the schema still has to land.
+
+**After merging any PR that carries a migration:**
+
+```
+npx wrangler whoami                              # right account?
+cd canopy && npx wrangler d1 migrations list canopy --remote   # expect: no pending
+cd canopy && npm run db:migrate:remote
+```
+
+Treat a PR with a migration as unshipped until that list comes back empty.
+
 ## Observability
 
 ### Where the logs land
@@ -50,12 +76,30 @@ secret, and payload *values* are never logged; identifiers only.
 
 | `event`              | Emitted at                                                | `outcome` values                       | Extras                                          |
 | -------------------- | --------------------------------------------------------- | -------------------------------------- | ----------------------------------------------- |
-| `signin`             | GitHub App sign-in (`src/auth/app-login.ts`)               | `success`, `failure`                   | `reason` (e.g. `app_not_configured`, `exchange_failed`) |
+| `signin`             | GitHub App sign-in (`src/auth/app-login.ts`)               | `success`, `failure`                   | `reason` (e.g. `app_not_configured`, `exchange_failed`), `detail` (log-only cause — see below) |
 | `repo_gate`          | Per-repo hub + `/mcp/:owner/:repo` gate (`src/auth/repo-gate.ts`) | `allow`, `deny`                 | `status` (401/404), `reason`, `can_push`        |
 | `installation_token` | Fresh installation-token mints (`src/auth/app.ts`; cache hits are silent) | `success`, `failure`   | `installation_id`, `status`                     |
 | `webhook`            | Each `/webhook/github` delivery (`src/webhook.ts`)         | `processed`, `ignored`, `unauthorized` | `github_event`, `captured`, `unchanged`         |
 | `mcp_auth`           | Bearer 401 at `/mcp` + `/mcp/:owner/:repo` (`src/index.ts`) | `unauthorized`                        | none — the request is unverified, so the line is deliberately detail-free |
 | `mcp_tool`           | Every MCP tool call (`src/mcp.ts`)                         | `success`, `error`                     | `tool`, `message` (on error)                    |
+| `rate_limit`         | An abuse control degrading OPEN because its D1 tables are unreachable (`failOpen` in `src/auth/rate-limit.ts`) | `error` | `reason` (`backend_error`), `policy`, `op`, `error` |
+
+**Reading a `signin` / `exchange_failed` line.** `reason` is the failure *class*; the
+`detail` field carries the underlying cause, which is the field that actually tells
+you what to fix. The response body deliberately stays `{"error":"exchange_failed"}`
+for every case — the caller is unauthenticated, so it learns only the class:
+
+| `detail` contains                       | Means                                            | Fix |
+| --------------------------------------- | ------------------------------------------------ | --- |
+| `incorrect_client_credentials`          | `GITHUB_APP_CLIENT_SECRET` doesn't match the App | Re-pipe it from the App's settings (see the secret gotcha above) |
+| `bad_verification_code`                 | Code replayed/expired — a user refreshed or back-buttoned the callback | Nothing; this is normal web traffic |
+| `redirect_uri_mismatch`                 | The callback URL isn't registered on the App     | Add `https://memo-sphere.com/auth/callback` to the App's callback URLs |
+| `user token request failed: <status>`   | GitHub's token endpoint returned non-OK          | Check GitHub status; transient |
+
+Before this field existed, all four were one indistinguishable log line — which is
+how a wrong client secret went undiagnosed. `detail` is safe to log because
+`oauthToken` composes those messages from the HTTP status and GitHub's `error` field
+only, never from the code, token, or secret.
 
 One deliberate exclusion: the **session-cookie 401** (`sessionGate` — an anonymous
 or expired browser hitting a gated HTTP route) is NOT logged at error level. Fresh

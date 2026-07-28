@@ -88,8 +88,11 @@ export async function finishAppLogin(
   // Every failed auth outcome below counts toward the per-IP lockout — the response
   // shapes are unchanged, they just also feed the failure tracker (issue #21) and
   // the structured signin log (issue #22).
-  const fail = async (error: string, status: 400 | 401 | 403): Promise<Response> => {
-    logEvent({ event: "signin", outcome: "failure", reason: error });
+  // `detail` is log-only — it NEVER widens the response body. An unauthenticated
+  // caller learns just the failure class; the operator gets the cause. (logEvent
+  // drops undefined fields, so the other callers' lines are byte-identical.)
+  const fail = async (error: string, status: 400 | 401 | 403, detail?: string): Promise<Response> => {
+    logEvent({ event: "signin", outcome: "failure", reason: error, detail });
     await failures.recordFailure(AUTH_FAILURE_LOCKOUT, ip);
     return c.json({ error }, status);
   };
@@ -108,8 +111,14 @@ export async function finishAppLogin(
   try {
     tokens = await exchangeUserCode(c.env, code, { fetchImpl: opts?.fetchImpl }); // user-to-server token (+ refresh)
     ghUser = await (opts?.getUserImpl ?? getUser)(tokens.token);
-  } catch {
-    return fail("exchange_failed", 401);
+  } catch (err) {
+    // Log the CAUSE. `incorrect_client_credentials` (a wrong/rotated client secret)
+    // and `bad_verification_code` (a replayed code) are the same 401 to a client and
+    // completely different to an operator — discarding it here cost a full debugging
+    // session on 2026-07-28. Safe to log: oauthToken/getUser compose these messages
+    // from the HTTP status and GitHub's `error` field only, never from the code,
+    // token, or client secret.
+    return fail("exchange_failed", 401, err instanceof Error ? err.message : String(err));
   }
   if (!ghUser) return fail("identity_failed", 401);
 
