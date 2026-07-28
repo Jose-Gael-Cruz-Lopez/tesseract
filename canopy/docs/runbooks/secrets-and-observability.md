@@ -83,6 +83,7 @@ secret, and payload *values* are never logged; identifiers only.
 | `mcp_auth`           | Bearer 401 at `/mcp` + `/mcp/:owner/:repo` (`src/index.ts`) | `unauthorized`                        | none — the request is unverified, so the line is deliberately detail-free |
 | `mcp_tool`           | Every MCP tool call (`src/mcp.ts`)                         | `success`, `error`                     | `tool`, `message` (on error)                    |
 | `rate_limit`         | An abuse control degrading OPEN because its D1 tables are unreachable (`failOpen` in `src/auth/rate-limit.ts`) | `error` | `reason` (`backend_error`), `policy`, `op`, `error` |
+| `selfcheck`          | Per-secret functional check, on the 6-hour cron and `GET /admin/selfcheck` (`src/auth/selfcheck.ts`) | `failure` (alertable), `indeterminate`, `degraded` | `secret`, `reason` |
 
 **Reading a `signin` / `exchange_failed` line.** `reason` is the failure *class*; the
 `detail` field carries the underlying cause, which is the field that actually tells
