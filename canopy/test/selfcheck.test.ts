@@ -250,3 +250,65 @@ describe("scheduled() isolation — the self-check can never break the cron (DoD
   });
 });
 
+describe("GET /admin/selfcheck — authorization (DoD 1, 2, 3, 4)", () => {
+  it("401 without any credentials", async () => {
+    const res = await app.request("/admin/selfcheck", {}, APP_ENV());
+    expect(res.status).toBe(401);
+  });
+
+  it("403 for a valid non-admin session", async () => {
+    _selfCheckTestHooks.fetchImpl = stubFetch({});
+    const res = await app.request("/admin/selfcheck", { headers: { cookie: await authedCookie("nobody") } }, APP_ENV());
+    expect(res.status).toBe(403);
+  });
+
+  it("200 with a full report for an admin session", async () => {
+    _selfCheckTestHooks.fetchImpl = stubFetch({});
+    const res = await app.request(
+      "/admin/selfcheck",
+      { headers: { cookie: await authedCookie("admin-user") } },
+      APP_ENV()
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Awaited<ReturnType<typeof runSelfCheck>>;
+    const names = body.secrets.map((s) => s.secret);
+    for (const s of [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+      "GITHUB_APP_CLIENT_ID",
+      "GITHUB_APP_CLIENT_SECRET",
+      "COOKIE_SECRET",
+      "GEMINI_API_KEY",
+      "GITHUB_WEBHOOK_SECRET",
+    ]) {
+      expect(names).toContain(s);
+    }
+  });
+
+  it("200 for a bearer token even while the App credentials are broken (break-glass)", async () => {
+    // The scenario this route exists for: App creds are wrong, so no session can be
+    // obtained at all. A pre-existing bearer must still get the report.
+    _selfCheckTestHooks.fetchImpl = stubFetch({ tokenError: "incorrect_client_credentials" });
+    // mcp_tokens references users(github_login) — seed the row before minting.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO users (github_login, name, avatar_url, created_at) VALUES (?, ?, NULL, ?)`
+    )
+      .bind("someone", "someone", "2026-01-01T00:00:00Z")
+      .run();
+    const { raw } = await mintToken(env.DB, "someone");
+    const res = await app.request("/admin/selfcheck", { headers: { authorization: `Bearer ${raw}` } }, APP_ENV());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Awaited<ReturnType<typeof runSelfCheck>>;
+    expect(body.ok).toBe(false);
+    expect(body.secrets.find((s) => s.secret === "GITHUB_APP_CLIENT_SECRET")!.status).toBe("fail");
+  });
+
+  it("401 for a bearer that does not resolve", async () => {
+    const res = await app.request(
+      "/admin/selfcheck",
+      { headers: { authorization: "Bearer canopy_mcp_nope" } },
+      APP_ENV()
+    );
+    expect(res.status).toBe(401);
+  });
+});
