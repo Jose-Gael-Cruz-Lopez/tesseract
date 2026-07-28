@@ -92,3 +92,26 @@ async function withTimeout(fn: (signal: AbortSignal) => Promise<Response>): Prom
 }
 
 /** GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY — mint an App JWT and spend it on GET /app. */
+async function probeAppJwt(env: Env, doFetch: typeof fetch): Promise<ProbeOutcome> {
+  if (!present(env.GITHUB_APP_ID) || !present(env.GITHUB_APP_PRIVATE_KEY)) return absent();
+  try {
+    const jwt = await appJwt(env);
+    const res = await withTimeout((signal) =>
+      doFetch("https://api.github.com/app", {
+        headers: { authorization: `Bearer ${jwt}`, accept: "application/vnd.github+json", "user-agent": "canopy" },
+        signal,
+      })
+    );
+    if (res.status === 200) return { status: "pass", verified: true, note: "GitHub accepted the App JWT", reason: "ok" };
+    if (res.status === 401 || res.status === 403) {
+      return { status: "fail", verified: true, note: "GitHub rejected the App JWT", reason: `http_${res.status}` };
+    }
+    return unreachable(`http_${res.status}`, `GitHub returned ${res.status}`);
+  } catch {
+    // A malformed key throws at import time; a fault throws at fetch. Neither PROVES
+    // the credential is wrong, so neither may alert.
+    return unreachable("probe_error", "could not complete the App JWT probe");
+  }
+}
+
+/** GITHUB_APP_CLIENT_ID + GITHUB_APP_CLIENT_SECRET — the bug #3 probe. */
