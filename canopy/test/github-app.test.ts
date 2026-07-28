@@ -277,10 +277,14 @@ describe("repo access authorization (auth/access.ts)", () => {
   });
 });
 
-// Phase 3: connect-your-repos — the installation-lifecycle webhook sync.
+// Phase 3: connect-your-repos — the installation-lifecycle webhook sync. `env` here has
+// no GitHub App config, so the issue #33 reconcile is inert and these cases exercise the
+// payload-delta path on its own (its own reconcile coverage is in
+// test/installation-repo-reconcile.test.ts).
 describe("connect-your-repos webhook sync (auth/connect.ts)", () => {
   const created = (id: number, repos: string[]) =>
     handleInstallationEvent(
+      env as Env,
       env.DB,
       "installation",
       { action: "created", installation: { id, account: { login: "octocat", type: "User" } }, repositories: repos.map((r) => ({ full_name: r })), sender: { login: "octocat" } },
@@ -300,6 +304,7 @@ describe("connect-your-repos webhook sync (auth/connect.ts)", () => {
   it("installation_repositories added/removed connects and soft-disconnects", async () => {
     await created(100, ["octocat/app"]);
     await handleInstallationEvent(
+      env as Env,
       env.DB,
       "installation_repositories",
       { action: "added", installation: { id: 100 }, repositories_added: [{ full_name: "octocat/new" }], repositories_removed: [{ full_name: "octocat/app" }], sender: { login: "octocat" } },
@@ -311,7 +316,7 @@ describe("connect-your-repos webhook sync (auth/connect.ts)", () => {
 
   it("installation.deleted soft-disconnects all the install's repos (rows retained)", async () => {
     await created(100, ["octocat/app", "octocat/site"]);
-    await handleInstallationEvent(env.DB, "installation", { action: "deleted", installation: { id: 100 } }, "2026-07-11T00:05:00Z");
+    await handleInstallationEvent(env as Env, env.DB, "installation", { action: "deleted", installation: { id: 100 } }, "2026-07-11T00:05:00Z");
     const rows = await env.DB.prepare(`SELECT status FROM repos WHERE installation_id = 100`).all<{ status: string }>();
     expect((rows.results ?? []).length).toBe(2);
     expect((rows.results ?? []).every((r) => r.status === "disconnected")).toBe(true);
@@ -321,9 +326,9 @@ describe("connect-your-repos webhook sync (auth/connect.ts)", () => {
     await created(100, []);
     const suspendedAt = async () =>
       (await env.DB.prepare(`SELECT suspended_at FROM installations WHERE installation_id = 100`).first<{ suspended_at: string | null }>())?.suspended_at;
-    await handleInstallationEvent(env.DB, "installation", { action: "suspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:05:00Z");
+    await handleInstallationEvent(env as Env, env.DB, "installation", { action: "suspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:05:00Z");
     expect(await suspendedAt()).toBe("2026-07-11T00:05:00Z");
-    await handleInstallationEvent(env.DB, "installation", { action: "unsuspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:06:00Z");
+    await handleInstallationEvent(env as Env, env.DB, "installation", { action: "unsuspend", installation: { id: 100, account: { login: "octocat", type: "User" } } }, "2026-07-11T00:06:00Z");
     expect(await suspendedAt()).toBeNull();
   });
 });

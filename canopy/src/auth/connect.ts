@@ -1,11 +1,13 @@
-import { type DB, run } from "../db";
+import { all, type DB, run } from "../db";
 import type { Env } from "../env";
 import { appJwt, ghGetAll, installationToken } from "./app";
 
 // Connect-your-repos: keep the `installations` + `repos` tables in sync with GitHub App
-// installation lifecycle. Driven entirely by the webhook payload (which carries the
-// account + repo list), so no GitHub round-trip is needed here. Removal is a
-// soft-disconnect (repos.status), never a delete — data survives and reconnect restores.
+// installation lifecycle. Mostly driven by the webhook payload (which carries the account
+// + repo list); the one place that needs a GitHub round-trip is a repo-selection change,
+// where the payload delta is provably incomplete (issue #33 — see
+// `reconcileInstallationRepos`). Removal is a soft-disconnect (repos.status), never a
+// delete — data survives and reconnect restores.
 
 interface InstallationEventPayload {
   action?: string;
@@ -62,11 +64,30 @@ export async function disconnectRepos(db: DB, repos: string[]): Promise<void> {
   }
 }
 
+export interface InstallationEventResult {
+  handled: boolean;
+  /** `installation_repositories` only: did the authoritative reconcile run to completion? */
+  reconciled?: boolean;
+  /** `installation_repositories` only: how many repos that reconcile soft-disconnected. */
+  disconnected?: number;
+}
+
 /**
  * Apply an installation-family webhook (`installation` / `installation_repositories`)
  * to the connection tables. Returns `{ handled }` (false for actions we ignore).
+ *
+ * `env` + `opts` are here only for the `installation_repositories` reconcile, which is
+ * the single branch that cannot trust the payload (issue #33); every other branch is
+ * still pure payload → D1. `fetchImpl`/`nowSec` are injectable for tests.
  */
-export async function handleInstallationEvent(db: DB, eventName: string, payload: unknown, now: string): Promise<{ handled: boolean }> {
+export async function handleInstallationEvent(
+  env: Env,
+  db: DB,
+  eventName: string,
+  payload: unknown,
+  now: string,
+  opts?: { fetchImpl?: typeof fetch; nowSec?: number }
+): Promise<InstallationEventResult> {
   const p = payload as InstallationEventPayload;
   const inst = p.installation;
   if (!inst?.id) return { handled: false };
@@ -99,9 +120,13 @@ export async function handleInstallationEvent(db: DB, eventName: string, payload
   }
 
   if (eventName === "installation_repositories") {
+    // The payload delta first: it costs no GitHub call, and it is ALL we have when the
+    // App isn't configured. Then reconcile against the authoritative list — the only
+    // thing that catches an all→selected narrowing, whose delta is empty by design.
     await connectRepos(db, inst.id, (p.repositories_added ?? []).map((r) => r.full_name), sender, now);
     await disconnectRepos(db, (p.repositories_removed ?? []).map((r) => r.full_name));
-    return { handled: true };
+    const rec = await reconcileInstallationRepos(env, db, inst.id, sender, now, opts);
+    return { handled: true, reconciled: rec.reconciled, disconnected: rec.disconnected.length };
   }
 
   return { handled: false };
@@ -144,4 +169,59 @@ export async function syncInstallationFromApp(
   await connectRepos(db, installationId, names, addedBy, now);
 
   return { repos: names };
+}
+
+/**
+ * Reconcile one installation's connection rows against the AUTHORITATIVE repo list
+ * GitHub reports for it: anything still `status='connected'` under this
+ * `installation_id` but absent from that list is soft-disconnected.
+ *
+ * Why the webhook delta isn't enough: narrowing an installation from "All repositories"
+ * to "Only select repositories" arrives as `action: "added"` with an EMPTY
+ * `repositories_removed` — under "all" GitHub never held an explicit list to remove
+ * FROM. So the delta flipped nothing and every de-scoped repo stayed `connected`
+ * forever, feeding the 6-hourly `recomputeConnectedRepos` a token mint that can no
+ * longer succeed (issue #33).
+ *
+ * SAFETY — this is the destructive direction, so it fires ONLY on a list we can prove
+ * is complete. "Absent from the list" is only evidence of de-scoping if the list is
+ * whole; on a truncated one it means "past the truncation point", which would take out
+ * every repo after page 1. Three guards, in order:
+ *   1. `syncInstallationFromApp` pages through `ghGetAll`, which accumulates in memory
+ *      and throws on the first non-2xx — we get the WHOLE list or an exception, never a
+ *      prefix, and nothing partial ever reaches D1.
+ *   2. Any throw at all (App unconfigured, token mint, account read, any page) is caught
+ *      here and disconnects NOTHING. A failed reconcile is a no-op, never a partial one.
+ *   3. An empty list is refused: it is indistinguishable from a 200 whose body we
+ *      couldn't read, and "this installation sees zero repos" is what `installation.
+ *      deleted` legitimately means — not what a repo-selection change means.
+ * Returns the repos it actually disconnected (always empty when it refused).
+ */
+export async function reconcileInstallationRepos(
+  env: Env,
+  db: DB,
+  installationId: number,
+  addedBy: string | null,
+  now: string,
+  opts?: { fetchImpl?: typeof fetch; nowSec?: number }
+): Promise<{ reconciled: boolean; disconnected: string[] }> {
+  let authoritative: string[];
+  try {
+    ({ repos: authoritative } = await syncInstallationFromApp(env, db, installationId, addedBy, now, opts));
+  } catch {
+    return { reconciled: false, disconnected: [] }; // guard 2
+  }
+  if (authoritative.length === 0) return { reconciled: false, disconnected: [] }; // guard 3
+
+  // Scoped to this installation: another tenant's rows are never in the comparison set,
+  // so one install's repo-selection change can't touch another's hubs.
+  const connected = await all<{ repo: string }>(
+    db,
+    `SELECT repo FROM repos WHERE installation_id = ? AND status = 'connected'`,
+    installationId
+  );
+  const reachable = new Set(authoritative);
+  const gone = connected.map((r) => r.repo).filter((repo) => !reachable.has(repo));
+  await disconnectRepos(db, gone); // status only — rows and captured data stay
+  return { reconciled: true, disconnected: gone };
 }
