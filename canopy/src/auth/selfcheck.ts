@@ -164,3 +164,33 @@ async function probeCookieSecret(env: Env): Promise<ProbeOutcome> {
 }
 
 /** GEMINI_API_KEY — optional by design; absent means degraded summaries, not breakage. */
+function probeGemini(env: Env): ProbeOutcome {
+  if (present(env.GEMINI_API_KEY)) {
+    return { status: "pass", verified: false, note: "set (not exercised)", reason: "present" };
+  }
+  return {
+    status: "degraded",
+    verified: false,
+    note: "not set — PR/issue summaries fall back to the excerpt path; PR cards show no summary",
+    reason: "optional_absent",
+  };
+}
+
+/**
+ * GITHUB_WEBHOOK_SECRET — presence ONLY. GitHub never exposes its copy, so the Worker
+ * has nothing to compare against; a matching-or-not verdict is impossible here. Real
+ * coverage is the webhook's own alerting: a mismatch emits
+ * {"event":"webhook","outcome":"unauthorized"} at error level on EVERY delivery.
+ * Reporting this as verified would recreate exactly the false confidence that
+ * `wrangler secret list` gave us during bug #5.
+ */
+function probeWebhookSecret(env: Env): ProbeOutcome {
+  if (!present(env.GITHUB_WEBHOOK_SECRET)) return absent();
+  return {
+    status: "pass",
+    verified: false,
+    note: "set, but NOT verified against GitHub — a mismatch surfaces as webhook unauthorized lines",
+    reason: "present_unverified",
+  };
+}
+
