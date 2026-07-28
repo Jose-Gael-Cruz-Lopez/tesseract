@@ -24,8 +24,10 @@ const PERSONAL_NAV = [
 const WORKSPACE_NAV = [
   { id: 'settings', label: 'Settings', icon: '⚙' },
   { id: 'members', label: 'Members', icon: '👥' },
-  { id: 'upgrade', label: 'Upgrade', icon: '↗' },
-  { id: 'billing', label: 'Billing', icon: '💳' },
+  // No 'Upgrade' / 'Billing' rows: canopy is a personal project and will never
+  // charge, so a payment affordance here would promise a feature that is not
+  // coming. Decided 2026-07-28 (issue #13) — billing is out of the roadmap, not
+  // deferred. The remaining stubs below describe things that plausibly still land.
   { id: 'security', label: 'Security', icon: '🛡' },
   { id: 'identity', label: 'Identity & provisioning', icon: '🪪' },
   { id: 'connections', label: 'Connections', icon: '⤵' },
