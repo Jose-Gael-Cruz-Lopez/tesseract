@@ -4,6 +4,7 @@ import { handleGithubWebhook } from "./webhook";
 import { logEvent } from "./log";
 import { resolveBearerPrincipal } from "./auth/principal";
 import { loginAllowed, evictStaleAbuseState } from "./auth/rate-limit";
+import { runSelfCheck } from "./auth/selfcheck";
 import { authorizeRepoAccess } from "./auth/repo-gate";
 import { getUserToken } from "./auth/user-token";
 import type { AccessibleRepo } from "./auth/app";
@@ -106,6 +107,16 @@ export default {
     // writes a row, so without eviction the tables grow without bound. Runs BEFORE
     // the App guard below — eviction must not depend on the GitHub App being set up.
     await evictStaleAbuseState(env.DB);
+    // Secret self-check (specs/secret-selfcheck.md). Runs BEFORE the App guard below,
+    // because an unset/broken App credential is precisely what it exists to report.
+    // Fully contained: runSelfCheck never throws by design, and this catch is the
+    // second belt — a diagnostic must never be able to take down the progress
+    // recompute it rides alongside (the lesson of PR #29's failOpen).
+    try {
+      await runSelfCheck(env);
+    } catch {
+      /* contained: the recompute below runs regardless */
+    }
     // Per-installation tokens now (GITHUB_SERVICE_TOKEN retired). No App configured → no-op.
     if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return;
     const { recomputeConnectedRepos } = await import("./tools/progress");

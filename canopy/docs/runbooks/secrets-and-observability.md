@@ -83,6 +83,7 @@ secret, and payload *values* are never logged; identifiers only.
 | `mcp_auth`           | Bearer 401 at `/mcp` + `/mcp/:owner/:repo` (`src/index.ts`) | `unauthorized`                        | none — the request is unverified, so the line is deliberately detail-free |
 | `mcp_tool`           | Every MCP tool call (`src/mcp.ts`)                         | `success`, `error`                     | `tool`, `message` (on error)                    |
 | `rate_limit`         | An abuse control degrading OPEN because its D1 tables are unreachable (`failOpen` in `src/auth/rate-limit.ts`) | `error` | `reason` (`backend_error`), `policy`, `op`, `error` |
+| `selfcheck`          | Per-secret functional check, on the 6-hour cron and `GET /admin/selfcheck` (`src/auth/selfcheck.ts`) | `failure` (alertable), `indeterminate`, `degraded` | `secret`, `reason` |
 
 **Reading a `signin` / `exchange_failed` line.** `reason` is the failure *class*; the
 `detail` field carries the underlying cause, which is the field that actually tells
@@ -100,6 +101,18 @@ Before this field existed, all four were one indistinguishable log line — whic
 how a wrong client secret went undiagnosed. `detail` is safe to log because
 `oauthToken` composes those messages from the HTTP status and GitHub's `error` field
 only, never from the code, token, or secret.
+
+**Reading a `selfcheck` line.** Only `outcome: "failure"` is alertable — that means a
+probe definitively proved a required secret wrong (or absent/empty). `indeterminate`
+means the probe could not reach GitHub, so it proved nothing; `degraded` means an
+*optional* secret is unset by design. Both of those sit at info level on purpose: an
+alert that fires during every GitHub blip, or stays permanently red because
+`GEMINI_API_KEY` is intentionally unset, gets muted — and a muted alert is worth nothing.
+
+`GITHUB_WEBHOOK_SECRET` is reported `verified: false`. It is checked for presence only,
+because GitHub never exposes its copy and the Worker has nothing to compare against.
+Its real coverage is the `webhook` / `unauthorized` line above, which fires on every
+delivery when the secret is wrong. Never read its `pass` as "correct".
 
 One deliberate exclusion: the **session-cookie 401** (`sessionGate` — an anonymous
 or expired browser hitting a gated HTTP route) is NOT logged at error level. Fresh

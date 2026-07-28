@@ -1,7 +1,8 @@
 import { Hono, type Context } from "hono";
 import { IngestPayload } from "@shared/contract";
 import type { AppEnv } from "./auth/principal";
-import { sessionGate, isAdmin } from "./auth/principal";
+import { sessionGate, isAdmin, resolveBearerPrincipal } from "./auth/principal";
+import { runSelfCheck } from "./auth/selfcheck";
 import { authApp } from "./auth/routes";
 import { syncInstallationFromApp } from "./auth/connect";
 import { consume } from "./consumer";
@@ -230,6 +231,23 @@ app.get("/me/repos", async (c) => {
 // still funnels through the ingestEvent gate fn. Non-admins get 403; an unconnected
 // repo / one with no installation → 503 with the error. (The hub equivalent —
 // POST /r/:owner/:repo/admin/backfill, push-gated — lives in src/hub.ts.)
+// ADMIN diagnostic (specs/secret-selfcheck.md): functionally exercise each configured
+// secret and report per-secret status. Flat by design — origin-level control state, not
+// tenant data, the same class as /admin/backfill; it is deliberately NOT mounted under
+// /r/:owner/:repo.
+//
+// Authorized by an isAdmin session OR any valid bearer. The bearer arm is load-bearing,
+// not convenience: bearer tokens are hashed in D1 and resolve with no dependence on the
+// GitHub App, so they still work during exactly the auth outage this route exists to
+// diagnose. A session-only gate would be unavailable in its primary scenario — which is
+// literally what happened for 10 days in July 2026. No new auth flow: sessionGate
+// already resolves either class.
+app.get("/admin/selfcheck", async (c) => {
+  const bearer = await resolveBearerPrincipal(c.req.raw, c.env);
+  if (!bearer && !isAdmin(c.env, c.get("principal").login)) return c.json({ error: "admin only" }, 403);
+  return c.json(await runSelfCheck(c.env));
+});
+
 app.post("/admin/backfill", async (c) => {
   const login = c.get("principal").login;
   if (!isAdmin(c.env, login)) return c.json({ error: "admin only" }, 403);
