@@ -102,6 +102,18 @@ how a wrong client secret went undiagnosed. `detail` is safe to log because
 `oauthToken` composes those messages from the HTTP status and GitHub's `error` field
 only, never from the code, token, or secret.
 
+**Reading a `selfcheck` line.** Only `outcome: "failure"` is alertable — that means a
+probe definitively proved a required secret wrong (or absent/empty). `indeterminate`
+means the probe could not reach GitHub, so it proved nothing; `degraded` means an
+*optional* secret is unset by design. Both of those sit at info level on purpose: an
+alert that fires during every GitHub blip, or stays permanently red because
+`GEMINI_API_KEY` is intentionally unset, gets muted — and a muted alert is worth nothing.
+
+`GITHUB_WEBHOOK_SECRET` is reported `verified: false`. It is checked for presence only,
+because GitHub never exposes its copy and the Worker has nothing to compare against.
+Its real coverage is the `webhook` / `unauthorized` line above, which fires on every
+delivery when the secret is wrong. Never read its `pass` as "correct".
+
 One deliberate exclusion: the **session-cookie 401** (`sessionGate` — an anonymous
 or expired browser hitting a gated HTTP route) is NOT logged at error level. Fresh
 visitors 401 routinely before sign-in (the SPA probes gated routes on load), so
