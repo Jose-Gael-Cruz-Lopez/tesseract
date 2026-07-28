@@ -322,7 +322,11 @@ export async function handleGithubWebhook(
   const eventName = request.headers.get("x-github-event") ?? "";
 
   // Installation lifecycle (connect-your-repos): sync the connection tables from the
-  // payload (which carries the account + repo list) — no capture, no gate.
+  // payload (which carries the account + repo list) — no capture, no gate. `env` goes in
+  // for the one branch that can't trust the payload: a repo-selection change reconciles
+  // against GitHub's authoritative list (issue #33). `reconciled`/`disconnected` ride the
+  // same single line, so a reconcile that keeps refusing is visible in Workers Logs
+  // without a second log surface (they're absent on the `installation` branch).
   if (eventName === "installation" || eventName === "installation_repositories") {
     let payload: unknown = null;
     try {
@@ -330,8 +334,15 @@ export async function handleGithubWebhook(
     } catch {
       payload = null;
     }
-    const res = await handleInstallationEvent(env.DB, eventName, payload, nowIso());
-    logEvent({ event: "webhook", outcome: "processed", github_event: eventName, handled: res.handled });
+    const res = await handleInstallationEvent(env, env.DB, eventName, payload, nowIso());
+    logEvent({
+      event: "webhook",
+      outcome: "processed",
+      github_event: eventName,
+      handled: res.handled,
+      reconciled: res.reconciled,
+      disconnected: res.disconnected,
+    });
     return json({ ok: true, ...res });
   }
 
