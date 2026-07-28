@@ -119,3 +119,15 @@ describe("runSelfCheck — App JWT probe (R2)", () => {
   });
 });
 
+describe("runSelfCheck — COOKIE_SECRET (DoD 8)", () => {
+  it("a working value round-trips → pass", async () => {
+    const r = await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({}) });
+    expect(find(r, "COOKIE_SECRET").status).toBe("pass");
+  });
+
+  it("an empty COOKIE_SECRET → fail", async () => {
+    const r = await runSelfCheck(APP_ENV({ COOKIE_SECRET: "" }), { fetchImpl: stubFetch({}) });
+    expect(find(r, "COOKIE_SECRET").status).toBe("fail");
+  });
+});
+
