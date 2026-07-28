@@ -194,3 +194,52 @@ function probeWebhookSecret(env: Env): ProbeOutcome {
   };
 }
 
+const OUTCOME: Record<SecretStatus, "success" | "failure" | "indeterminate" | "degraded"> = {
+  pass: "success",
+  fail: "failure", // the only failure-class outcome → console.error → alertable
+  indeterminate: "indeterminate",
+  degraded: "degraded",
+};
+
+/**
+ * Run every probe and report. Never throws: a probe that fails to answer degrades to
+ * `indeterminate` rather than propagating, because this runs on the same cron as the
+ * progress recompute and must not be able to take it down.
+ */
+export async function runSelfCheck(env: Env, opts?: { fetchImpl?: typeof fetch }): Promise<SelfCheckReport> {
+  const doFetch = opts?.fetchImpl ?? _selfCheckTestHooks.fetchImpl ?? fetch;
+
+  const [appOutcome, clientOutcome, cookieOutcome] = await Promise.all([
+    probeAppJwt(env, doFetch),
+    probeClientCredentials(env, doFetch),
+    probeCookieSecret(env),
+  ]);
+
+  // One probe can cover a pair of secrets: a rejected client credential could be either
+  // half, so both are reported with the same verdict rather than guessing which is wrong.
+  const groups: Array<{ secrets: string[]; outcome: ProbeOutcome }> = [
+    { secrets: ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"], outcome: appOutcome },
+    { secrets: ["GITHUB_APP_CLIENT_ID", "GITHUB_APP_CLIENT_SECRET"], outcome: clientOutcome },
+    { secrets: ["COOKIE_SECRET"], outcome: cookieOutcome },
+    { secrets: ["GEMINI_API_KEY"], outcome: probeGemini(env) },
+    { secrets: ["GITHUB_WEBHOOK_SECRET"], outcome: probeWebhookSecret(env) },
+  ];
+
+  const secrets: SecretReport[] = [];
+  const summary: Record<SecretStatus, number> = { pass: 0, fail: 0, indeterminate: 0, degraded: 0 };
+
+  for (const { secrets: names, outcome } of groups) {
+    for (const secret of names) {
+      secrets.push({ secret, status: outcome.status, verified: outcome.verified, note: outcome.note });
+      summary[outcome.status] += 1;
+      // One line per non-passing secret, so a spike of one shape is attributable to one
+      // credential. `fail` lands at error level (alertable); the rest at info, so a
+      // GitHub outage or an intentionally-unset optional key can never page anyone.
+      if (outcome.status !== "pass") {
+        logEvent({ event: "selfcheck", outcome: OUTCOME[outcome.status], secret, reason: outcome.reason });
+      }
+    }
+  }
+
+  return { ok: summary.fail === 0, summary, secrets };
+}
