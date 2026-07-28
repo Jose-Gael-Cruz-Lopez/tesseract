@@ -115,3 +115,39 @@ async function probeAppJwt(env: Env, doFetch: typeof fetch): Promise<ProbeOutcom
 }
 
 /** GITHUB_APP_CLIENT_ID + GITHUB_APP_CLIENT_SECRET — the bug #3 probe. */
+async function probeClientCredentials(env: Env, doFetch: typeof fetch): Promise<ProbeOutcome> {
+  if (!present(env.GITHUB_APP_CLIENT_ID) || !present(env.GITHUB_APP_CLIENT_SECRET)) return absent();
+  try {
+    const res = await withTimeout((signal) =>
+      doFetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json", "user-agent": "canopy" },
+        body: JSON.stringify({
+          client_id: env.GITHUB_APP_CLIENT_ID,
+          client_secret: env.GITHUB_APP_CLIENT_SECRET,
+          code: INVALID_CODE,
+        }),
+        signal,
+      })
+    );
+    if (!res.ok) return unreachable(`http_${res.status}`, `GitHub returned ${res.status}`);
+    const body = (await res.json()) as { error?: string };
+    if (body.error === "bad_verification_code") {
+      return { status: "pass", verified: true, note: "GitHub accepted the client credentials", reason: "ok" };
+    }
+    if (body.error === "incorrect_client_credentials") {
+      return {
+        status: "fail",
+        verified: true,
+        note: "GitHub rejected the client credentials — the stored value does not match the App",
+        reason: "incorrect_client_credentials",
+      };
+    }
+    // Never assume good from a shape we don't recognise.
+    return unreachable("unexpected_response", "unrecognised response from GitHub");
+  } catch {
+    return unreachable("probe_error", "could not complete the client-credential probe");
+  }
+}
+
+/** COOKIE_SECRET — purely local: seal a sentinel and unseal it again. */
