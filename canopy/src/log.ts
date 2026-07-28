@@ -19,7 +19,8 @@ export type LogEventName =
   | "webhook"
   | "mcp_tool"
   | "mcp_auth"
-  | "rate_limit"; // abuse controls degrading open — see failOpen in auth/rate-limit.ts
+  | "rate_limit" // abuse controls degrading open — see failOpen in auth/rate-limit.ts
+  | "selfcheck"; // per-secret functional check — see auth/selfcheck.ts
 
 /**
  * Per-flow results. The failure class (`failure` / `deny` / `unauthorized` /
