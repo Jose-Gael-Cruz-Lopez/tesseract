@@ -29,6 +29,67 @@ empty `GITHUB_WEBHOOK_SECRET`-adjacent misconfiguration makes every delivery
 doubt, re-pipe the value — `secret put` overwrites idempotently. The full secret
 inventory lives in `CLAUDE.md` (Env / bindings) and `src/env.ts`.
 
+### In the dashboard, "Variable" is NOT "Secret"
+
+Workers → canopy → Settings → **Variables and Secrets** offers two types, and the
+wrong one looks like it worked. On 2026-07-28 `GITHUB_WEBHOOK_SECRET` was added as
+a plaintext **Variable**; every webhook delivery kept returning 401.
+
+Three separate problems with that:
+
+1. **It conflicts with the secret of the same name.** `wrangler secret list` already
+   showed `GITHUB_WEBHOOK_SECRET` as `secret_text`. With both defined, the Worker
+   kept reading the old secret — so the "fix" changed nothing.
+2. **A dashboard edit needs an explicit Deploy.** Saving the field alone does not
+   publish. The tell is that no new Worker version appears.
+3. **A plaintext Variable is readable in the dashboard**, and `[vars]` in
+   `wrangler.toml` can wipe dashboard-set plaintext variables on the next Workers
+   Builds deploy — so it silently vanishes later and the 401s return with no
+   apparent cause.
+
+### `pbcopy` / `pbpaste` do NOT work in an automation shell
+
+Clipboard commands run through an automation/`!` shell **silently no-op**. `pbcopy`
+writes nothing and `pbpaste` returns whatever was on the clipboard beforehand — no
+error, no warning. Combined with the empty-secret gotcha above, every failure mode
+in the chain is silent:
+
+| Step | What it looks like | What actually happened |
+| --- | --- | --- |
+| `openssl rand -hex 32 \| pbcopy` | no output — looks fine | clipboard unchanged |
+| `pbpaste \| wc -c` | a plausible number | a *stale* value from before |
+| `printf '%s' "$(pbpaste)" \| wrangler secret put X` | `✨ Success!` | stored the stale junk |
+
+On 2026-07-28 this cost several rounds: the clipboard was stuck on a 17-byte
+fragment for an entire session, so a piped `secret put` cheerfully stored 17 bytes
+of junk as the App client secret.
+
+There is also a plain trap even when the clipboard *does* work: copying the command
+out of a chat or doc **overwrites the secret you just copied**. The instruction and
+the payload compete for the same clipboard.
+
+**Do secret entry in a real terminal, never through `!`:**
+
+```
+openssl rand -hex 32                 # prints locally; never into a transcript
+npx wrangler secret put NAME         # paste at the hidden prompt, Enter
+```
+
+A hidden prompt gives no feedback either, so confirm with `wrangler versions list`
+(below) rather than trusting `Success!`. If a value must be generated and stored,
+generate it in the terminal where you will paste it — do not route it through a
+chat, a file, or a shell you do not control.
+
+**The tell that a value landed:** a secret write always mints a new Worker version.
+
+```
+npx wrangler versions list        # a new entry appears, timestamped just now
+```
+
+If there is no new version, the value was not written — regardless of what the UI
+or `secret list` says. Prefer `npx wrangler secret put NAME` from a real terminal;
+it writes an encrypted secret *and* publishes, in one step.
+
 ## Migration gotcha — merging deploys CODE, never SCHEMA
 
 **A merge to `main` triggers a Workers Builds deploy of the Worker. It does NOT
@@ -141,13 +202,57 @@ issue #28; when done, record what was configured and when here.
   an attack (including a revoked/leaked `canopy_mcp_` bearer being probed),
   a broken secret (see the gotcha above — `app_not_configured` is the empty
   `GITHUB_APP_CLIENT_ID` signature), or a webhook secret mismatch.
-- **5xx responses** — create a *Workers Alert* notification (available for
-  Workers on the account) on failing/erroring requests for the `canopy` Worker,
-  and/or watch the error-rate panel under **Workers & Pages → canopy →
-  Metrics**. A 5xx burst on `/auth/*` is the login path; check the `signin`
-  lines first.
+- **5xx responses** — a 5xx burst on `/auth/*` is the login path; check the
+  `signin` lines first. See the plan caveat immediately below.
 
 Both alerts are deliberately threshold-based notifications on data the Worker
 already emits — no extra instrumentation, dashboards, or API configuration is
 required (or should be attempted) from this repo. Issue #28 tracks turning this
 section from "recommended" into "configured".
+
+### ⚠️ Plan caveat — there is no Workers notification on the free plan
+
+Verified 2026-07-28 by paging the entire **Notifications → Add** catalogue: all
+**53** alert types, and **none of them is for Workers**. Products offered are
+Abuse, Access, Billing, Brand Protection, CASB, Cloudflare Status, Cloudforce
+One, DDoS Protection, Health Checks, Images, Load Balancing, Log Explorer,
+Logpush, Magic Transit, CNI, Pages, Radar, Route Leak Detection, SSL/TLS,
+Client-side security, Security insights, Stream, Traffic Monitoring, Trust &
+Safety, Tunnel, Web Analytics. Pages has "Project updates"; Workers has nothing.
+
+Workers alerting and Log Explorer are **Workers Paid** features, and this account
+is on the free plan ("You're on the free plan with 200K events per day" on the
+Observability tab). So the *Workers Alert* recommended above **cannot be created
+here**. Do not substitute an unrelated notification type to fill the checkbox —
+that yields a green tick and zero coverage, which is the exact failure shape of
+the 2026-07-28 incidents.
+
+### External uptime monitoring (the free-plan substitute)
+
+Poll the login path from outside Cloudflare and alert on anything that is not a
+redirect. This is what actually covers the outage class on the free plan, and it
+has one advantage the native alert structurally lacks: being *outside*
+Cloudflare, it also catches a Cloudflare-side outage.
+
+```
+URL:       https://memo-sphere.com/auth/login
+Interval:  5 minutes
+Expect:    HTTP 302, Location → github.com/login/oauth/authorize
+Alert on:  any 5xx, any timeout, or any non-302
+```
+
+Why this endpoint: it is the exact surface that broke. On 2026-07-17 it returned
+a bare 500 for **~10 days** and nothing noticed; this check would have fired
+within ~5 minutes. It is also cheap and side-effect-light — a poll sets two
+short-lived cookies and redirects, writing at most one reusable `rate_limits`
+row, and at one request per 5 minutes it is nowhere near `LOGIN_RATE`
+(10/min per IP), so the monitor can never rate-limit itself into a false alarm.
+
+Do **not** point the monitor at `/` (static assets — it stayed 200 throughout the
+outage) or at `/auth/callback` (every hit records an auth failure toward the
+lockout tracker).
+
+Complementary, not redundant: `GET /admin/selfcheck` and its 6-hour cron
+(`specs/secret-selfcheck.md`) cover *credential drift*, which an uptime check
+cannot see; the uptime check covers *total surface failure*, which the
+self-check cannot see.
