@@ -358,3 +358,23 @@ test('item nodes carry devKind + devRef for the viewer', () => {
 test('deterministic: same input yields the same positions', () => {
   const input = { docs: { docs: [{ slug: 'a', title: 'A' }] } };
   expect(buildDevGraph(input)).toEqual(buildDevGraph(input));
+});
+
+test('empty / missing sections yield hubs with zero items (no crash)', () => {
+  const g = buildDevGraph({});
+  expect(hubs(g)).toHaveLength(5);
+  expect(g.links).toEqual([]);
+});
+
+test('every link resolves to a real node', () => {
+  const g = buildDevGraph({ docs: { docs: [{ slug: 'a', title: 'A' }] } });
+  const ids = new Set(g.nodes.map((n) => n.id));
+  for (const l of g.links) {
+    expect(ids.has(l.source)).toBe(true);
+    expect(ids.has(l.target)).toBe(true);
+  }
+});
+```
+
+- [ ] **Step 2: Run the tests and watch them fail**
+
