@@ -542,23 +542,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   const NODE_START = 4.0, NODE_STAGGER = 0.16, NODE_DUR = 1.0;
   const INTRO_END = 7.3;
   const clamp01 = (x) => Math.min(1, Math.max(0, x));
-  const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
-  const easeOutBack = (x) => {
-    const c1 = 1.70158, c3 = c1 + 1;
-    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-  };
-
-  let introElapsed = 0;
-  let introDone = prefersReduced;
-
-  // Build the initial graph from the provider (after introDone exists — cluster
-  // reveal state depends on it). Synchronous for the store; deferred for canopy.
-  withGraph((graph) => { for (const spec of graph.hubs) makeCluster(spec); });
-
-  if (!introDone) {
-    revealStatics.forEach((s) => { s.mat.opacity = 0; });
-    cubeParts.forEach((p) => { p.mat.opacity = 0; p.obj.scale.setScalar(0.0001); });
-    clusters.forEach((c) => { c.revealFactor = 0; c.hub.scale.set(0.0001, 0.0001, 1); });
-    threads.forEach((th) => { th.mat.opacity = 0; th.pulseMat.opacity = 0; });
-  }
-
