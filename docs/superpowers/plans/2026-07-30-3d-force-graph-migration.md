@@ -438,3 +438,23 @@ new ForceGraph3D(element)        // CONSTRUCTOR. ForceGraph3D()(el) is the OLD a
   .pauseAnimation() .resumeAnimation() .zoomToFit(ms, padding)
   ._destructor()
 ```
+
+The renderer itself is **not** unit-testable here — it needs WebGL and this repo has no renderer harness (`globe.js` was untested for the same reason). Task 4's test therefore covers only what can be checked without a GPU: that the module's contract is intact. Real verification is Task 6.
+
+- [ ] **Step 1: Write the failing contract test**
+
+Create `tests/graph-module.test.js`:
+
+```js
+// @vitest-environment happy-dom
+import { test, expect } from 'vitest';
+import * as graph from '../src/graph/graph.js';
+
+// initGraph itself needs WebGL, so this pins the module's shape only — the
+// behaviour is verified in a real browser (see the plan's Task 6).
+test('exposes initGraph and re-exports the builder', () => {
+  expect(typeof graph.initGraph).toBe('function');
+  expect(typeof graph.buildGraphFromPages).toBe('function');
+});
+
+test('initGraph takes (container, hooks, provider)', () => {
