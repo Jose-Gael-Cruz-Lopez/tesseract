@@ -78,3 +78,23 @@ test('positions are keyed by page id hash, not call order', () => {
   for (const id of ['one', 'two', 'three']) {
     expect(pos(a, id)).toEqual(pos(b, id));
   }
+});
+
+test('every node gets finite seeded coordinates', () => {
+  const { nodes } = buildGraphFromPages([P('a'), P('b', 'a')]);
+  for (const n of nodes) {
+    for (const c of [n.x, n.y, n.z]) expect(Number.isFinite(c)).toBe(true);
+  }
+});
+
+test('empty / missing input does not throw', () => {
+  expect(buildGraphFromPages([])).toEqual({ nodes: [], links: [] });
+  expect(buildGraphFromPages(undefined)).toEqual({ nodes: [], links: [] });
+});
+
+test('hashId and mulberry32 are stable helpers', () => {
+  expect(hashId('a')).toBe(hashId('a'));
+  expect(hashId('a')).not.toBe(hashId('b'));
+  const r = mulberry32(42);
+  const first = [r(), r(), r()];
+  const r2 = mulberry32(42);
