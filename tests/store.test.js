@@ -236,7 +236,7 @@ test('stays functional in memory when localStorage throws', () => {
   };
   withLocalStorage(throwing, () => {
     store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
-    expect(store.topLevelPages().length).toBe(6);
+    expect(store.topLevelPages().length).toBe(3);
     const p = store.createPage({ title: 'Mem only' });
     expect(store.getPage(p.id).title).toBe('Mem only');
     expect(store.getPage(p.id).parentId).toBe(null);

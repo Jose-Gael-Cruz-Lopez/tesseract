@@ -71,16 +71,16 @@ test('empty query shows up to 8 seeded pages grouped under "Today"', () => {
   expect(groupLabels).toEqual(['Today']);
 });
 
-test('typing "Reading" filters the results to Reading List', () => {
+test('typing "Errands" filters the results to that page', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
   openSearch(makeCtx());
 
   const input = document.querySelector('.srch-input');
-  input.value = 'Reading';
+  input.value = 'Errands';
   input.dispatchEvent(new Event('input', { bubbles: true }));
 
   const titles = [...document.querySelectorAll('.srch-row-title')].map((n) => n.textContent);
-  expect(titles).toEqual(['Reading List']);
+  expect(titles).toEqual(['Errands']);
 });
 
 test('an empty search shows an empty state instead of stale rows', () => {

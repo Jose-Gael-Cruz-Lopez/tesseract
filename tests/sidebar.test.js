@@ -7,10 +7,7 @@ import { openTrash } from '../src/ui/trash.js';
 const TOP_LEVEL = [
   'Getting Started',
   'Quick Note',
-  'Personal Home',
   'Task List',
-  'Journal',
-  'Reading List',
 ];
 
 // Node v25 ships a native experimental `localStorage` global that throws on
@@ -83,7 +80,7 @@ test('imports trash', async () => {
 });
 
 describe('sidebar tree', () => {
-  test('renders the six seed page titles in sidebar order', () => {
+  test('renders the seed page titles in sidebar order', () => {
     const { container } = mount();
     expect(topRows(container).map((r) => r.querySelector('.sb-page-title').textContent)).toEqual(TOP_LEVEL);
   });

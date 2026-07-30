@@ -276,7 +276,7 @@ test('Start writing with AI mounts the AI bar (ai.js integrated)', async () => {
 // ---------- database delegation ----------
 
 test('a database page renders through database.js (database.js integrated)', async () => {
-  openTitled('Reading List');
+  openTitled('Task List');
   // database.js is present post-integration, so the dynamic import resolves
   // and renderDatabase fills the .ed-db host (the "Database view" fallback is
   // now dead code, exercised only if database.js ever fails to load). The
@@ -285,7 +285,7 @@ test('a database page renders through database.js (database.js integrated)', asy
     expect(container.querySelector('.ed-db .db-table')).not.toBeNull();
   });
   expect(container.querySelector('.ed-db-fallback')).toBeNull();
-  expect(container.textContent).toContain('Brave New World');
+  expect(container.textContent).toContain('Write project brief');
   // no contenteditable doc body for database pages
   expect(container.querySelector('.ed-body')).toBeNull();
 });
@@ -370,7 +370,14 @@ test('ghost row shows Add icon/Add cover/Add comment as applicable and routes co
 // ---------- cover + cover picker ----------
 
 test('a page with a cover renders it with the three hover buttons; Remove clears it', () => {
-  const page = openTitled('Personal Home');
+  // No seeded page ships a cover any more (Personal Home and Reading List were
+  // both removed from the seed), so this builds its own page with one rather
+  // than depending on the seed's contents.
+  const page = store.createPage({
+    title: 'Covered page',
+    cover: { type: 'preset', value: 'photo-books' },
+  });
+  editor.open(page.id);
   const cover = container.querySelector('.ed-cover');
   expect(cover).not.toBeNull();
   const buttons = [...cover.querySelectorAll('.ed-cover-btn')].map((b) => b.textContent);
