@@ -18,3 +18,23 @@ vi.mock('dompurify', () => ({
 }));
 
 // A fake canopy-api: each getter resolves to { ok, data }.
+function fakeApi(over = {}) {
+  const ok = (data) => async () => ({ ok: true, status: 200, data });
+  return {
+    getDocs: ok({ docs: [{ slug: 'arch', title: 'Architecture' }] }),
+    getRoadmap: ok({ narrative: 'x', milestones: [{ id: 1, title: 'v1' }] }),
+    getFeed: ok({ feed: [{ summary: 'merged' }] }),
+    getTriage: ok({ items: [{ raw: 'oov tag' }] }),
+    getDashboard: ok({ previousActivity: [], todo: [] }),
+    getDoc: ok({ body: '# Hello\n\nSome text.\n\n<script>alert(1)</script>' }),
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {}, key: () => null, length: 0 },
+    configurable: true, writable: true,
+  });
+});
+
