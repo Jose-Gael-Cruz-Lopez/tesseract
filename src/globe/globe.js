@@ -802,23 +802,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     });
   }
 
-  const clock = new THREE.Clock();
-  let t = 0;
-  let rafId = 0;
-  let visible = true;
-  let disposed = false;
-
-  function animate() {
-    rafId = requestAnimationFrame(animate);
-    const dt = Math.min(clock.getDelta(), 0.05);
-    t += dt;
-
-    updateReveal(dt);
-
-    if (!dragging) {
-      // Auto-rotate only when nothing is focused, so the hub stays put in view.
-      if (!selected) {
-        universe.rotation.y += velY + 0.0009;
-        universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
-      }
-      velY *= 0.94; velX *= 0.94;
