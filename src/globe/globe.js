@@ -662,23 +662,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   const onWheel = (e) => {
     e.preventDefault();
     camDist = THREE.MathUtils.clamp(camDist * (1 + e.deltaY * 0.0012), 10, 55);
-  };
-  canvas.addEventListener('mousedown', onCanvasDown);
-  window.addEventListener('mousemove', onWinMove);
-  window.addEventListener('mouseup', onUp);
-  canvas.addEventListener('wheel', onWheel, { passive: false });
-
-  function touchDist(e) {
-    const a = e.touches[0], b = e.touches[1];
-    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  }
-  const onTouchStart = (e) => {
-    if (e.touches.length === 1) {
-      updateMouse(e.touches[0].clientX, e.touches[0].clientY);
-      maybeGrabHub();
-      onDown(e.touches[0].clientX, e.touches[0].clientY);
-    } else if (e.touches.length === 2) {
-      pinchStart = touchDist(e); pinchBaseDist = camDist; dragging = false; draggedHub = null;
-    }
-  };
-  const onTouchMove = (e) => {
