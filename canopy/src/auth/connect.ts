@@ -19,13 +19,26 @@ interface InstallationEventPayload {
   sender?: { login: string };
 }
 
-/** Upsert an installation row (account + suspension state). */
+/**
+ * Upsert an installation row (account + suspension state).
+ *
+ * `suspendedAt` is deliberately THREE-valued (issue #36): omitted means "I wasn't told"
+ * and PRESERVES whatever is stored, `null` means "explicitly not suspended" and CLEARS
+ * it, a timestamp SETS it. Only the suspend/unsuspend branch knows the suspension state;
+ * every other caller is a plain re-sync that would otherwise silently un-suspend an
+ * installation GitHub still considers suspended.
+ *
+ * Collapsing the omitted and null cases — the obvious `COALESCE(excluded.suspended_at,
+ * suspended_at)` — is wrong in the other direction: it makes unsuspend a no-op, leaving a
+ * suspension that can never be lifted.
+ */
 export async function recordInstallation(
   db: DB,
   inst: { id: number; account_login: string; account_type: string },
   now: string,
-  suspendedAt: string | null = null
+  suspendedAt?: string | null
 ): Promise<void> {
+  const stated = suspendedAt !== undefined;
   await run(
     db,
     `INSERT INTO installations (installation_id, account_login, account_type, created_at, suspended_at)
@@ -33,12 +46,13 @@ export async function recordInstallation(
      ON CONFLICT(installation_id) DO UPDATE SET
        account_login = excluded.account_login,
        account_type = excluded.account_type,
-       suspended_at = excluded.suspended_at`,
+       suspended_at = CASE WHEN ? THEN excluded.suspended_at ELSE installations.suspended_at END`,
     inst.id,
     inst.account_login,
     inst.account_type,
     now,
-    suspendedAt
+    suspendedAt ?? null,
+    stated ? 1 : 0
   );
 }
 
@@ -98,7 +112,9 @@ export async function handleInstallationEvent(
   if (eventName === "installation") {
     switch (p.action) {
       case "created":
-        if (account) await recordInstallation(db, { id: inst.id, account_login: account.login, account_type: account.type }, now);
+        // Explicitly unsuspended: GitHub reporting the install as just-created
+        // contradicts any suspension still stored against the same id.
+        if (account) await recordInstallation(db, { id: inst.id, account_login: account.login, account_type: account.type }, now, null);
         await connectRepos(db, inst.id, (p.repositories ?? []).map((r) => r.full_name), sender, now);
         // The installer is about to look at their new hubs; without this their cached
         // access set (if any) keeps them out for up to the TTL (issue #39).
@@ -171,6 +187,8 @@ export async function syncInstallationFromApp(
   });
   if (!instRes.ok) throw new Error(`installation lookup failed for ${installationId}: ${instRes.status}`);
   const { account } = (await instRes.json()) as { account: { login: string; type: string } };
+  // No `suspendedAt`: this read carries no suspension state, so it must preserve what is
+  // stored rather than assert "not suspended" (issue #36).
   await recordInstallation(db, { id: installationId, account_login: account.login, account_type: account.type }, now);
 
   // Repo list is an installation-scoped read, authed by a minted installation token.
