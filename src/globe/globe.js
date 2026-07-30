@@ -762,23 +762,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     }
   }
 
-  /* ---------- animation loop ---------- */
-  // Leaf/branch spring physics.
-  const SPRING_K = 42;      // stiffness (how hard nodes are pulled to their anchor)
-  const SPRING_DAMP = 7.5;  // velocity damping (higher = less bounce)
-  const NODE_BOUND = R * 0.985;
-  const NODE_BOUND_SQ = NODE_BOUND * NODE_BOUND;
-  const _anchor = new THREE.Vector3();
-  const _force = new THREE.Vector3();
-
-  // Integrate one physics step for every cluster and push the results into the
-  // point/line geometry buffers. Called each frame; also used to step + verify.
-  function simulateClusters(dt) {
-    clusters.forEach((c) => {
-      const hubPos = c.group.position;
-      for (const n of c.pnodes) {
-        const base = n.parent < 0 ? hubPos : c.pnodes[n.parent].pos;
-        _anchor.copy(base).add(n.rest);
-        _force.copy(_anchor).sub(n.pos).multiplyScalar(SPRING_K * dt);
-        n.vel.add(_force).multiplyScalar(Math.max(0, 1 - SPRING_DAMP * dt));
-        n.pos.addScaledVector(n.vel, dt);
