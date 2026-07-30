@@ -538,3 +538,23 @@ export function initGraph(container, hooks = {}, provider = null) {
   function focusNode(node) {
     selected = node;
     const dist = 90;
+    const len = Math.hypot(node.x || 0, node.y || 0, node.z || 0) || 1;
+    const k = 1 + dist / len;
+    graph.cameraPosition(
+      { x: (node.x || 0) * k, y: (node.y || 0) * k, z: (node.z || 0) * k },
+      { x: node.x || 0, y: node.y || 0, z: node.z || 0 },
+      600,
+    );
+  }
+
+  /* ---------- data ---------- */
+  function setData(data) {
+    graph.graphData(data && data.nodes ? data : { nodes: [], links: [] });
+  }
+
+  function rebuild() {
+    if (provider) {
+      // Developer mode: never let a failed canopy read blank the view.
+      Promise.resolve(provider.getGraph())
+        .then(setData)
+        .catch(() => setData({ nodes: [], links: [] }));
