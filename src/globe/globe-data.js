@@ -56,23 +56,3 @@ function randDir(rng) {
   return setLength(v, 1);
 }
 
-// Palette color → [r,g,b] floats (0..1) for point-cloud vertex colors.
-function paletteRGB(rng) {
-  const hex = PALETTE[Math.floor(rng() * PALETTE.length)];
-  const n = parseInt(hex.slice(1), 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
-
-const golden = Math.PI * (3 - Math.sqrt(5));
-
-/**
- * @param {Array} pages  flat page records ({id, parentId, deleted, ...})
- * @returns {{hubs: Array<{page, dir:[x,y,z], dist, scale, accent,
- *   leaves: Array<{page, parentIdx, rest:[x,y,z], col:[r,g,b], major}>}>}}
- *
- * `parentIdx` is -1 for a direct child (anchored to the hub) or the index of
- * the parent leaf within the same `leaves` array for a grandchild. `rest` is
- * the spring rest offset from that anchor, capped so every node stays inside
- * the globe shell (|hub| + |offset| <= 0.94·R).
- */
-export function buildGraphFromPages(pages) {
