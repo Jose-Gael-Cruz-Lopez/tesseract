@@ -702,23 +702,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const wasFocused = !!selected;
     selected = selected === c ? null : c;
     if (selected) {
-      if (!wasFocused) preFocusDist = camDist; // remember the free-look zoom
-      camDist = FOCUS_DIST; // fly the camera in to the hub
-    } else if (wasFocused) {
-      camDist = preFocusDist; // restore the previous zoom
-    }
-    if (fire && selected !== prev) onHubFocus(selected ? selected.page.id : null);
-  }
-
-  // Raycast helpers: hubs win over dots.
-  function pickHub() {
-    raycaster.setFromCamera(mouse, camera);
-    const hit = raycaster.intersectObjects(hubSprites)[0];
-    return hit ? hit.object.userData.cluster : null;
-  }
-  function pickDot() {
-    raycaster.setFromCamera(mouse, camera);
-    const targets = [];
-    for (const c of clusters) { targets.push(c.major, c.minor); }
-    const hit = raycaster.intersectObjects(targets)[0];
-    if (!hit) return null;
