@@ -138,3 +138,23 @@ test('link integrity: every source and target resolves to a real node', () => {
   const { nodes, links } = buildGraphFromPages(pages);
   const ids = new Set(nodes.map((n) => n.id));
   for (const l of links) {
+    expect(ids.has(l.source)).toBe(true);
+    expect(ids.has(l.target)).toBe(true);
+  }
+});
+
+test('deleted pages are excluded at every level', () => {
+  const pages = [P('a'), P('b', 'a', { deleted: true }), P('c', 'a')];
+  const { nodes } = buildGraphFromPages(pages);
+  expect(nodes.map((n) => n.id).sort()).toEqual(['a', 'c']);
+});
+
+test('same input produces identical output (deterministic rebuild)', () => {
+  const pages = [P('a'), P('b'), P('c', 'a')];
+  expect(buildGraphFromPages(pages)).toEqual(buildGraphFromPages(pages));
+});
+
+// THE LOAD-BEARING ONE. d3-force-3d seeds initial positions from ARRAY INDEX,
+// and the store's page order is not stable — so seeding must be keyed by page
+// id, not by position in the list, or the layout shuffles on reorder.
+test('positions are keyed by page id hash, not call order', () => {
