@@ -42,23 +42,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     d.className = cls;
     if (text) d.textContent = text;
     container.appendChild(d);
-    return d;
-  };
-
-  /* ---------- renderer / scene ---------- */
-  const width = () => container.clientWidth || window.innerWidth;
-  const height = () => container.clientHeight || window.innerHeight;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, width() / height(), 0.1, 400);
-  const camDir = new THREE.Vector3(0, 0.18, 1).normalize();
-  let camDist = 30, curDist = 30;
-  camera.position.copy(camDir).multiplyScalar(curDist);
-  camera.lookAt(0, 0, 0);
-
-  // Theme-aware palette. The globe isn't styled by CSS tokens, so it repaints
-  // itself in sync with the app theme: light mode gets a light background,
-  // normal-blended dots (additive glow is invisible on light) and darker
-  // structure lines; dark mode keeps the original deep-space look.
-  const GLOBE_THEMES = {
-    dark: {
