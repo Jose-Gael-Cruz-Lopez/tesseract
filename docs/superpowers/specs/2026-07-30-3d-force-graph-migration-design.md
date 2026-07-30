@@ -58,3 +58,23 @@ This shared seam is why replacing both surfaces costs barely more than replacing
 leaving them split (two 3D renderers to maintain) was rejected.
 
 ### 3. Full-depth tree
+
+`buildGraphFromPages` currently caps the hierarchy at three levels — hub, leaf, branch — with
+`// deeper descendants are intentionally ignored`. That cap exists **only** because the sphere
+layout had no way to place arbitrary depth.
+
+The new builder emits one node per non-deleted page and one link per parent→child edge, at any
+depth. This fixes a real but quiet bug: pages nested four or more levels deep are currently
+invisible in the globe entirely.
+
+### 4. Determinism is preserved by seeding, not by fixed placement
+
+This is the subtle one.
+
+`d3-force-3d` is itself deterministic, but it seeds initial positions from each node's **array
+index**. The store's page order is not stable, so index-seeding would let the layout shuffle
+whenever page order changed — precisely the failure `tests/globe-data.test.js` ("layout is keyed
+by page id hash, not call order") exists to prevent.
+
+So `graph-data.js` assigns every node an initial `x/y/z` derived from
+`mulberry32(hashId(page.id))` before handing it to the simulation. Identical page set →
