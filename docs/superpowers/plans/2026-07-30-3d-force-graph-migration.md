@@ -398,3 +398,23 @@ to:
 import { buildGraphFromPages } from '../graph/graph-data.js';
 ```
 
+Also update the module's header comment: it currently says the dev sphere "reuses the exact knowledge-globe builder" and that "the globe engine renders this graph unchanged" — replace "globe" with "graph" in both places so the comment matches reality.
+
+- [ ] **Step 4: Run the tests and watch them pass**
+
+```bash
+npx vitest run tests/dev-graph.test.js
+```
+
+Expected: PASS, 6 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/dev/dev-graph.js tests/dev-graph.test.js
+git commit -m "feat(dev): build the dev sphere from the force-graph builder"
+```
+
+---
+
+### Task 4: The renderer
