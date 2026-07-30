@@ -18,3 +18,23 @@ decides positions. This is a product decision, not an incidental side effect of 
 
 - **IN:** a new `src/graph/` module (renderer + pure data builder); both modes migrated; the full
   page tree rendered at any depth; deletion of `src/globe/`; ported and new tests.
+- **OUT:** any change to canopy (the Worker, its API, its schema). `3d-force-graph` is a
+  **client-side renderer only** — it has no server, storage, or API component, so there is no
+  "backend functionality" to adopt from it. The backend remains canopy, unchanged.
+- **OUT:** changes to the sidebar, topbar, editor, comments, hub picker or dev-sidebar. The
+  renderer contract is preserved precisely so these stay untouched.
+
+## Key decisions
+
+### 1. New module, same contract (approach B)
+
+`initGraph(container, hooks, provider)` returns the **identical** shape `initGlobe` did:
+
+```js
+{ focusPage(id), clearFocus(), setVisible(bool), dispose(), refresh() }
+```
+
+and accepts the **identical** hooks: `onOpenPage(pageId)`, `onHubFocus(pageId|null)`.
+
+Rejected alternatives:
+
