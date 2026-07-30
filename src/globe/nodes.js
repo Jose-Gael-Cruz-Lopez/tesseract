@@ -29,23 +29,3 @@ export function buildTesseract() {
 
   const solidMat = new THREE.MeshLambertMaterial({
     color: 0xff3355,
-    transparent: true,
-    opacity: 1,
-  });
-  const solid = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.95), solidMat);
-
-  const wireA = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.47, 1.47, 1.47)),
-    new THREE.LineBasicMaterial({ color: 0xffc9d4, transparent: true, opacity: 0.7 })
-  );
-  const wireB = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(2.05, 2.05, 2.05)),
-    new THREE.LineBasicMaterial({ color: 0xffdbe3, transparent: true, opacity: 0.35 })
-  );
-
-  const shellSizes = [1.76, 2.49, 3.3];
-  const shellOps = [0.1, 0.07, 0.045];
-  const shells = shellSizes.map((s, i) => {
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s, s),
-      new THREE.MeshBasicMaterial({
