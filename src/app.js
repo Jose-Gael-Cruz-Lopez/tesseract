@@ -198,3 +198,23 @@ export function mountApp(root, { onLogOut } = {}) {
     topbar.setPage(null);
     const deepId = location.hash.slice(1);
     if (deepId && store.getPage(deepId)) ctx.openPage(deepId);
+  }
+
+  // Guards the async hub-list fetch: only the newest mountDeveloper() may mount,
+  // so a stale response can't double-mount after a remount or mode switch.
+  let devMountSeq = 0;
+
+  function mountDeveloper() {
+    sidebar = null;
+    // Chrome-only sidebar first: the no-hub states (picker / connect-a-repo /
+    // hubs-unavailable) must never be a dead end — mode switch, Developer
+    // settings, and Log out stay reachable even before a graph exists. The full
+    // sidebar replaces this once the sphere mounts and its graph arrives.
+    mountDevSidebarChrome(sidebarEl, ctx);
+    if (!isConfigured()) { showConnectPrompt(); return; }
+    // Hub-first (Phase 3): every dev read is scoped to /r/:owner/:repo, so an
+    // active hub must exist before the sphere mounts. The hub list comes from
+    // /me/repos; the persisted selection is re-validated against it so a hub
+    // the user lost access to can't stick.
+    const seq = ++devMountSeq;
+    canopyApi.getMyRepos().then((res) => {
