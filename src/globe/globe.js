@@ -482,23 +482,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       pos.push(p.x, p.y, p.z);
       const c = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
       c.multiplyScalar(dim);
-      col.push(c.r, c.g, c.b);
-    }
-    return makePoints(pos, col, size, opacity);
-  }
-  const ambientParticles = scatter(420, 3, R * 0.98, 0.16, 0.75, 0.8);
-  universe.add(ambientParticles);
-  const bgStars = scatter(260, R * 1.3, R * 3.2, 0.2, 0.5, 0.55);
-  scene.add(bgStars);
-
-  /* ---------- floating year label ---------- */
-  function textSprite(text) {
-    const c = document.createElement('canvas'); c.width = 512; c.height = 128;
-    const x = c.getContext('2d');
-    x.font = '600 58px "Segoe UI", Arial, sans-serif';
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillStyle = 'rgba(232,236,255,0.92)';
-    x.fillText(text.split('').join('  '), 256, 64);
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false,
-    }));
