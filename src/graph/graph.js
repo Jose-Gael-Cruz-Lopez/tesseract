@@ -158,3 +158,20 @@ export function initGraph(container, hooks = {}, provider = null) {
     if (v === visible) return;
     visible = v;
     if (v) graph.resumeAnimation();
+    else graph.pauseAnimation();
+  }
+
+  function dispose() {
+    if (disposed) return; // idempotent — double-dispose must not throw
+    disposed = true;
+    if (!provider) offStore('pages', onPages);
+    document.removeEventListener('mnemosphere:themechange', onThemeChange);
+    window.removeEventListener('resize', resize);
+    if (ro) ro.disconnect();
+    graph._destructor();
+    container.classList.remove('graph-stage', 'graph-light');
+    container.innerHTML = '';
+  }
+
+  return { focusPage, clearFocus, setVisible, dispose, refresh: rebuild };
+}
