@@ -598,3 +598,23 @@ export function initGraph(container, hooks = {}, provider = null) {
     if (node) focusNode(node);
   }
 
+  function clearFocus() {
+    selected = null;
+    graph.zoomToFit(600, 60);
+  }
+
+  function setVisible(v) {
+    v = !!v;
+    if (v === visible) return;
+    visible = v;
+    if (v) graph.resumeAnimation();
+    else graph.pauseAnimation();
+  }
+
+  function dispose() {
+    if (!provider) offStore('pages', onPages);
+    document.removeEventListener('mnemosphere:themechange', onThemeChange);
+    window.removeEventListener('resize', resize);
+    if (ro) ro.disconnect();
+    graph._destructor();
+    container.classList.remove('graph-stage', 'graph-light');
