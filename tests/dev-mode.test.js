@@ -78,3 +78,23 @@ test('mountDevSidebar lists the five categories', () => {
   const container = document.createElement('aside');
   const graph = buildDevGraph({ docs: { docs: [{ slug: 'a', title: 'A' }] } });
   mountDevSidebar(container, { openDevItem: vi.fn() }, graph);
+  const titles = [...container.querySelectorAll('.dev-sb-group-title')].map((e) => e.textContent);
+  expect(titles).toEqual(['Docs', 'Roadmap', 'Feed', 'Triage', 'My Work']);
+});
+
+test('mountDevSidebar shows the active hub and switches hubs via the popover', () => {
+  const container = document.createElement('aside');
+  document.body.appendChild(container);
+  const setDevHub = vi.fn();
+  const hubs = [{ repo: 'acme/widgets', can_push: true }, { repo: 'acme/gadgets', can_push: false }];
+  const ctx = { openDevItem: vi.fn(), devHub: () => 'acme/widgets', devHubs: () => hubs, setDevHub };
+  mountDevSidebar(container, ctx, buildDevGraph({}));
+
+  const hubBtn = container.querySelector('.dev-sb-hub');
+  expect(hubBtn.textContent).toContain('acme/widgets');
+  hubBtn.click();
+  const items = [...document.querySelectorAll('.pop-root .sb-menu-item')];
+  expect(items.map((i) => i.textContent)).toEqual(['✓ acme/widgets', 'acme/gadgets']);
+  items[1].click();
+  expect(setDevHub).toHaveBeenCalledWith('acme/gadgets');
+  document.body.innerHTML = '';
