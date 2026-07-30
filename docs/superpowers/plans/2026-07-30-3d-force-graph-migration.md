@@ -738,3 +738,23 @@ Expected: **no output.** If anything matches, fix it before continuing. (`globeE
 - [ ] **Step 5: Run the whole suite**
 
 ```bash
+npm test
+```
+
+Expected: all files pass, at **28 files / 456 tests**. The arithmetic from the 448-test baseline: `globe-data.test.js` (−7 tests, −1 file), `graph-data.test.js` (+12 tests, +1 file), `graph-module.test.js` (+2 tests, +1 file), `dev-graph.test.js` (+1 test, same file) → 448 − 7 + 12 + 2 + 1 = 456, and 27 − 1 + 2 = 28 files. If your numbers differ, work out why before continuing — a surprise here usually means a test file was silently skipped.
+
+- [ ] **Step 6: Prove the app actually builds**
+
+```bash
+npm run build
+```
+
+Expected: exit 0. This is the step that catches an unresolved `3d-force-graph` import or a bad three.js dedupe, neither of which unit tests would surface.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "feat: render both modes with 3d-force-graph; delete the globe"
+```
+
