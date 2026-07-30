@@ -78,3 +78,23 @@ export function initGraph(container, hooks = {}, provider = null) {
 
   function setData(data) {
     // A canopy read in flight when the mode is switched must not write into a
+    // destroyed renderer.
+    if (disposed) return;
+    const next = data && data.nodes ? data : { nodes: [], links: [] };
+    // Carry settled positions across rebuilds. Knowledge mode rebuilds on every
+    // store 'pages' event — roughly one per editor autosave — and handing the
+    // engine brand-new node objects re-heats the simulation, so the whole graph
+    // visibly re-explodes while the user is typing. Reusing the previous
+    // coordinates keeps an edit local to the node that changed.
+    const prev = new Map(((graph.graphData() || {}).nodes || []).map((n) => [n.id, n]));
+    for (const n of next.nodes) {
+      const old = prev.get(n.id);
+      if (!old) continue;
+      n.x = old.x; n.y = old.y; n.z = old.z;
+      n.vx = old.vx; n.vy = old.vy; n.vz = old.vz;
+    }
+    graph.graphData(next);
+  }
+
+  function rebuild() {
+    if (provider) {
