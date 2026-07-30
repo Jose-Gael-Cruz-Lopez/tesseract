@@ -302,23 +302,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       phase: rand() * Math.PI * 2,
     };
     hub.userData.cluster = cluster;
-    // Reveal/opacity state; the intro (if still running) re-drives revealFactor.
-    cluster._lineOp = cluster.baseLineOp; cluster._majOp = cluster.baseMajOp;
-    cluster._minOp = cluster.baseMinOp; cluster._hubOp = cluster.hubBaseOp;
-    cluster.revealFactor = introDone ? 1 : 0;
-    rebuildClusterGeometry(cluster);
-    clusters.push(cluster);
-    hubSprites.push(hub);
-
-    /* tether: curved thread from the core out to this hub */
-    const jitterDir = randDir();
-    const curve = new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
-    );
-    const tMat = new THREE.LineBasicMaterial({ color: 0xff6d8a, transparent: true, opacity: 0.26 });
-    const tLine = new THREE.Line(new THREE.BufferGeometry(), tMat);
-    universe.add(tLine);
-
-    const pulseMat = new THREE.SpriteMaterial({
-      map: dotTex, color: 0xffc2cf, transparent: true, opacity: 0.9,
-      depthWrite: false, blending: palette().blending,
