@@ -378,3 +378,23 @@ test('every link resolves to a real node', () => {
 
 - [ ] **Step 2: Run the tests and watch them fail**
 
+```bash
+npx vitest run tests/dev-graph.test.js
+```
+
+Expected: FAIL — `g.nodes is undefined` (the builder still returns `{hubs}`).
+
+- [ ] **Step 3: Change the import**
+
+In `src/dev/dev-graph.js`, change line 7 from:
+
+```js
+import { buildGraphFromPages } from '../globe/globe-data.js';
+```
+
+to:
+
+```js
+import { buildGraphFromPages } from '../graph/graph-data.js';
+```
+
