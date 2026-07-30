@@ -158,3 +158,23 @@ export function mountApp(root, { onLogOut } = {}) {
     toggleComments: (pageId) => comments.toggle(pageId ?? currentId),
 
     async logOut() {
+      auth.logOut();
+      if (globe) globe.dispose();
+      // Local state alone is not the credential. The canopy session lives in an httpOnly
+      // cookie that JS cannot touch, so it must be revoked server-side — and BEFORE the
+      // hand-back, because boot() consults GET /auth/me first: a cookie that outlives the
+      // sign-out re-derives a session on the very next reload and drops the user straight
+      // back into the app they just left. Neither call throws, so awaiting both is safe.
+      await Promise.all([supabaseSignOut(), canopyLogout()]);
+      if (typeof onLogOut === 'function') onLogOut();
+      else location.reload();
+    },
+
+    toast,
+  };
+
+  // Shared chrome (both modes).
+  topbar = mountTopbar(topbarEl, ctx);
+  editor = mountEditor(pageEl, ctx);
+  comments = mountComments(commentsEl, ctx);
+  topbar.setPage(null);
