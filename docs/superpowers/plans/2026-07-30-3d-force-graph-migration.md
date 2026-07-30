@@ -158,3 +158,23 @@ test('same input produces identical output (deterministic rebuild)', () => {
 // and the store's page order is not stable — so seeding must be keyed by page
 // id, not by position in the list, or the layout shuffles on reorder.
 test('positions are keyed by page id hash, not call order', () => {
+  const a = buildGraphFromPages([P('one'), P('two'), P('three')]);
+  const b = buildGraphFromPages([P('three'), P('one'), P('two')]);
+  const pos = (g, id) => {
+    const n = g.nodes.find((x) => x.id === id);
+    return [n.x, n.y, n.z];
+  };
+  for (const id of ['one', 'two', 'three']) {
+    expect(pos(a, id)).toEqual(pos(b, id));
+  }
+});
+
+test('every node gets finite seeded coordinates', () => {
+  const { nodes } = buildGraphFromPages([P('a'), P('b', 'a')]);
+  for (const n of nodes) {
+    for (const c of [n.x, n.y, n.z]) expect(Number.isFinite(c)).toBe(true);
+  }
+});
+
+test('empty / missing input does not throw', () => {
+  expect(buildGraphFromPages([])).toEqual({ nodes: [], links: [] });
