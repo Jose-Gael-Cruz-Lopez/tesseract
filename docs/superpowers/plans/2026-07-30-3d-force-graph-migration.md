@@ -298,3 +298,23 @@ npx vitest run tests/graph-data.test.js
 ```
 
 Expected: PASS, 12 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/graph/graph-data.js tests/graph-data.test.js
+git commit -m "feat(graph): pure {nodes, links} builder with id-seeded positions"
+```
+
+---
+
+### Task 3: Repoint the Developer-mode builder
+
+**Files:**
+- Modify: `src/dev/dev-graph.js` (change the import and the return contract usage)
+- Test: `tests/dev-graph.test.js` (rewrite assertions against `{nodes, links}`)
+
+**Interfaces:**
+- Consumes: `buildGraphFromPages` from `src/graph/graph-data.js` (Task 2).
+- Produces: `buildDevGraph({docs, roadmap, feed, triage, dashboard}) → {nodes, links}`; `CATEGORIES` unchanged.
+
