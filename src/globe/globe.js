@@ -922,23 +922,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   function focusPage(id) {
     const c = findClusterForPage(id);
     if (c && c !== selected) select(c, false);
-  }
-  function clearFocus() {
-    if (selected) select(selected, false);
-  }
-  function setVisible(v) {
-    v = !!v;
-    if (v === visible) return;
-    visible = v;
-    if (v) {
-      clock.getDelta(); // swallow the paused time so physics doesn't jump
-      if (!rafId) animate();
-    } else if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-  }
-  function dispose() {
-    if (disposed) return;
-    disposed = true;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
