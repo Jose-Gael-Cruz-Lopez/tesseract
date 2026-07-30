@@ -9,23 +9,3 @@ export function makeDotTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const x = c.getContext('2d');
-  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,255,255,0.85)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g;
-  x.fillRect(0, 0, 64, 64);
-  dotTexture = new THREE.CanvasTexture(c);
-  return dotTexture;
-}
-
-// The tesseract nucleus, kept from our own build (NOT the reference's cubes):
-// a solid lit red cube inside counter-rotating wire cubes and frosted shells,
-// no glow. Our R=300 proportions scaled to the reference globe R=11 so it keeps
-// the same look relative to the sphere. Returns the group plus a tick(dt) that
-// applies the whole-group spin and each cube's own rotation.
-export function buildTesseract() {
-  const group = new THREE.Group();
-
-  const solidMat = new THREE.MeshLambertMaterial({
-    color: 0xff3355,
