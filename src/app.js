@@ -218,3 +218,23 @@ export function mountApp(root, { onLogOut } = {}) {
     // the user lost access to can't stick.
     const seq = ++devMountSeq;
     canopyApi.getMyRepos().then((res) => {
+      if (seq !== devMountSeq || mode !== 'developer') return;
+      devHubs = (res.ok && Array.isArray(res.data?.repos)) ? res.data.repos : [];
+      const appSlug = (res.ok && res.data?.appSlug) || null;
+      // Re-validate only against a SUCCESSFUL and NON-EMPTY list — canopy's
+      // /me/repos degrades to 200 { repos: [] } on server-side failure (missing
+      // user token, GitHub outage), so neither a failed fetch nor an empty list
+      // may wipe the selection (the sphere's own reads surface any 401/404).
+      if (shouldClearDevHub(res, store.getDevHub())) store.setDevHub('');
+      if (store.getDevHub()) { mountDevSphere(); return; }
+      mountDevHubPicker(globeEl, {
+        repos: devHubs,
+        appSlug,
+        error: !res.ok,
+        onPick: (repo) => ctx.setDevHub(repo),
+        onRetry: () => ctx.refreshDev(),
+      });
+    });
+    topbar.setPage(null);
+  }
+
