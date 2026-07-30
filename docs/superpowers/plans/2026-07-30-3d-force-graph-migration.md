@@ -118,3 +118,23 @@ test('top-level pages are hubs, everything else is a leaf', () => {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   expect(byId.a.kind).toBe('hub');
   expect(byId.c.kind).toBe('leaf');
+});
+
+// Orphan protection: a live child of a DELETED parent must not emit a link to a
+// node that does not exist, or the force engine will throw on an unresolvable
+// link target.
+test('a child of a deleted parent becomes a hub, with no dangling link', () => {
+  const { nodes, links } = buildGraphFromPages([
+    P('gone', null, { deleted: true }),
+    P('orphan', 'gone'),
+  ]);
+  expect(nodes.map((n) => n.id)).toEqual(['orphan']);
+  expect(nodes[0].kind).toBe('hub');
+  expect(links).toEqual([]);
+});
+
+test('link integrity: every source and target resolves to a real node', () => {
+  const pages = [P('a'), P('b', 'a'), P('c', 'b'), P('d')];
+  const { nodes, links } = buildGraphFromPages(pages);
+  const ids = new Set(nodes.map((n) => n.id));
+  for (const l of links) {
