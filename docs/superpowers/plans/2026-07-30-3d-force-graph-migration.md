@@ -638,3 +638,23 @@ Create `src/styles/graph.css`:
   inset: 0;
   overflow: hidden;
 }
+
+.graph-stage canvas {
+  display: block;
+}
+
+/* 3d-force-graph renders its node tooltip into a floating div. */
+.graph-stage .scene-tooltip {
+  font: 12px/1.4 var(--font-ui, system-ui, sans-serif);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .72);
+  color: #fff;
+  pointer-events: none;
+}
+
+.graph-stage.graph-light .scene-tooltip {
+  background: rgba(255, 255, 255, .92);
+  color: #111;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
