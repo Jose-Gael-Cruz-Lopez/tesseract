@@ -618,3 +618,23 @@ export function initGraph(container, hooks = {}, provider = null) {
     if (ro) ro.disconnect();
     graph._destructor();
     container.classList.remove('graph-stage', 'graph-light');
+    container.innerHTML = '';
+  }
+
+  return { focusPage, clearFocus, setVisible, dispose, refresh: rebuild };
+}
+```
+
+- [ ] **Step 4: Write the stylesheet**
+
+Create `src/styles/graph.css`:
+
+```css
+/* The 3D force graph fills the shell's content area. Most of the retired
+   globe.css styled decorative chrome (equator ring, star field, ambient dust,
+   tesseract core, year label) that the force layout does not have. */
+.graph-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
