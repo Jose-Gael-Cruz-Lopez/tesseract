@@ -842,23 +842,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     clusters.forEach((c) => {
       // --- opacity / reveal / hub scale ---
       const f = selected ? (c === selected ? 1 : 0.1) : 1;
-      const rv = c.revealFactor;
-      c._lineOp += (c.baseLineOp * f - c._lineOp) * 0.08;
-      c._majOp += (c.baseMajOp * f - c._majOp) * 0.08;
-      c._minOp += (c.baseMinOp * f - c._minOp) * 0.08;
-      c._hubOp += (c.hubBaseOp * Math.min(f * 1.1, 1) - c._hubOp) * 0.08;
-      c.lineMat.opacity = c._lineOp * rv;
-      c.majorMat.opacity = c._majOp * rv;
-      c.minorMat.opacity = c._minOp * rv;
-      c.hubMat.opacity = c._hubOp * rv;
-      const active = c === hoverCluster || c === selected;
-      const target = c.hubBase * (1 + 0.09 * Math.sin(t * 2 + c.phase)) * (active ? 1.5 : 1) * rv;
-      c.hub.scale.x += (target - c.hub.scale.x) * 0.15;
-      c.hub.scale.y = c.hub.scale.x;
-    });
-
-    threads.forEach((th) => {
-      const f = selected ? (th.cluster === selected ? 2.6 : 0.25) : 1;
-      const rv = th.cluster.revealFactor;
-      th._op += (Math.min(th.baseOp * f, 0.85) - th._op) * 0.08;
-      th.mat.opacity = th._op * rv;
