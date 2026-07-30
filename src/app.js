@@ -38,3 +38,23 @@ const SHELL_HTML = `
         <section class="shell-page" id="shell-page" aria-hidden="true"></section>
         <aside class="shell-comments" id="shell-comments"></aside>
       </div>
+    </main>
+  </div>`;
+
+function inEditableFocus() {
+  const a = document.activeElement;
+  if (!a) return false;
+  const tag = a.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || a.isContentEditable;
+}
+
+function overlayOpen() {
+  return !!document.querySelector('.pop-root, .mod-scrim');
+}
+
+export function mountApp(root, { onLogOut } = {}) {
+  root.innerHTML = SHELL_HTML;
+  const sidebarEl = root.querySelector('#shell-sidebar');
+  const topbarEl = root.querySelector('#shell-topbar');
+  const pageEl = root.querySelector('#shell-page');
+  const commentsEl = root.querySelector('#shell-comments');
