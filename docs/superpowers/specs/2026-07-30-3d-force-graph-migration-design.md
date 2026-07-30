@@ -158,3 +158,23 @@ already in place. **No version bump is required.**
 **Ported** — behaviour that outlives the sphere:
 
 - deterministic rebuild (same input → same output)
+- layout keyed by page-id hash, not call order (see §4 — this one is load-bearing)
+- deleted pages excluded at every level
+
+**New:**
+
+- the full tree renders at any depth (regression test for the 4+-level bug)
+- link integrity: every link's `source` and `target` resolve to real nodes; no orphans
+
+**Rewritten** — `tests/dev-graph.test.js` against `{nodes, links}` instead of `{hubs}`: five
+categories in order, item counts, `devKind`/`devRef` carried, determinism, empty/missing sections
+without crashing.
+
+**Dropped as obsolete** — four tests asserting sphere math that no longer exists: the fibonacci
+envelope, the leaf-offset containment budget, palette accent cycling by hub index, and the
+three-level cap.
+
+**Not unit-tested:** `graph.js` itself, exactly as `globe.js` is not today — it needs WebGL and
+there is no renderer harness in this repo. It will be verified against the running app in a real
+browser instead.
+
