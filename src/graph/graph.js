@@ -118,3 +118,23 @@ export function initGraph(container, hooks = {}, provider = null) {
     theme = (e && e.detail && e.detail.theme) ? e.detail.theme : readTheme();
     theme = theme === 'dark' ? 'dark' : 'light';
     container.classList.toggle('graph-light', theme === 'light');
+    graph.backgroundColor(THEMES[theme].bg);
+    graph.linkColor(() => THEMES[theme].link);
+  }
+  document.addEventListener('mnemosphere:themechange', onThemeChange);
+
+  /* ---------- sizing ---------- */
+  const resize = () => {
+    graph.width(container.clientWidth || 800).height(container.clientHeight || 600);
+  };
+  let ro = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(resize);
+    ro.observe(container);
+  }
+  window.addEventListener('resize', resize);
+
+  /* ---------- public handle ---------- */
+  let visible = true;
+
+  // Every public method no-ops after disposal. app.js disposes on mode switch
