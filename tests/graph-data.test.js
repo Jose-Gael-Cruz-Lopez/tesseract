@@ -138,3 +138,23 @@ test('nodes carry the label, color and val the renderer binds', () => {
 
 test('an untitled page still gets a label', () => {
   const { nodes } = buildGraphFromPages([{ id: 'x', parentId: null }]);
+  expect(nodes[0].label).toBe('(untitled)');
+});
+
+// ── hubGroups: what the dev sidebar renders from ───────────────────────────
+
+test('hubGroups returns each hub with its direct children', () => {
+  const g = buildGraphFromPages([P('h1'), P('h2'), P('c1', 'h1'), P('c2', 'h1')]);
+  const groups = hubGroups(g);
+  expect(groups.map((x) => x.page.id)).toEqual(['h1', 'h2']);
+  expect(groups[0].leaves.map((l) => l.page.id)).toEqual(['c1', 'c2']);
+  expect(groups[1].leaves).toEqual([]);
+});
+
+test('hubGroups exposes the original page objects, so icon/title/devKind survive', () => {
+  const g = buildGraphFromPages([
+    P('cat:docs', null, { icon: '📄', title: 'Docs' }),
+    P('doc:a', 'cat:docs', { title: 'A', devKind: 'doc', devRef: 'a' }),
+  ]);
+  const [group] = hubGroups(g);
+  expect(group.page.icon).toBe('📄');
