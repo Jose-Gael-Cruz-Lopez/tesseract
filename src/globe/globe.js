@@ -282,23 +282,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       map: dotTex, color: palette().hub, transparent: true, opacity: 0.95,
       depthWrite: false, blending: palette().blending,
     });
-    const hub = new THREE.Sprite(hubMat);
-    const hubBase = 0.85 * spec.scale;
-    hub.scale.set(hubBase, hubBase, 1);
-    g.add(hub);
-    universe.add(g);
-
-    const { pnodes, maxOff } = buildNodes(spec, g.position);
-
-    const cluster = {
-      page: spec.page, group: g, hub, hubMat, hubBase,
-      major: null, minor: null, lineSeg: null,
-      majorMat: null, minorMat: null, lineMat: null,
-      pnodes, majIdx: [], minIdx: [], majCol: [], minCol: [],
-      baseLineOp: 0.34, baseMajOp: 0.95, baseMinOp: 0.9, hubBaseOp: 0.95,
-      maxOffset: maxOff,
-      scale: spec.scale, dist: spec.dist, budget: R * 0.94 - spec.dist,
-      accent: spec.accent,
-      phase: rand() * Math.PI * 2,
-    };
-    hub.userData.cluster = cluster;
