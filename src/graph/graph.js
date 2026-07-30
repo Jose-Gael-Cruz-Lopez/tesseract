@@ -98,3 +98,23 @@ export function initGraph(container, hooks = {}, provider = null) {
 
   function rebuild() {
     if (provider) {
+      // Developer mode: never let a failed canopy read blank the view.
+      Promise.resolve(provider.getGraph())
+        .then(setData)
+        .catch(() => setData({ nodes: [], links: [] }));
+    } else {
+      setData(buildGraphFromPages(getPages()));
+    }
+  }
+
+  rebuild();
+
+  // Knowledge mode tracks the store live, exactly as the globe did.
+  const onPages = () => { if (!provider) rebuild(); };
+  if (!provider) onStore('pages', onPages);
+
+  /* ---------- theme ---------- */
+  function onThemeChange(e) {
+    theme = (e && e.detail && e.detail.theme) ? e.detail.theme : readTheme();
+    theme = theme === 'dark' ? 'dark' : 'light';
+    container.classList.toggle('graph-light', theme === 'light');
