@@ -178,3 +178,23 @@ test('every node gets finite seeded coordinates', () => {
 
 test('empty / missing input does not throw', () => {
   expect(buildGraphFromPages([])).toEqual({ nodes: [], links: [] });
+  expect(buildGraphFromPages(undefined)).toEqual({ nodes: [], links: [] });
+});
+
+test('hashId and mulberry32 are stable helpers', () => {
+  expect(hashId('a')).toBe(hashId('a'));
+  expect(hashId('a')).not.toBe(hashId('b'));
+  const r = mulberry32(42);
+  const first = [r(), r(), r()];
+  const r2 = mulberry32(42);
+  expect([r2(), r2(), r2()]).toEqual(first);
+  expect(PALETTE.length).toBeGreaterThan(0);
+});
+```
+
+- [ ] **Step 2: Run the tests and watch them fail**
+
+```bash
+npx vitest run tests/graph-data.test.js
+```
+
