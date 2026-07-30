@@ -382,23 +382,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     withGraph((graph) => {
       for (const spec of graph.hubs) makeCluster(spec);
       if (focusedId) {
-        const again = clusters.find((c) => c.page.id === focusedId);
-        if (again) selected = again;
-        else { selected = null; camDist = preFocusDist; onHubFocus(null); }
-      }
-      hoverNode = null; hoverCluster = null;
-    });
-  }
-
-  // Rebuild just one hub's nodes (children/grandchildren changed). Store-only
-  // (the developer provider never calls this — it has no per-hub events).
-  function rebuildHub(cluster) {
-    withGraph((graph) => {
-      const spec = graph.hubs.find((h) => h.page.id === cluster.page.id);
-      if (!spec) { rebuildAll(); return; }
-      cacheCluster(cluster);
-      const { pnodes, maxOff } = buildNodes(spec, cluster.group.position);
-      cluster.pnodes = pnodes;
-      cluster.maxOffset = maxOff;
-      rebuildClusterGeometry(cluster);
-      if (hoverNode && hoverNode.cluster === cluster) hoverNode = null;
