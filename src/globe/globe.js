@@ -862,23 +862,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       const rv = th.cluster.revealFactor;
       th._op += (Math.min(th.baseOp * f, 0.85) - th._op) * 0.08;
       th.mat.opacity = th._op * rv;
-      th.t = (th.t + th.speed * dt * (th.cluster === selected ? 2.2 : 1)) % 1;
-      th.pulse.position.copy(th.curve.getPoint(th.t));
-      const pulseOp = selected && th.cluster !== selected ? 0.1 : 0.55 + 0.45 * Math.sin(th.t * Math.PI);
-      th.pulseMat.opacity = pulseOp * rv;
-    });
-
-    updateHover();
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  /* ---------- sizing ---------- */
-  function resize() {
-    const w = width(), h = height();
-    if (!w || !h) return;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-  }
-  let ro = null;
