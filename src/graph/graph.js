@@ -138,3 +138,23 @@ export function initGraph(container, hooks = {}, provider = null) {
   let visible = true;
 
   // Every public method no-ops after disposal. app.js disposes on mode switch
+  // and on log-out, and a stale handle calling in would otherwise restart an
+  // animation loop on a destroyed renderer.
+  function focusPage(id) {
+    if (disposed) return;
+    const node = ((graph.graphData() || {}).nodes || []).find((n) => n.id === id);
+    if (node) focusNode(node);
+  }
+
+  function clearFocus() {
+    if (disposed) return;
+    selected = null;
+    graph.zoomToFit(600, 60);
+  }
+
+  function setVisible(v) {
+    if (disposed) return;
+    v = !!v;
+    if (v === visible) return;
+    visible = v;
+    if (v) graph.resumeAnimation();
