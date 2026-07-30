@@ -74,6 +74,13 @@ async function boot() {
     if (sbSession) {
       setSession(profileFromSession(sbSession));
       history.replaceState(null, '', location.pathname); // drop the OAuth token/code from the URL
+      // The two sessions answer DIFFERENT questions: Supabase says who owns the
+      // Knowledge side, canopy says whether Developer is unlocked. Returning here
+      // without asking canopy meant a Google-signed-in user could never unlock
+      // Developer — "Continue with GitHub" completed the OAuth round trip and
+      // minted a valid session cookie, then boot ignored it on the way back and
+      // landed on the same page, looking like the button did nothing.
+      if (await getCanopySession()) setDevAvailable(true);
       startApp(root);
       return;
     }
