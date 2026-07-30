@@ -982,23 +982,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       camera.lookAt(lookTarget); renderer.render(scene, camera);
     },
     // Dev: drive the real drag clamp toward a requested radius; returns the result.
-    dragTest: (name, reqRadius) => {
-      const c = clusters.find((x) => x.page.id === name || title(x.page) === name);
-      if (!c) return null;
-      draggedHub = c;
-      const target = c.group.position.clone().setLength(Math.max(0.01, reqRadius));
-      const rMax = Math.max(CUBE_RADIUS, GLOBE_INNER - c.maxOffset);
-      target.setLength(THREE.MathUtils.clamp(target.length(), CUBE_RADIUS, rMax));
-      c.group.position.copy(target);
-      retetherThread(c.thread);
-      draggedHub = null;
-      // farthest node from center after the move (must stay < R)
-      const worst = c.group.position.length() + c.maxOffset;
-      return { reqRadius, hubRadius: +c.group.position.length().toFixed(2), rMax: +rMax.toFixed(2),
-        cubeRadius: CUBE_RADIUS, farthestNode: +worst.toFixed(2), globeR: R };
-    },
-  };
-  window.__SBG__ = devHandle;
-
-  return { focusPage, clearFocus, setVisible, dispose, refresh: rebuildAll };
-}
