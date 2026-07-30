@@ -658,3 +658,23 @@ Create `src/styles/graph.css`:
   color: #111;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
 }
+```
+
+- [ ] **Step 5: Run the test and watch it pass**
+
+```bash
+npx vitest run tests/graph-module.test.js
+```
+
+Expected: PASS, 2 tests.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/graph/graph.js src/styles/graph.css tests/graph-module.test.js
+git commit -m "feat(graph): 3d-force-graph renderer behind the initGlobe contract"
+```
+
+---
+
+### Task 5: Wire it in and delete the globe
