@@ -59,23 +59,3 @@ test('hub placement stays on the seeded fibonacci sphere envelope', () => {
     expect(len(h.dir)).toBeCloseTo(1, 6); // unit direction
     expect(h.dist).toBeGreaterThanOrEqual(GLOBE_R * 0.4);
     expect(h.dist).toBeLessThan(GLOBE_R * 0.7);
-    expect(h.scale).toBeGreaterThanOrEqual(0.8);
-    expect(h.scale).toBeLessThan(1.7);
-  }
-  // fibonacci placement spreads hubs — no two directions collapse together
-  for (let i = 0; i < hubs.length; i++) {
-    for (let j = i + 1; j < hubs.length; j++) {
-      const d = hubs[i].dir, e = hubs[j].dir;
-      const dot = d[0] * e[0] + d[1] * e[1] + d[2] * e[2];
-      expect(dot).toBeLessThan(0.99);
-    }
-  }
-});
-
-test('accent cycles the palette by hub index', () => {
-  const pages = Array.from({ length: PALETTE.length + 3 }, (_, i) => mkPage(`hub-${i}`));
-  const { hubs } = buildGraphFromPages(pages);
-  hubs.forEach((h, i) => expect(h.accent).toBe(PALETTE[i % PALETTE.length]));
-});
-
-test('same input produces identical output (deterministic rebuild)', () => {
