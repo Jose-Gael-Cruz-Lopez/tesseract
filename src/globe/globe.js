@@ -502,23 +502,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
       map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false,
     }));
-    s.scale.set(5.2, 1.3, 1);
-    return s;
-  }
-  const yearLabel = textSprite('2026');
-  yearLabel.position.set(0, R + 1.7, 0);
-  universe.add(yearLabel);
-
-  /* ---------- intro reveal (staggered load-in) ----------
-     Groups appear one at a time: squares -> globe (+rings) -> nodes (clusters
-     pop in one by one) -> ambiance (streams, dust, stars, label). Static
-     materials fade via a per-group factor; clusters/tethers fade + pop via a
-     per-cluster reveal factor read in the animation loop. */
-  const prefersReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-
-  const revealStatics = [];
-  const reg = (mat, group) => revealStatics.push({ mat, target: mat.opacity, group });
-  reg(thinLine, 'globe');
-  reg(equatorMat, 'globe');
-  reg(fanMat, 'globe');
-  ringGroup.traverse((o) => { if (o.material) reg(o.material, 'globe'); });
