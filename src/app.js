@@ -238,3 +238,23 @@ export function mountApp(root, { onLogOut } = {}) {
     topbar.setPage(null);
   }
 
+  function mountDevSphere() {
+    const provider = devProvider();
+    globe = initGraph(globeEl, {
+      onOpenPage(id) { const node = devNodesById && devNodesById.get(id); if (node) ctx.openDevItem(node); },
+      onHubFocus() {},
+    }, provider);
+    // Build the sidebar + node lookup from the same graph the globe uses.
+    provider.getGraph().then((graph) => {
+      // Flat now: every node carries its page, so hubs and items index the same
+      // way (the old nested hubs/leaves walk is gone with the sphere builder).
+      devNodesById = new Map();
+      for (const node of graph.nodes) devNodesById.set(node.page.id, node.page);
+      mountDevSidebar(sidebarEl, ctx, graph);
+    });
+  }
+
+  function showConnectPrompt() {
+    const state = el('div', 'dev-state');
+    state.append(
+      el('h2', null, 'Connect to canopy'),
