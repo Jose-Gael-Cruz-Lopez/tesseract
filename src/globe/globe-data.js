@@ -96,23 +96,3 @@ export function buildGraphFromPages(pages) {
     const th = golden * i;
     const j = randDir(rng);
     const dir = setLength(
-      [Math.cos(th) * rr + j[0] * 0.22, yy + j[1] * 0.22, Math.sin(th) * rr + j[2] * 0.22],
-      1,
-    );
-
-    // Hubs sit inward enough that every leaf fits between hub and shell.
-    const dist = GLOBE_R * (0.4 + rng() * 0.3);
-    const scale = 0.8 + rng() * 0.9;
-    const budget = GLOBE_R * 0.94 - dist;
-
-    const leaves = [];
-    for (const child of byParent.get(page.id) || []) {
-      const lr = mulberry32(hashId(child.id));
-      let rest = setLength(randDir(lr), (0.7 + lr() * 1.8) * scale);
-      if (vlen(rest) > budget) rest = setLength(rest, budget);
-      const col = paletteRGB(lr);
-      const major = lr() < 0.3;
-      const leafIdx = leaves.length;
-      leaves.push({ page: child, parentIdx: -1, rest, col, major });
-
-      for (const grand of byParent.get(child.id) || []) {
