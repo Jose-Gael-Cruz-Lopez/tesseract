@@ -118,3 +118,23 @@ export function mountApp(root, { onLogOut } = {}) {
     },
 
     goHome() {
+      if (mode === 'developer') ctx.closeDevPage();
+      else ctx.closePage();
+    },
+
+    // ---- Mode switch ----
+    setMode(m) {
+      const next = m === 'developer' ? 'developer' : 'knowledge';
+      // Can't enter developer mode without an available canopy session — send the user
+      // through GitHub sign-in instead (returns to the app with the developer side on).
+      if (next === 'developer' && !store.isDevAvailable()) {
+        try { window.location.href = '/auth/login?return=/'; } catch { /* nav blocked */ }
+        return;
+      }
+      if (next === mode) return;
+      mode = next;
+      store.setMode(next);
+      remountMode();
+    },
+    refreshDev() { if (mode === 'developer') remountMode(); },
+
