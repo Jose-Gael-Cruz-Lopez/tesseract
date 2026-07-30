@@ -202,23 +202,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const c = thread.curve;
     c.v0.copy(end).normalize().multiplyScalar(2.1);
     c.v1.copy(end).multiplyScalar(0.5).addScaledVector(thread.jitterDir, end.length() * 0.14);
-    c.v2.copy(end).multiplyScalar(0.965);
-    thread.line.geometry.setFromPoints(c.getPoints(48));
-  }
-
-  // Spring particles from a hub spec's leaves: pos/vel integrated each frame,
-  // rest is the offset from the anchor (hub for leaves, parent leaf for
-  // branches). Cached positions win so rebuilds don't pop.
-  function buildNodes(spec, hubPos) {
-    let maxOff = 0;
-    const pnodes = spec.leaves.map((l) => {
-      const rest = new THREE.Vector3().fromArray(l.rest);
-      const abs = l.parentIdx < 0
-        ? rest.clone()
-        : new THREE.Vector3().fromArray(spec.leaves[l.parentIdx].rest).add(rest);
-      maxOff = Math.max(maxOff, abs.length());
-      const cached = nodeCache.get(l.page.id);
-      return {
-        pos: cached ? cached.pos.clone() : hubPos.clone().add(abs),
-        vel: cached ? cached.vel.clone() : new THREE.Vector3(),
-        rest, parent: l.parentIdx, col: l.col, major: l.major,
