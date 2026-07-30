@@ -18,3 +18,23 @@ const REQUIRED = ['focusPage', 'clearFocus', 'setVisible', 'dispose', 'refresh']
 function makeStub() {
   const calls = { destructor: 0, pause: 0, resume: 0 };
   const inst = new Proxy({}, {
+    get(_t, prop) {
+      if (prop === 'graphData') return () => ({ nodes: [], links: [] });
+      if (prop === '_destructor') return () => { calls.destructor++; };
+      if (prop === 'pauseAnimation') return () => { calls.pause++; return inst; };
+      if (prop === 'resumeAnimation') return () => { calls.resume++; return inst; };
+      return () => inst;
+    },
+  });
+  return { inst, calls };
+}
+
+test('exposes initGraph and re-exports the builder', async () => {
+  const graph = await import('../src/graph/graph.js');
+  expect(typeof graph.initGraph).toBe('function');
+  expect(typeof graph.buildGraphFromPages).toBe('function');
+});
+
+// `hooks` and `provider` are optional (they carry defaults, so Function.length
+// is 1 — asserting on that would test JS semantics, not our contract). What
+// matters is that a container-only call still yields a working handle, since
