@@ -38,3 +38,23 @@ npm install 3d-force-graph@^1.80.0
 ```
 
 - [ ] **Step 2: Prove there is exactly one copy of three**
+
+```bash
+npm ls three
+```
+
+Expected: `three@0.185.1` appears **once**, deduped to the root. If you see a second nested `three@…` under `3d-force-graph`, STOP and report it — do not proceed, and do not "fix" it by bumping three. `vite.config.js` already sets `resolve.dedupe: ['three']`, which covers bundling, but a nested install would still signal a version conflict worth understanding first.
+
+- [ ] **Step 3: Confirm the existing suite is still green**
+
+```bash
+npm test
+```
+
+Expected: 27 files / 448 tests passing. Adding a dependency must change nothing.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add package.json package-lock.json
+git commit -m "build: add 3d-force-graph (three stays pinned at 0.185.1)"
