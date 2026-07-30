@@ -18,3 +18,23 @@ function buildDevSbLabel(ctx) {
       build: (pop, close) => {
         pop.appendChild(el('div', 'sb-menu-label', 'Switch mode'));
         for (const [id, text] of [['knowledge', 'Knowledge'], ['developer', 'Developer']]) {
+          const active = id === 'developer';
+          const item = el('button', 'sb-menu-item' + (active ? ' is-active' : ''), (active ? '✓ ' : '') + text);
+          item.type = 'button';
+          item.addEventListener('click', () => { close(); ctx.setMode && ctx.setMode(id); });
+          pop.appendChild(item);
+        }
+        pop.appendChild(el('div', 'sb-menu-divider'));
+        const settings = el('button', 'sb-menu-item', 'Developer settings');
+        settings.type = 'button';
+        settings.addEventListener('click', () => { close(); ctx.openSettings && ctx.openSettings('developer'); });
+        pop.appendChild(settings);
+        const logout = el('button', 'sb-menu-item', 'Log out');
+        logout.type = 'button';
+        logout.addEventListener('click', () => { close(); ctx.logOut && ctx.logOut(); });
+        pop.appendChild(logout);
+      },
+    });
+  });
+  return label;
+}
