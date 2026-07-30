@@ -78,3 +78,23 @@ export function buildGraphFromPages(pages) {
   const links = [];
   for (const page of alive) {
     if (!isHub(page)) links.push({ source: page.parentId, target: page.id });
+  }
+
+  return { nodes, links };
+}
+
+/**
+ * Regroup a {nodes, links} graph into hubs with their DIRECT children.
+ *
+ * The dev sidebar renders exactly two levels — a category and its items — and
+ * previously read the builder's old nested `{hubs: [{page, leaves}]}` shape
+ * directly. That shape is gone, so this derives the same view from the flat
+ * graph rather than making every consumer re-implement the grouping.
+ *
+ * @returns {Array<{page, leaves: Array<{page}>}>} hubs in node order
+ */
+export function hubGroups(graph) {
+  const nodes = (graph && graph.nodes) || [];
+  const links = (graph && graph.links) || [];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const groups = new Map();
