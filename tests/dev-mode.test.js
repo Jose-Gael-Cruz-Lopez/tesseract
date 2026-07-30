@@ -98,3 +98,23 @@ test('mountDevSidebar shows the active hub and switches hubs via the popover', (
   items[1].click();
   expect(setDevHub).toHaveBeenCalledWith('acme/gadgets');
   document.body.innerHTML = '';
+});
+
+test('mountDevSidebar renders no hub switcher without an active hub', () => {
+  const container = document.createElement('aside');
+  mountDevSidebar(container, { openDevItem: vi.fn() }, buildDevGraph({}));
+  expect(container.querySelector('.dev-sb-hub')).toBeNull();
+});
+
+test('hub picker lists connected hubs and picks one', () => {
+  const container = document.createElement('div');
+  const onPick = vi.fn();
+  mountDevHubPicker(container, {
+    repos: [{ repo: 'acme/widgets', can_push: true }, { repo: 'acme/gadgets', can_push: false }],
+    appSlug: 'canopy-app',
+    onPick,
+  });
+  const options = [...container.querySelectorAll('.dev-hub-option')];
+  expect(options.map((o) => o.querySelector('.dev-hub-name').textContent)).toEqual(['acme/widgets', 'acme/gadgets']);
+  expect(options.map((o) => o.querySelector('.dev-hub-access').textContent)).toEqual(['Push access', 'Read-only']);
+  options[1].click();
