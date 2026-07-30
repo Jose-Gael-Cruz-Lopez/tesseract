@@ -118,3 +118,12 @@ export function hubGroups(graph) {
  * `textContent` and was safe by construction; the force graph is not, so the
  * escaping has to be explicit.
  */
+export function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
