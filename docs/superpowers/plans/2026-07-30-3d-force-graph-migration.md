@@ -678,3 +678,23 @@ git commit -m "feat(graph): 3d-force-graph renderer behind the initGlobe contrac
 ---
 
 ### Task 5: Wire it in and delete the globe
+
+**Files:**
+- Modify: `src/app.js:8` (import), `src/app.js:194`, `src/app.js:243` (call sites)
+- Modify: `src/main.js` (stylesheet import)
+- Delete: `src/globe/globe.js`, `src/globe/globe-data.js`, `src/globe/nodes.js`, `src/styles/globe.css`
+- Delete: `tests/globe-data.test.js`
+
+**Interfaces:**
+- Consumes: `initGraph` from `src/graph/graph.js` (Task 4).
+- Produces: an app with no reference to `src/globe/` anywhere.
+
+- [ ] **Step 1: Repoint `app.js`**
+
+In `src/app.js`, change line 8 from:
+
+```js
+import { initGlobe } from './globe/globe.js';
+```
+
+to:
