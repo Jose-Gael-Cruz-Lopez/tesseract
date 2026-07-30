@@ -642,23 +642,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     draggedHub.group.position.copy(dragHit);
     retetherThread(draggedHub.thread);
   }
-
-  function onDown(x, y) { dragging = true; lastX = x; lastY = y; moved = 0; canvas.style.cursor = 'grabbing'; }
-  function onMove(x, y) {
-    if (!dragging) return;
-    const dx = x - lastX, dy = y - lastY;
-    moved += Math.abs(dx) + Math.abs(dy);
-    lastX = x; lastY = y;
-    if (draggedHub) { moveHub(); return; } // sliding a hub around
-    if (selected) return; // view is locked on the focused hub; release to rotate
-    velY = dx * 0.0035; velX = dy * 0.0035;
-    universe.rotation.y += velY;
-    universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
-  }
-  function onUp() { dragging = false; draggedHub = null; canvas.style.cursor = 'grab'; }
-
-  const onCanvasDown = (e) => { updateMouse(e.clientX, e.clientY); maybeGrabHub(); onDown(e.clientX, e.clientY); };
-  const onWinMove = (e) => { updateMouse(e.clientX, e.clientY); onMove(e.clientX, e.clientY); };
-  const onWheel = (e) => {
-    e.preventDefault();
-    camDist = THREE.MathUtils.clamp(camDist * (1 + e.deltaY * 0.0012), 10, 55);
