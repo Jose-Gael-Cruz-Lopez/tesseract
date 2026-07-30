@@ -3,6 +3,7 @@
 // fetch). A row click opens the read-only dev page and focuses the globe hub.
 
 import { el, openPopover } from '../ui/popover.js';
+import { hubGroups } from '../graph/graph-data.js';
 
 const escapeText = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -90,7 +91,7 @@ export function mountDevSidebar(container, ctx, graph) {
     root.appendChild(hubBtn);
   }
 
-  for (const hub of graph.hubs) {
+  for (const hub of hubGroups(graph)) {
     const group = el('div', 'dev-sb-group');
     const header = el('div', 'dev-sb-group-head');
     header.appendChild(el('span', 'dev-sb-icon', hub.page.icon || ''));

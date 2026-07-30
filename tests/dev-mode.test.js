@@ -5,6 +5,7 @@ import { mountDevPage } from '../src/dev/dev-page.js';
 import { mountDevSidebar, mountDevSidebarChrome } from '../src/dev/dev-sidebar.js';
 import { mountDevHubPicker, hubInstallUrl, shouldClearDevHub } from '../src/dev/dev-hub.js';
 import { buildDevGraph } from '../src/dev/dev-graph.js';
+import { hubGroups } from '../src/graph/graph-data.js';
 
 // marked + dompurify are real in the browser but dompurify returns "" under
 // happy-dom (needs a fuller DOM). Mock both so the dev-page flow is testable;
@@ -38,16 +39,29 @@ beforeEach(() => {
 });
 
 test('devProvider.getGraph fetches + maps to the five hubs', async () => {
-  const { hubs } = await devProvider(fakeApi()).getGraph();
+  const graph = await devProvider(fakeApi()).getGraph();
+  const hubs = hubGroups(graph);
   expect(hubs.map((h) => h.page.title)).toEqual(['Docs', 'Roadmap', 'Feed', 'Triage', 'My Work']);
   expect(hubs[0].leaves.length).toBe(1); // one doc
 });
 
 test('a failed surface is omitted, not fatal', async () => {
   const api = fakeApi({ getFeed: async () => ({ ok: false, status: 401 }) });
-  const { hubs } = await devProvider(api).getGraph();
+  const hubs = hubGroups(await devProvider(api).getGraph());
   expect(hubs.find((h) => h.page.title === 'Feed').leaves.length).toBe(0);
   expect(hubs.find((h) => h.page.title === 'Docs').leaves.length).toBe(1);
+});
+
+// Regression: the dev node index is what turns a graph click into an open-item
+// call. It was silently empty after the {hubs} -> {nodes, links} change, so
+// every Developer-mode item click became a no-op with no test noticing.
+test('every node exposes page.id, so the dev click index can be built', async () => {
+  const graph = await devProvider(fakeApi()).getGraph();
+  const byId = new Map(graph.nodes.map((n) => [n.page.id, n.page]));
+  expect(byId.size).toBe(graph.nodes.length);
+  expect(byId.get('cat:docs').title).toBe('Docs');
+  const doc = graph.nodes.find((n) => n.page.devKind === 'doc');
+  expect(byId.get(doc.page.id).devRef).toBe(doc.page.devRef);
 });
 
 test('mountDevPage renders a doc and sanitizes the body (script stripped)', async () => {

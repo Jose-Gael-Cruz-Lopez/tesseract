@@ -5,7 +5,7 @@
 // is switched from the sidebar workspace menu; only the globe + sidebar + page
 // behavior differ, so the topbar/editor/comments chrome is mounted once.
 
-import { initGlobe } from './globe/globe.js';
+import { initGraph } from './graph/graph.js';
 import * as store from './data/store.js';
 import * as auth from './auth/auth.js';
 import { supabaseSignOut } from './data/supabase.js';
@@ -191,7 +191,7 @@ export function mountApp(root, { onLogOut } = {}) {
 
   function mountKnowledge() {
     sidebar = mountSidebar(sidebarEl, ctx);
-    globe = initGlobe(globeEl, {
+    globe = initGraph(globeEl, {
       onOpenPage(pageId) { ctx.openPage(pageId); },
       onHubFocus() {},
     });
@@ -240,17 +240,16 @@ export function mountApp(root, { onLogOut } = {}) {
 
   function mountDevSphere() {
     const provider = devProvider();
-    globe = initGlobe(globeEl, {
+    globe = initGraph(globeEl, {
       onOpenPage(id) { const node = devNodesById && devNodesById.get(id); if (node) ctx.openDevItem(node); },
       onHubFocus() {},
     }, provider);
     // Build the sidebar + node lookup from the same graph the globe uses.
     provider.getGraph().then((graph) => {
+      // Flat now: every node carries its page, so hubs and items index the same
+      // way (the old nested hubs/leaves walk is gone with the sphere builder).
       devNodesById = new Map();
-      for (const hub of graph.hubs) {
-        devNodesById.set(hub.page.id, hub.page);
-        for (const leaf of hub.leaves) devNodesById.set(leaf.page.id, leaf.page);
-      }
+      for (const node of graph.nodes) devNodesById.set(node.page.id, node.page);
       mountDevSidebar(sidebarEl, ctx, graph);
     });
   }

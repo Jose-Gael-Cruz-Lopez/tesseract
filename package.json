@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",
+    "3d-force-graph": "^1.80.0",
     "dompurify": "^3.4.11",
     "marked": "^18.0.5",
     "three": "0.185.1"

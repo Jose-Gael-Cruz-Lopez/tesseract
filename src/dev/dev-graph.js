@@ -1,10 +1,10 @@
-// Map canopy's read DTOs onto the globe graph. The developer sphere reuses the
-// exact knowledge-globe builder (buildGraphFromPages) by handing it synthetic
+// Map canopy's read DTOs onto the force graph. The developer sphere reuses the
+// exact knowledge-graph builder (buildGraphFromPages) by handing it synthetic
 // "pages": five top-level category pages (→ hubs) and one child page per canopy
 // item (→ orbiting leaves). Each item page carries { devKind, devRef } so a
-// click knows what to open. The globe engine renders this graph unchanged.
+// click knows what to open. The graph engine renders this graph unchanged.
 
-import { buildGraphFromPages } from '../globe/globe-data.js';
+import { buildGraphFromPages } from '../graph/graph-data.js';
 
 const CATEGORIES = [
   { id: 'cat:docs', title: 'Docs', icon: '📄' },

@@ -4,7 +4,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/modals.css';
 import './styles/shell.css';
-import './styles/globe.css';
+import './styles/graph.css';
 import './styles/auth.css';
 import './styles/sidebar.css';
 import './styles/topbar.css';
