@@ -1,7 +1,9 @@
 // Landing intro: a full-screen video shown to signed-out visitors. It autoplays
 // muted (so browsers don't block it), then CROSSFADES to the auth flow when it
-// finishes — or immediately when the visitor clicks Skip. A blocked autoplay or a
-// load error never strands the visitor: both fall through to `onDone`.
+// finishes. There is no Skip control, so nothing on screen can rescue a visitor
+// whose video never ends — the invariant that a blocked autoplay, a load error
+// or a stall never strands anyone is now carried entirely by the code paths
+// below, all of which fall through to `onDone`.
 //
 // The video is a fixed overlay on <body> (not `root`), so `onDone` can render the
 // sign-in screen underneath it; the overlay then fades out to reveal it — a smooth
@@ -22,9 +24,11 @@ export function mountLanding(root, { onDone }) {
   video.preload = 'auto';
 
   let done = false;
+  let watchdog = null;
   const finish = () => {
     if (done) return;
     done = true;
+    if (watchdog) clearTimeout(watchdog);
     // Render the sign-in screen underneath the overlay first, then fade the video out
     // to reveal it — a smooth crossfade. Remove the overlay once the fade completes.
     onDone();
@@ -35,31 +39,29 @@ export function mountLanding(root, { onDone }) {
   video.addEventListener('ended', finish);
   video.addEventListener('error', finish); // codec/network failure → go straight to sign-in
 
-  // Tap the video to toggle sound (the click satisfies the gesture requirement).
-  const sound = document.createElement('button');
-  sound.className = 'landing-sound';
-  sound.type = 'button';
-  sound.setAttribute('aria-label', 'Unmute');
-  sound.textContent = '🔇';
-  sound.addEventListener('click', () => {
-    video.muted = !video.muted;
-    sound.textContent = video.muted ? '🔇' : '🔊';
-    if (!video.muted) video.play().catch(() => {});
+  // Watchdog: with no Skip control, a video that stalls mid-play fires neither
+  // 'ended' nor 'error', which would leave the visitor staring at a frozen frame
+  // with no way forward. Give it its own duration plus a margin, falling back to
+  // a fixed cap while the duration is still unknown.
+  const FALLBACK_MS = 20000;
+  const arm = (ms) => {
+    if (watchdog) clearTimeout(watchdog);
+    watchdog = setTimeout(finish, ms);
+  };
+  arm(FALLBACK_MS);
+  video.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(video.duration) && video.duration > 0) arm(video.duration * 1000 + 3000);
   });
 
-  const skip = document.createElement('button');
-  skip.className = 'landing-skip';
-  skip.type = 'button';
-  skip.textContent = 'Skip';
-  skip.addEventListener('click', finish);
-
-  wrap.append(video, sound, skip);
+  wrap.append(video);
   // Overlay on <body> (not root) so onDone() can render the sign-in screen underneath;
   // the fade-out then reveals it for a crossfade.
   document.body.appendChild(wrap);
 
   // Explicit play() for Safari, which doesn't always honor the autoplay attribute.
   video.play().catch(() => {
-    // Autoplay blocked — leave the first frame up; Skip and the ended handler still work.
+    // Autoplay blocked. Skip used to be the way out of this; without it, holding
+    // the first frame would strand the visitor, so go straight to sign-in.
+    finish();
   });
 }

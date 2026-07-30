@@ -6,19 +6,16 @@ import { buildSeed, TEMPLATE_TODOS, TEMPLATE_READING } from '../src/data/seed.js
 const TOP_LEVEL = [
   'Getting Started',
   'Quick Note',
-  'Personal Home',
   'Task List',
-  'Journal',
-  'Reading List',
 ];
 
 beforeEach(() => store.resetStore());
 
-test('buildSeed returns the six top-level pages in sidebar order', () => {
+test('buildSeed returns the top-level pages in sidebar order', () => {
   expect(buildSeed().map((e) => e.title)).toEqual(TOP_LEVEL);
 });
 
-test('seedWorkspace creates exactly six top-level pages in order', () => {
+test('seedWorkspace creates exactly the top-level pages in order', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
   expect(store.topLevelPages().map((p) => p.title)).toEqual(TOP_LEVEL);
 });
@@ -26,7 +23,9 @@ test('seedWorkspace creates exactly six top-level pages in order', () => {
 test('every top-level page has exactly three sub-pages', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
   const counts = store.topLevelPages().map((p) => store.childrenOf(p.id).length);
-  expect(counts).toEqual([3, 3, 3, 3, 3, 3]);
+  // Derived from TOP_LEVEL so adding or removing a seed page doesn't need this
+  // literal edited too (it did when Personal Home was removed).
+  expect(counts).toEqual(TOP_LEVEL.map(() => 3));
 });
 
 test('sub-page titles match the brief exactly', () => {
@@ -35,17 +34,13 @@ test('sub-page titles match the brief exactly', () => {
     store.childrenOf(store.topLevelPages().find((p) => p.title === title).id).map((p) => p.title);
   expect(kids('Getting Started')).toEqual(['Basics', 'Shortcuts', 'FAQ']);
   expect(kids('Quick Note')).toEqual(['Groceries', 'Ideas', 'Scratchpad']);
-  expect(kids('Personal Home')).toEqual(['Habit tracker', 'Recipes', 'Workout plan']);
   expect(kids('Task List')).toEqual(['Work', 'Home', 'Errands']);
-  expect(kids('Journal')).toEqual(['Morning pages', 'Gratitude log', 'Dream log']);
-  expect(kids('Reading List')).toEqual(['2026 books', 'Articles', 'Podcast queue']);
 });
 
-test('Task List and Reading List blocks are databases', () => {
+test('Task List blocks are a database', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
   const byTitle = (t) => store.topLevelPages().find((p) => p.title === t);
   expect(byTitle('Task List').blocks.type).toBe('database');
-  expect(byTitle('Reading List').blocks.type).toBe('database');
 });
 
 test('doc-only top-level pages carry HTML string blocks or empty docs', () => {
@@ -54,17 +49,22 @@ test('doc-only top-level pages carry HTML string blocks or empty docs', () => {
   expect(typeof byTitle('Getting Started').blocks).toBe('string');
   expect(byTitle('Getting Started').blocks).toContain('Welcome to Mnemosphere!');
   expect(byTitle('Quick Note').blocks).toContain('Mnemosphere Tip:');
-  expect(byTitle('Personal Home').blocks).toBe('');
-  expect(byTitle('Journal').blocks).toBe('');
 });
 
-test('seeded page icons and covers match the brief', () => {
+test('seeded page icons match the brief', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
   const byTitle = (t) => store.topLevelPages().find((p) => p.title === t);
   expect(byTitle('Getting Started').icon).toEqual({ type: 'emoji', value: '👋' });
   expect(byTitle('Quick Note').icon).toEqual({ type: 'emoji', value: '📌' });
-  expect(byTitle('Personal Home').cover).toEqual({ type: 'preset', value: 'gradient-red' });
-  expect(byTitle('Reading List').cover).toEqual({ type: 'preset', value: 'photo-books' });
+  expect(byTitle('Task List').icon).toEqual({ type: 'emoji', value: '✔️' });
+});
+
+// No seeded page carries a cover any more (Personal Home and Reading List, the
+// only two that did, were removed from the seed). Covers remain a page feature —
+// see the cover tests in editor.test.js, which now build their own page.
+test('no seeded page ships with a cover', () => {
+  store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
+  expect(store.topLevelPages().every((p) => !p.cover)).toBe(true);
 });
 
 test('TEMPLATE_TODOS matches the To-dos database in the brief', () => {
@@ -100,11 +100,14 @@ test('TEMPLATE_READING matches the Reading List database in the brief', () => {
   expect(statusView.groupBy).toBe(TEMPLATE_READING.columns.find((c) => c.name === 'Status').id);
 });
 
-test('seeded Reading List keeps its own database config (not the shared template)', () => {
+// Was written against the seeded Reading List; re-expressed against Task List,
+// the remaining seeded database page. The property is the point: the seed must
+// deep-clone the shared template, or editing a page would corrupt the template
+// every later page is built from.
+test('a seeded database page keeps its own config (not the shared template)', () => {
   store.seedWorkspace({ name: 'Ada', email: 'a@b.c' });
-  const reading = store.topLevelPages().find((p) => p.title === 'Reading List');
-  reading.blocks.rows[0].cells[reading.blocks.columns[0].id] = 'mutated';
-  expect(TEMPLATE_READING.rows[0].cells.name).toBe(
-    'Who Will Teach Silicon Valley to Be Ethical?',
-  );
+  const tasks = store.topLevelPages().find((p) => p.title === 'Task List');
+  const titleCol = TEMPLATE_TODOS.columns.find((c) => c.kind === 'title').id;
+  tasks.blocks.rows[0].cells[titleCol] = 'mutated';
+  expect(TEMPLATE_TODOS.rows[0].cells[titleCol]).toBe('Write project brief');
 });

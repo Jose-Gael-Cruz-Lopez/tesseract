@@ -54,24 +54,6 @@ function quickNoteBlocks() {
   ].join('');
 }
 
-// Intro copy that sits above the Reading List database (7.png / Reading List
-// template). Stored on the database config's `intro` field because a page's
-// `blocks` is a single value — either a doc string or one database object — and
-// the seed test requires the Reading List `blocks.type` to be `'database'`.
-function readingListIntro() {
-  return [
-    p(
-      "The modern day reading list includes more than just books. We've created a dashboard to help you track books, articles, podcasts, and videos. Each media type has its own view based on the Type property.",
-    ),
-    p(
-      '✂️ One more thing… if you install the Mnemosphere Web Clipper, you can save links off the web directly to this table.',
-    ),
-    p(
-      '👆 Click through the different database tabs to see other views. Sort content by status, author, type, or publisher.',
-    ),
-  ].join('');
-}
-
 // ---------- database templates ----------
 
 // The To-dos database behind "Task List". A `checkbox` "Done" column carries the
@@ -219,30 +201,10 @@ export function buildSeed() {
       children: docs(['Groceries', 'Ideas', 'Scratchpad']),
     },
     {
-      title: 'Personal Home',
-      icon: { type: 'emoji', value: '🏠' },
-      cover: { type: 'preset', value: 'gradient-red' },
-      blocks: '',
-      children: docs(['Habit tracker', 'Recipes', 'Workout plan']),
-    },
-    {
       title: 'Task List',
       icon: { type: 'emoji', value: '✔️' },
       blocks: structuredClone(TEMPLATE_TODOS),
       children: docs(['Work', 'Home', 'Errands']),
-    },
-    {
-      title: 'Journal',
-      icon: { type: 'emoji', value: '📔' },
-      blocks: '',
-      children: docs(['Morning pages', 'Gratitude log', 'Dream log']),
-    },
-    {
-      title: 'Reading List',
-      icon: { type: 'emoji', value: '📚' },
-      cover: { type: 'preset', value: 'photo-books' },
-      blocks: { ...structuredClone(TEMPLATE_READING), intro: readingListIntro() },
-      children: docs(['2026 books', 'Articles', 'Podcast queue']),
     },
   ];
 }

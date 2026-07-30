@@ -246,7 +246,7 @@ test('Filter, Sort, search and "Calculate ⌄" toast Coming soon', () => {
   expect(ctx.toast).toHaveBeenCalledWith('Coming soon');
 });
 
-test('the seeded Reading List intro paragraphs render above the chrome', () => {
+test('database intro paragraphs render above the chrome', () => {
   const config = reading();
   config.intro = '<p>The modern day reading list includes more than just books.</p>';
   render(config);
@@ -370,7 +370,7 @@ test('Lock database / Copy link to view / Properties / Sort / Group toast Coming
 
 // ---------- seeded store integration ----------
 
-test('seeded Task List + Reading List pages render through renderDatabase and persist to the store', async () => {
+test('the seeded Task List renders through renderDatabase and persists to the store', async () => {
   const store = await import('../src/data/store.js');
   store.resetStore();
   store.seedWorkspace({ name: 'Test', email: 'test@example.com' });
@@ -381,11 +381,20 @@ test('seeded Task List + Reading List pages render through renderDatabase and pe
   expect(container.textContent).toContain('Write project brief');
   container.querySelector('.db-row .db-check').click();
   expect(store.getPage(taskList.id).blocks.rows[0].cells.done).toBe(true);
+});
 
-  const readingList = store.getPages().find((p) => p.title === 'Reading List');
-  renderDatabase(container, readingList, realCtx);
+// Reading List is no longer a seeded page, but it is still a Templates gallery
+// entry built from the same config — so the rendering path it used to cover is
+// exercised through a page created from the template instead.
+test('a Reading List page created from the template renders through renderDatabase', async () => {
+  const store = await import('../src/data/store.js');
+  store.resetStore();
+  store.seedWorkspace({ name: 'Test', email: 'test@example.com' });
+  const { TEMPLATES } = await import('../src/data/templates.js');
+
+  const built = TEMPLATES.find((t) => t.name === 'Reading List').build();
+  const page = store.createPage(built);
+  renderDatabase(container, page, { store, toast: vi.fn() });
+
   expect(container.textContent).toContain('Brave New World');
-  expect(container.querySelector('.db-intro').textContent).toContain(
-    'The modern day reading list includes more than just books.',
-  );
 });
