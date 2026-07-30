@@ -158,3 +158,23 @@ test('shouldClearDevHub clears only when a successful non-empty list excludes th
 
 test('shouldClearDevHub never wipes the hub on a degraded or failed /me/repos', () => {
   // canopy's /me/repos returns 200 { repos: [] } on EVERY server-side failure
+  // (missing/expired user token, GitHub outage) — an empty 200 is
+  // indistinguishable from degradation and must not wipe the persisted hub.
+  expect(shouldClearDevHub({ ok: true, status: 200, data: { repos: [] } }, 'acme/widgets')).toBe(false);
+  // Same for a malformed payload, an HTTP failure, and a network failure.
+  expect(shouldClearDevHub({ ok: true, status: 200, data: {} }, 'acme/widgets')).toBe(false);
+  expect(shouldClearDevHub({ ok: false, status: 401, error: 'http 401' }, 'acme/widgets')).toBe(false);
+  expect(shouldClearDevHub({ ok: false, status: 0, error: 'network' }, 'acme/widgets')).toBe(false);
+});
+
+test('mountDevSidebarChrome keeps mode switch, settings, and log out reachable without a graph', () => {
+  // The no-hub states (picker / connect-a-repo / hubs-unavailable) mount only
+  // this chrome — it must offer the way back to Knowledge mode on its own,
+  // since mode='developer' is persisted and reloads land straight in the picker.
+  const container = document.createElement('aside');
+  document.body.appendChild(container);
+  const setMode = vi.fn();
+  const openSettings = vi.fn();
+  const logOut = vi.fn();
+  mountDevSidebarChrome(container, { setMode, openSettings, logOut });
+
