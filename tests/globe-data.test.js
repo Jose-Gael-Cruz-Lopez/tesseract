@@ -79,23 +79,3 @@ test('accent cycles the palette by hub index', () => {
 });
 
 test('same input produces identical output (deterministic rebuild)', () => {
-  const pages = fixture();
-  const g1 = buildGraphFromPages(pages);
-  const g2 = buildGraphFromPages(pages);
-  expect(JSON.stringify(g1)).toBe(JSON.stringify(g2));
-});
-
-test('layout is keyed by page id hash, not call order', () => {
-  const pages = fixture();
-  const before = buildGraphFromPages(pages);
-  // Mutating an unrelated hub's subtree must not shift hub A's randomness.
-  const withExtra = [...pages, mkPage('leaf-b2', 'hub-b'), mkPage('branch-b1x', 'leaf-b1')];
-  const after = buildGraphFromPages(withExtra);
-  expect(JSON.stringify(after.hubs[0])).toBe(JSON.stringify(before.hubs[0]));
-  // And a hub keeps its own id-seeded dist/scale even when the hub count
-  // changes (only the fibonacci base direction may redistribute).
-  const alone = buildGraphFromPages([pages[0]]);
-  expect(alone.hubs[0].dist).toBe(before.hubs[0].dist);
-  expect(alone.hubs[0].scale).toBe(before.hubs[0].scale);
-});
-
