@@ -562,23 +562,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     threads.forEach((th) => { th.mat.opacity = 0; th.pulseMat.opacity = 0; });
   }
 
-  function applyReveal(tt) {
-    const gf = {
-      globe: easeOutCubic(clamp01((tt - BEATS.globe.start) / BEATS.globe.dur)),
-      ambiance: easeOutCubic(clamp01((tt - BEATS.ambiance.start) / BEATS.ambiance.dur)),
-    };
-    revealStatics.forEach((s) => { s.mat.opacity = s.target * gf[s.group]; });
-    // Squares: each cube fades + pops in on its own stagger, one by one.
-    cubeParts.forEach((p) => {
-      const raw = clamp01((tt - p.start) / SQUARES_PART_DUR);
-      p.mat.opacity = p.target * easeOutCubic(raw);
-      p.obj.scale.setScalar(easeOutBack(raw));
-    });
-    clusters.forEach((c, i) => {
-      c.revealFactor = easeOutCubic(clamp01((tt - (NODE_START + i * NODE_STAGGER)) / NODE_DUR));
-    });
-  }
-
-  function updateReveal(dt) {
-    if (introDone) return;
-    introElapsed += dt;
