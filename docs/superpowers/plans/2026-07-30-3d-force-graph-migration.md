@@ -518,3 +518,23 @@ export function initGraph(container, hooks = {}, provider = null) {
     .nodeId('id')
     .nodeLabel((n) => n.label)
     .nodeVal((n) => n.val)
+    .nodeColor((n) => n.color)
+    .linkColor(() => THEMES[theme].link)
+    .backgroundColor(THEMES[theme].bg)
+    .showNavInfo(false)
+    .width(container.clientWidth || 800)
+    .height(container.clientHeight || 600)
+    .onNodeClick((node) => {
+      if (!node) return;
+      focusNode(node);
+      // A hub is focused, not opened — matching the globe's behaviour, where a
+      // top-level page is a focus target even though a page exists behind it.
+      if (node.kind === 'hub') onHubFocus(node.id);
+      else onOpenPage(node.id);
+    });
+
+  let selected = null;
+
+  function focusNode(node) {
+    selected = node;
+    const dist = 90;
