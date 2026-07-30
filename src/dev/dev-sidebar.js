@@ -58,3 +58,23 @@ export function mountDevSidebarChrome(container, ctx) {
 // (the dev-side mirror of canopy's admin repo switcher).
 export function mountDevSidebar(container, ctx, graph) {
   container.innerHTML = '';
+  const root = el('div', 'dev-sb');
+
+  // Header doubles as the mode switch (the dev sidebar replaces the knowledge
+  // one, so the switch must live here too).
+  root.appendChild(buildDevSbLabel(ctx));
+
+  // Active-hub switcher: which /r/:owner/:repo hub the sphere reads. Only rendered
+  // when the shell provides the hub dimension (an active hub always exists then).
+  const activeHub = ctx.devHub && ctx.devHub();
+  if (activeHub) {
+    const hubBtn = el('button', 'dev-sb-hub', escapeText(activeHub) + ' ⌄');
+    hubBtn.type = 'button';
+    hubBtn.title = 'Switch hub';
+    hubBtn.addEventListener('click', () => {
+      openPopover(hubBtn, {
+        className: 'sb-ws-pop',
+        build: (pop, close) => {
+          pop.appendChild(el('div', 'sb-menu-label', 'Switch hub'));
+          // A failed /me/repos leaves the list empty — still show the active hub.
+          const hubs = (ctx.devHubs && ctx.devHubs()) || [];
