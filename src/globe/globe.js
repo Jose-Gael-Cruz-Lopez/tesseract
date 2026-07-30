@@ -242,23 +242,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const flat = (idxs) => { const a = []; idxs.forEach((ix) => { const q = c.pnodes[ix].pos; a.push(q.x, q.y, q.z); }); return a; };
     if (c.major) {
       universe.remove(c.major, c.minor, c.lineSeg);
-      c.major.geometry.dispose(); c.major.material.dispose();
-      c.minor.geometry.dispose(); c.minor.material.dispose();
-      c.lineSeg.geometry.dispose(); c.lineSeg.material.dispose();
-    }
-
-    const major = makePoints(flat(majIdx), majCol, 0.5, 0.95);
-    const minor = makePoints(flat(minIdx), minCol, 0.26, 0.9);
-    const linePts = new Float32Array(c.pnodes.length * 6);
-    c.pnodes.forEach((n, k) => {
-      const from = n.parent < 0 ? c.group.position : c.pnodes[n.parent].pos;
-      linePts.set([from.x, from.y, from.z, n.pos.x, n.pos.y, n.pos.z], k * 6);
-    });
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.BufferAttribute(linePts, 3));
-    const lineSeg = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: palette().clusterLine, transparent: true, opacity: c.baseLineOp }));
-    universe.add(major, minor, lineSeg);
-    // Back-links so a Points raycast hit can be mapped to a page.
-    major.userData = { cluster: c, kind: 'maj' };
-    minor.userData = { cluster: c, kind: 'min' };
-
