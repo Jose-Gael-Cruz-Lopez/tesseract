@@ -116,23 +116,3 @@ export function buildGraphFromPages(pages) {
       leaves.push({ page: child, parentIdx: -1, rest, col, major });
 
       for (const grand of byParent.get(child.id) || []) {
-        const gr = mulberry32(hashId(grand.id));
-        const off = setLength(randDir(gr), 0.55 * scale);
-        let abs = [rest[0] + off[0], rest[1] + off[1], rest[2] + off[2]];
-        if (vlen(abs) > budget) abs = setLength(abs, budget);
-        leaves.push({
-          page: grand,
-          parentIdx: leafIdx,
-          rest: [abs[0] - rest[0], abs[1] - rest[1], abs[2] - rest[2]],
-          col: paletteRGB(gr),
-          major: false,
-        });
-        // deeper descendants are intentionally ignored
-      }
-    }
-
-    return { page, dir, dist, scale, accent: PALETTE[i % PALETTE.length], leaves };
-  });
-
-  return { hubs };
-}
