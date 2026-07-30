@@ -418,3 +418,23 @@ git commit -m "feat(dev): build the dev sphere from the force-graph builder"
 ---
 
 ### Task 4: The renderer
+
+**Files:**
+- Create: `src/graph/graph.js`
+- Create: `src/styles/graph.css`
+- Test: `tests/graph-module.test.js`
+
+**Interfaces:**
+- Consumes: `buildGraphFromPages` (Task 2); `getPages`, `onStore`, `offStore` from `src/data/store.js`.
+- Produces: `initGraph(container, hooks, provider) → { focusPage, clearFocus, setVisible, dispose, refresh }`, and a re-export of `buildGraphFromPages`.
+
+**Library API — verified against `3d-force-graph@1.80.0` type definitions. Do not substitute from memory:**
+
+```js
+new ForceGraph3D(element)        // CONSTRUCTOR. ForceGraph3D()(el) is the OLD api and throws.
+  .graphData({nodes, links})     // .nodeId('id') .nodeVal(fn) .nodeColor(fn) .nodeLabel(fn)
+  .linkColor(fn) .backgroundColor(str) .width(n) .height(n)
+  .onNodeClick(cb) .cameraPosition(pos, lookAt, ms)
+  .pauseAnimation() .resumeAnimation() .zoomToFit(ms, padding)
+  ._destructor()
+```
