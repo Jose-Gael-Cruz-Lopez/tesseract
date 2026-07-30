@@ -222,23 +222,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
         pos: cached ? cached.pos.clone() : hubPos.clone().add(abs),
         vel: cached ? cached.vel.clone() : new THREE.Vector3(),
         rest, parent: l.parentIdx, col: l.col, major: l.major,
-        page: l.page, parentPageId: l.page.parentId,
-      };
-    });
-    return { pnodes, maxOff };
-  }
-
-  // Rebuild a cluster's point clouds + connector lines from its current pnodes.
-  // The buffers are fixed-size, so this runs after any node add/remove; the
-  // major/minor split and colors are derived from the nodes themselves.
-  function rebuildClusterGeometry(c) {
-    const majIdx = [], minIdx = [], majCol = [], minCol = [];
-    c.pnodes.forEach((n, k) => {
-      const col = n.col || [1, 1, 1];
-      if (n.major) { majIdx.push(k); majCol.push(col[0], col[1], col[2]); }
-      else { minIdx.push(k); minCol.push(col[0], col[1], col[2]); }
-    });
-    c.majIdx = majIdx; c.minIdx = minIdx; c.majCol = majCol; c.minCol = minCol;
-    const flat = (idxs) => { const a = []; idxs.forEach((ix) => { const q = c.pnodes[ix].pos; a.push(q.x, q.y, q.z); }); return a; };
-    if (c.major) {
-      universe.remove(c.major, c.minor, c.lineSeg);
