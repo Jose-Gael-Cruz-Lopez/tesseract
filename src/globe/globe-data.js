@@ -36,23 +36,3 @@ export function hashId(str) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  return h >>> 0;
-}
-
-// ---------- tiny [x,y,z] vector helpers ----------
-
-const vlen = (v) => Math.hypot(v[0], v[1], v[2]);
-
-function setLength(v, l) {
-  const cur = vlen(v) || 1;
-  return [(v[0] / cur) * l, (v[1] / cur) * l, (v[2] / cur) * l];
-}
-
-// Random unit vector (ported from the old randDir; consumes 3 rng values).
-function randDir(rng) {
-  const v = [rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1];
-  const l2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-  if (l2 < 1e-4) return [1, 0, 0];
-  return setLength(v, 1);
-}
-
