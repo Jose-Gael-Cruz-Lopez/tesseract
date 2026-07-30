@@ -198,3 +198,23 @@ test('hashId and mulberry32 are stable helpers', () => {
 npx vitest run tests/graph-data.test.js
 ```
 
+Expected: FAIL — `Failed to resolve import "../src/graph/graph-data.js"`. That is the correct failure: the module does not exist yet.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `src/graph/graph-data.js`:
+
+```js
+// Pure graph data for the 3D force layout — no DOM, no storage, no three.js.
+//
+// buildGraphFromPages(pages) turns the store's flat page list into the
+// {nodes, links} shape 3d-force-graph consumes: one node per live page, one
+// link per parent->child edge, at ANY depth (the old sphere builder capped at
+// three levels because it could not place deeper nodes).
+//
+// Initial x/y/z are seeded from the page id, NOT the array index. d3-force-3d
+// seeds from index by default, and the store's page order is not stable, so
+// index-seeding would reshuffle the whole layout whenever page order changed.
+// Seeding by id means the same page set always settles the same way.
+
+export const PALETTE = [
