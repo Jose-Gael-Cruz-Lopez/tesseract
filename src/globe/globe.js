@@ -182,23 +182,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   ringGroup.add(makeRing(4.3, 0xe0356b, 0.75, 0.16, 0.4, 0.028));
   ringGroup.add(makeRing(5.6, 0xc22f5f, 0.5, -0.1, -0.7, 0.022));
   ringGroup.add(makeRing(7.6, 0x93264a, 0.4, 0.24, 1.4, 0.02));
-  ringGroup.add(makeRing(9.4, 0x6e1f3d, 0.3, -0.3, 2.3, 0.018));
-
-  /* ---------- clusters (store-driven) ---------- */
-  const clusters = [];
-  const hubSprites = [];
-  const threads = [];
-  const title = (p) => (p && p.title) || 'Untitled';
-
-  // Session-continuity caches so a rebuild never snaps a dragged hub back or
-  // makes settled leaves jump: positions/velocities survive by page id.
-  const hubPosCache = new Map(); // pageId -> Vector3
-  const nodeCache = new Map();   // pageId -> {pos: Vector3, vel: Vector3}
-
-  // (Re)build a tether's curve + geometry from its hub's current position, so
-  // the tether follows when the hub is dragged around.
-  function retetherThread(thread) {
-    const end = thread.cluster.group.position;
-    const c = thread.curve;
-    c.v0.copy(end).normalize().multiplyScalar(2.1);
-    c.v1.copy(end).multiplyScalar(0.5).addScaledVector(thread.jitterDir, end.length() * 0.14);
