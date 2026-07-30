@@ -118,3 +118,23 @@ Developer-mode nodes additionally carry the existing `devKind` / `devRef` on `pa
 | Today (`globe.js`) | New (`graph.js`) |
 | --- | --- |
 | click leaf → `onOpenPage(id)` | `onNodeClick`, node `kind: 'leaf'` |
+| click hub → `onHubFocus(id)` | `onNodeClick`, node `kind: 'hub'` |
+| `focusPage(id)` | camera fly-to node + highlight |
+| `clearFocus()` | reset camera + clear highlight |
+| `setVisible(bool)` | container show/hide (page slide-over) |
+| `dispose()` | `_destructor()`, drop canvas, unsubscribe store |
+| `refresh()` | re-run provider → `graphData()` |
+| store `'pages'` subscription | unchanged — rebuild `graphData` |
+| theme repaint (light/dark) | `backgroundColor` + node/link colors on theme change |
+
+Theme awareness is explicitly retained; dropping it would be a visible regression in light mode.
+
+## What is deleted
+
+| File | Lines |
+| --- | --- |
+| `src/globe/globe.js` | 1004 |
+| `src/globe/globe-data.js` | 138 |
+| `src/globe/nodes.js` | 91 |
+| **Total** | **1233** |
+
