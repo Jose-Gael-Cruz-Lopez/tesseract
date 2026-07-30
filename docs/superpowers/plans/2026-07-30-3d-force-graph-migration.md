@@ -18,3 +18,23 @@
 - **The library is constructed with `new`:** `new ForceGraph3D(element)`. The older `ForceGraph3D()(element)` call form is **wrong** for 1.80.0 and will throw.
 - **Theme event:** the app dispatches `document` event `'mnemosphere:themechange'` with `e.detail.theme` of `'dark' | 'light'`. Read the current value from `document.documentElement.dataset.theme`.
 - **Run tests from the repo root** (`npm test`), not from `canopy/`. The root suite is Vitest over `tests/**`.
+- **TDD is mandatory.** Every task writes a failing test first and watches it fail before implementing.
+
+---
+
+### Task 1: Add the dependency and prove there is only one three.js
+
+**Files:**
+- Modify: `package.json`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `3d-force-graph` importable as a default export; `three` still resolving to exactly one copy.
+
+- [ ] **Step 1: Install the dependency**
+
+```bash
+npm install 3d-force-graph@^1.80.0
+```
+
+- [ ] **Step 2: Prove there is exactly one copy of three**
