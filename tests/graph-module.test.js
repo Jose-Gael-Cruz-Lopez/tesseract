@@ -78,3 +78,13 @@ test('the handle carries all five contract methods, and disposal is safe', async
   // After disposal the handle must be inert. Without the guard, setVisible(true)
   // restarts an animation loop on a destroyed renderer.
   expect(() => {
+    handle.setVisible(true);
+    handle.clearFocus();
+    handle.focusPage('nope');
+    handle.refresh();
+  }).not.toThrow();
+  expect(calls.resume).toBe(0);
+
+  vi.doUnmock('3d-force-graph');
+  vi.resetModules();
+});
