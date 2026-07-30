@@ -318,3 +318,23 @@ git commit -m "feat(graph): pure {nodes, links} builder with id-seeded positions
 - Consumes: `buildGraphFromPages` from `src/graph/graph-data.js` (Task 2).
 - Produces: `buildDevGraph({docs, roadmap, feed, triage, dashboard}) → {nodes, links}`; `CATEGORIES` unchanged.
 
+`dev-graph.js`'s own logic — five synthetic category pages plus one child page per canopy item, each carrying `devKind` / `devRef` — does **not** change. Only the import path changes, because the builder it delegates to now returns a different shape. This is the whole reason Developer mode converts nearly for free.
+
+- [ ] **Step 1: Rewrite the failing tests**
+
+Replace the body of `tests/dev-graph.test.js` (keep its existing imports of `buildDevGraph`/`CATEGORIES` and any fixtures it already has at the top):
+
+```js
+// @vitest-environment happy-dom
+import { test, expect } from 'vitest';
+import { buildDevGraph, CATEGORIES } from '../src/dev/dev-graph.js';
+
+const hubs = (g) => g.nodes.filter((n) => n.kind === 'hub');
+const childrenOf = (g, id) => g.links.filter((l) => l.source === id).map((l) => l.target);
+
+test('produces exactly the five category hubs in order', () => {
+  const g = buildDevGraph({});
+  expect(hubs(g).map((n) => n.id)).toEqual(CATEGORIES.map((c) => c.id));
+});
+
+test('item counts match the source data', () => {
