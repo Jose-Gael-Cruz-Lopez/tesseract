@@ -582,23 +582,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   function updateReveal(dt) {
     if (introDone) return;
     introElapsed += dt;
-    applyReveal(introElapsed);
-    if (introElapsed >= INTRO_END) {
-      introDone = true;
-      revealStatics.forEach((s) => { s.mat.opacity = s.target; });
-      cubeParts.forEach((p) => { p.mat.opacity = p.target; p.obj.scale.setScalar(1); });
-      clusters.forEach((c) => { c.revealFactor = 1; });
-    }
-  }
-
-  /* ---------- interaction: drag, zoom, hover, click-to-focus ---------- */
-  const raycaster = new THREE.Raycaster();
-  raycaster.params.Points = { threshold: 0.3 };
-  const mouse = new THREE.Vector2(-2, -2);
-
-  let dragging = false, lastX = 0, lastY = 0, velX = 0, velY = 0, moved = 0;
-  let tooltipXY = [0, 0], hoverCluster = null, hoverNode = null, selected = null;
-  let pinchStart = 0, pinchBaseDist = 0;
-
-  // Camera focus: clicking a hub flies the look-at + distance to it.
-  const FOCUS_DIST = 13;
