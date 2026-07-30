@@ -38,3 +38,23 @@ function startApp(root) {
   if (!initStore()) seedWorkspace({ name: session?.name || 'Me', email: session?.email || '' });
   mountApp(root, { onLogOut: () => showAuth(root) });
 }
+
+// Render the sign-up / log-in / onboarding flow; on completion, boot the app.
+async function showAuth(root) {
+  const load = authViews['./auth/auth-view.js'];
+  if (load) {
+    const { mountAuth } = await load();
+    mountAuth(root, { onComplete: () => startApp(root) });
+  } else {
+    root.innerHTML = '<div class="boot-auth-pending">auth pending</div>';
+  }
+}
+
+// Signed-out visitors see the intro video first; when it ends (or is skipped),
+// hand off to the sign-in / onboarding flow.
+function showLanding(root) {
+  mountLanding(root, { onDone: () => showAuth(root) });
+}
+
+async function boot() {
+  initTheme();
