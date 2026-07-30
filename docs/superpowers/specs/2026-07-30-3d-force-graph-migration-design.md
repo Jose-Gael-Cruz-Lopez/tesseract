@@ -98,3 +98,23 @@ One shape, emitted by both modes, so the renderer never learns which mode it is 
 { source: parentId, target: id }
 ```
 
+`x/y/z` are the seeded initial positions from §4.
+
+`kind` is derived from one rule — **`hub` means `parentId == null`** — and is what lets the
+renderer route a click to `onHubFocus` versus `onOpenPage`. This unifies the two modes cleanly:
+in Developer mode the top-level pages *are* the five synthetic categories, and in Knowledge mode
+they are the user's top-level pages, so the same rule produces the right behaviour on both sides
+without the renderer knowing which mode it is in.
+
+One nuance carried over from today: a Knowledge-mode hub is a real page, so it is both focusable
+and openable. Current behaviour is that clicking a hub focuses it (`onHubFocus`) rather than
+opening it, and that is preserved — `kind` decides the click route, not whether a page exists
+behind the node.
+
+Developer-mode nodes additionally carry the existing `devKind` / `devRef` on `page`, untouched.
+
+## Feature parity
+
+| Today (`globe.js`) | New (`graph.js`) |
+| --- | --- |
+| click leaf → `onOpenPage(id)` | `onNodeClick`, node `kind: 'leaf'` |
