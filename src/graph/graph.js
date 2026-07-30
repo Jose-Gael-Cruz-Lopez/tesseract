@@ -58,3 +58,23 @@ export function initGraph(container, hooks = {}, provider = null) {
       if (node.kind === 'hub') onHubFocus(node.id);
       else onOpenPage(node.id);
     });
+
+  let selected = null;
+
+  function focusNode(node) {
+    selected = node;
+    const dist = 90;
+    const len = Math.hypot(node.x || 0, node.y || 0, node.z || 0) || 1;
+    const k = 1 + dist / len;
+    graph.cameraPosition(
+      { x: (node.x || 0) * k, y: (node.y || 0) * k, z: (node.z || 0) * k },
+      { x: node.x || 0, y: node.y || 0, z: node.z || 0 },
+      600,
+    );
+  }
+
+  /* ---------- data ---------- */
+  let disposed = false;
+
+  function setData(data) {
+    // A canopy read in flight when the mode is switched must not write into a
