@@ -118,3 +118,23 @@ test('hub picker lists connected hubs and picks one', () => {
   expect(options.map((o) => o.querySelector('.dev-hub-name').textContent)).toEqual(['acme/widgets', 'acme/gadgets']);
   expect(options.map((o) => o.querySelector('.dev-hub-access').textContent)).toEqual(['Push access', 'Read-only']);
   options[1].click();
+  expect(onPick).toHaveBeenCalledWith('acme/gadgets');
+});
+
+test('hub picker with no repos shows the connect-a-repo empty state with the App install link', () => {
+  const container = document.createElement('div');
+  mountDevHubPicker(container, { repos: [], appSlug: 'canopy-app', onPick: vi.fn() });
+  expect(container.querySelector('h2').textContent).toBe('Connect a repo');
+  expect(container.querySelector('.dev-hub-option')).toBeNull();
+  const link = container.querySelector('.dev-hub-connect');
+  expect(link.getAttribute('href')).toBe('https://github.com/apps/canopy-app/installations/new');
+  expect(link.getAttribute('target')).toBe('_blank');
+});
+
+test('hub picker error state offers retry instead of connect guidance', () => {
+  const container = document.createElement('div');
+  const onRetry = vi.fn();
+  mountDevHubPicker(container, { repos: [], error: true, onRetry });
+  expect(container.querySelector('h2').textContent).toBe('Hubs unavailable');
+  expect(container.querySelector('.dev-hub-connect')).toBeNull();
+  container.querySelector('.dev-hub-retry').click();
