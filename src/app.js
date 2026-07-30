@@ -9,6 +9,7 @@ import { initGlobe } from './globe/globe.js';
 import * as store from './data/store.js';
 import * as auth from './auth/auth.js';
 import { supabaseSignOut } from './data/supabase.js';
+import { canopyLogout } from './data/canopy-session.js';
 import { toast, el } from './ui/popover.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountTopbar } from './ui/topbar.js';
@@ -156,10 +157,15 @@ export function mountApp(root, { onLogOut } = {}) {
     openShare: (anchor, pageId) => openShare(anchor, pageId ?? currentId, ctx),
     toggleComments: (pageId) => comments.toggle(pageId ?? currentId),
 
-    logOut() {
+    async logOut() {
       auth.logOut();
-      supabaseSignOut();
       if (globe) globe.dispose();
+      // Local state alone is not the credential. The canopy session lives in an httpOnly
+      // cookie that JS cannot touch, so it must be revoked server-side — and BEFORE the
+      // hand-back, because boot() consults GET /auth/me first: a cookie that outlives the
+      // sign-out re-derives a session on the very next reload and drops the user straight
+      // back into the app they just left. Neither call throws, so awaiting both is safe.
+      await Promise.all([supabaseSignOut(), canopyLogout()]);
       if (typeof onLogOut === 'function') onLogOut();
       else location.reload();
     },
