@@ -58,3 +58,23 @@ test('a failed surface is omitted, not fatal', async () => {
 test('every node exposes page.id, so the dev click index can be built', async () => {
   const graph = await devProvider(fakeApi()).getGraph();
   const byId = new Map(graph.nodes.map((n) => [n.page.id, n.page]));
+  expect(byId.size).toBe(graph.nodes.length);
+  expect(byId.get('cat:docs').title).toBe('Docs');
+  const doc = graph.nodes.find((n) => n.page.devKind === 'doc');
+  expect(byId.get(doc.page.id).devRef).toBe(doc.page.devRef);
+});
+
+test('mountDevPage renders a doc and sanitizes the body (script stripped)', async () => {
+  const container = document.createElement('section');
+  document.body.appendChild(container);
+  await mountDevPage(container, { devKind: 'doc', devRef: 'arch', title: 'Architecture' }, fakeApi());
+  expect(container.querySelector('.dev-doc-title').textContent).toBe('Architecture');
+  const body = container.querySelector('.dev-doc-body');
+  expect(body.querySelector('h1')).not.toBeNull();
+  expect(body.innerHTML).not.toContain('<script');
+});
+
+test('mountDevSidebar lists the five categories', () => {
+  const container = document.createElement('aside');
+  const graph = buildDevGraph({ docs: { docs: [{ slug: 'a', title: 'A' }] } });
+  mountDevSidebar(container, { openDevItem: vi.fn() }, graph);
