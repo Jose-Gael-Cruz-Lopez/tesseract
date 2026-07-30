@@ -178,3 +178,23 @@ export function mountApp(root, { onLogOut } = {}) {
   editor = mountEditor(pageEl, ctx);
   comments = mountComments(commentsEl, ctx);
   topbar.setPage(null);
+
+  // ---- Mode mounting ----
+  function teardownMode() {
+    currentId = null;
+    if (globe) { globe.dispose(); globe = null; }
+    pageEl.classList.remove('show');
+    pageEl.setAttribute('aria-hidden', 'true');
+    sidebarEl.innerHTML = '';
+    globeEl.innerHTML = '';
+  }
+
+  function mountKnowledge() {
+    sidebar = mountSidebar(sidebarEl, ctx);
+    globe = initGraph(globeEl, {
+      onOpenPage(pageId) { ctx.openPage(pageId); },
+      onHubFocus() {},
+    });
+    topbar.setPage(null);
+    const deepId = location.hash.slice(1);
+    if (deepId && store.getPage(deepId)) ctx.openPage(deepId);
