@@ -38,3 +38,23 @@ function buildDevSbLabel(ctx) {
   });
   return label;
 }
+
+// Chrome-only dev sidebar: just the mode-switch header, no graph needed. Mounted
+// while no hub is active (hub picker / connect-a-repo / hubs-unavailable states)
+// so those states are never a dead end — mode='developer' is persisted, so a
+// developer with zero connected repos reloads straight into the picker and must
+// still be able to switch back to Knowledge, open Developer settings, or log out.
+export function mountDevSidebarChrome(container, ctx) {
+  container.innerHTML = '';
+  const root = el('div', 'dev-sb');
+  root.appendChild(buildDevSbLabel(ctx));
+  container.appendChild(root);
+  return { root };
+}
+
+// graph = { hubs: [{ page:{title, icon}, leaves:[{page:{title, devKind, devRef, id}}] }] }
+// ctx.openDevItem(node) opens the item; ctx.setMode switches back to Knowledge.
+// ctx.devHub() / ctx.devHubs() / ctx.setDevHub(repo) drive the active-hub switcher
+// (the dev-side mirror of canopy's admin repo switcher).
+export function mountDevSidebar(container, ctx, graph) {
+  container.innerHTML = '';
