@@ -622,23 +622,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     tooltipXY = [cx - r.left, cy - r.top];
   }
   function maybeGrabHub() {
-    if (selected) return; // no dragging while focused
-    raycaster.setFromCamera(mouse, camera);
-    const hit = raycaster.intersectObjects(hubSprites)[0];
-    if (!hit) return;
-    draggedHub = hit.object.userData.cluster;
-    camera.getWorldDirection(dragNormal);
-    dragPlane.setFromNormalAndCoplanarPoint(dragNormal, draggedHub.hub.getWorldPosition(new THREE.Vector3()));
-    canvas.style.cursor = 'grabbing';
-  }
-  function moveHub() {
-    raycaster.setFromCamera(mouse, camera);
-    if (!raycaster.ray.intersectPlane(dragPlane, dragHit)) return;
-    universe.worldToLocal(dragHit);
-    if (dragHit.lengthSq() < 1e-6) return;
-    // Keep the hub between the cubes and the shell so its leaves stay inside.
-    const rMax = Math.max(CUBE_RADIUS, GLOBE_INNER - draggedHub.maxOffset);
-    dragHit.setLength(THREE.MathUtils.clamp(dragHit.length(), CUBE_RADIUS, rMax));
-    draggedHub.group.position.copy(dragHit);
-    retetherThread(draggedHub.thread);
-  }
