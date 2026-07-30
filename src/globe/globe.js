@@ -882,23 +882,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     renderer.setSize(w, h);
   }
   let ro = null;
-  if (typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver(resize);
-    ro.observe(container);
-  }
-  window.addEventListener('resize', resize);
-
-  /* ---------- theme sync ---------- */
-  // Repaint the whole scene when the app theme changes: background, structure
-  // lines, glow blending, and hub tint. New objects built afterwards read the
-  // updated `currentTheme` via palette().
-  function applyGlobeTheme(theme) {
-    currentTheme = theme === 'dark' ? 'dark' : 'light';
-    const P = palette();
-    renderer.setClearColor(P.clear, 1);
-    thinLine.color.setHex(P.thin); thinLine.opacity = P.thinOp;
-    equatorMat.color.setHex(P.equator); equatorMat.opacity = P.equatorOp;
-    fanMat.color.setHex(P.fan); fanMat.opacity = P.fanOp;
-    scene.traverse((o) => {
-      const m = o.material;
-      if (!m) return;
