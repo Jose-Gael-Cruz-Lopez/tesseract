@@ -158,3 +158,21 @@ test('hubGroups exposes the original page objects, so icon/title/devKind survive
   ]);
   const [group] = hubGroups(g);
   expect(group.page.icon).toBe('📄');
+  expect(group.leaves[0].page.devKind).toBe('doc');
+  expect(group.leaves[0].page.devRef).toBe('a');
+});
+
+test('hubGroups tolerates an empty graph', () => {
+  expect(hubGroups({ nodes: [], links: [] })).toEqual([]);
+  expect(hubGroups(undefined)).toEqual([]);
+});
+
+// ── escapeHtml: 3d-force-graph renders nodeLabel as HTML ───────────────────
+
+test('escapeHtml neutralises markup in a page title', () => {
+  expect(escapeHtml('<img src=x onerror=alert(1)>'))
+    .toBe('&lt;img src=x onerror=alert(1)&gt;');
+  expect(escapeHtml('a & b')).toBe('a &amp; b');
+  expect(escapeHtml('"q"')).toBe('&quot;q&quot;');
+  expect(escapeHtml(null)).toBe('');
+});
