@@ -98,3 +98,23 @@ test('hashId and mulberry32 are stable helpers', () => {
   const r = mulberry32(42);
   const first = [r(), r(), r()];
   const r2 = mulberry32(42);
+  expect([r2(), r2(), r2()]).toEqual(first);
+  expect(PALETTE.length).toBeGreaterThan(0);
+});
+
+// ── Hardening, added after review found the originals too weak ──────────────
+
+// The original determinism test compared two orderings and would have stayed
+// green against an implementation that set every position to 0. Distinctness is
+// what actually pins the seeding.
+test('distinct ids get distinct seeded positions (not all-zero)', () => {
+  const { nodes } = buildGraphFromPages([P('a'), P('b'), P('c')]);
+  const keys = nodes.map((n) => `${n.x},${n.y},${n.z}`);
+  expect(new Set(keys).size).toBe(3);
+  expect(keys.every((k) => k === '0,0,0')).toBe(false);
+});
+
+// The original link-integrity test only ever saw a happy-path fixture, so it
+// could not fail for the case it is named after.
+test('link integrity holds when a mid-tree parent is deleted', () => {
+  const pages = [P('a'), P('mid', 'a', { deleted: true }), P('deep', 'mid')];
