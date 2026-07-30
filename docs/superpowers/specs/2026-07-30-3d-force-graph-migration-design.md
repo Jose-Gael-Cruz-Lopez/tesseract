@@ -38,3 +38,23 @@ and accepts the **identical** hooks: `onOpenPage(pageId)`, `onHubFocus(pageId|nu
 
 Rejected alternatives:
 
+- **In-place swap** (gut `globe.js`, keep the name): leaves a module called "globe" rendering no
+  globe, and `globe-data.js` naming math that no longer exists. Misleading names are how the next
+  bug gets written.
+- **Redesign the contract too:** would rewrite `app.js` mode-mounting, both sidebars and the hub
+  picker with their tests, for no user-visible gain.
+
+The contract survives because it is genuinely well-shaped for this: `onOpenPage` / `onHubFocus`
+are exactly the two events a force graph needs to emit, and `focusPage` / `clearFocus` map
+cleanly onto camera focus.
+
+### 2. Both modes convert together, for free
+
+Developer mode has no renderer of its own. `dev-graph.js` fabricates five synthetic category
+pages plus one child page per canopy item and feeds them to the **same** builder the Knowledge
+side uses. It therefore converts by repointing one import; its own logic is unchanged.
+
+This shared seam is why replacing both surfaces costs barely more than replacing one, and why
+leaving them split (two 3D renderers to maintain) was rejected.
+
+### 3. Full-depth tree
