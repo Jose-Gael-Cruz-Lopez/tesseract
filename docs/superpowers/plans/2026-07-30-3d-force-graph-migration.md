@@ -458,3 +458,23 @@ test('exposes initGraph and re-exports the builder', () => {
 });
 
 test('initGraph takes (container, hooks, provider)', () => {
+  expect(graph.initGraph.length).toBeGreaterThanOrEqual(1);
+});
+```
+
+- [ ] **Step 2: Run the test and watch it fail**
+
+```bash
+npx vitest run tests/graph-module.test.js
+```
+
+Expected: FAIL — `Failed to resolve import "../src/graph/graph.js"`.
+
+- [ ] **Step 3: Write the renderer**
+
+Create `src/graph/graph.js`:
+
+```js
+// The Mnemosphere graph: a 3D force-directed view of the workspace, rendered by
+// 3d-force-graph (three.js + d3-force-3d) instead of the hand-written globe
+// scene it replaces.
