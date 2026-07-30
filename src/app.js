@@ -258,3 +258,23 @@ export function mountApp(root, { onLogOut } = {}) {
     const state = el('div', 'dev-state');
     state.append(
       el('h2', null, 'Connect to canopy'),
+      el('p', null, 'Developer mode reads a canopy instance. Add its URL and an access token to see the developer sphere.'),
+    );
+    const btn = el('button', null, 'Open Developer settings');
+    btn.addEventListener('click', () => ctx.openSettings('developer'));
+    state.appendChild(btn);
+    globeEl.appendChild(state);
+  }
+
+  function remountMode() {
+    teardownMode();
+    if (mode === 'developer') mountDeveloper();
+    else mountKnowledge();
+  }
+
+  remountMode();
+
+  function onKeydown(e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      ctx.openSearch();
