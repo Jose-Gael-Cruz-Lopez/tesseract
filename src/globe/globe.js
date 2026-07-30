@@ -122,23 +122,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   /* ---------- globe wireframe ---------- */
   const thinLine = new THREE.LineBasicMaterial({ color: palette().thin, transparent: true, opacity: palette().thinOp });
 
-  function latCircleGeo(radius, y, segments) {
-    const pts = [];
-    for (let i = 0; i < segments; i++) {
-      const a = (i / segments) * Math.PI * 2;
-      pts.push(new THREE.Vector3(Math.cos(a) * radius, y, Math.sin(a) * radius));
-    }
-    return new THREE.BufferGeometry().setFromPoints(pts);
-  }
-  for (let lat = -75; lat <= 75; lat += 15) {
-    const phi = (lat * Math.PI) / 180;
-    universe.add(new THREE.LineLoop(latCircleGeo(R * Math.cos(phi), R * Math.sin(phi), 128), thinLine));
-  }
-  function meridianGeo(segments) {
-    const pts = [];
-    for (let i = 0; i < segments; i++) {
-      const a = (i / segments) * Math.PI * 2;
-      pts.push(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0));
-    }
-    return new THREE.BufferGeometry().setFromPoints(pts);
-  }
