@@ -142,23 +142,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     }
     return new THREE.BufferGeometry().setFromPoints(pts);
   }
-  for (let i = 0; i < 12; i++) {
-    const m = new THREE.LineLoop(meridianGeo(128), thinLine);
-    m.rotation.y = (i * Math.PI) / 12;
-    universe.add(m);
-  }
-  /* bright equator ring */
-  const equatorMat = new THREE.LineBasicMaterial({ color: palette().equator, transparent: true, opacity: palette().equatorOp });
-  universe.add(new THREE.LineLoop(latCircleGeo(R, 0, 160), equatorMat));
-  /* dense radial fan disc at the equator plane */
-  const fanPts = [];
-  for (let a = 0; a < 360; a += 2.5) {
-    const r = (a * Math.PI) / 180;
-    fanPts.push(
-      new THREE.Vector3(Math.cos(r) * 2.4, 0, Math.sin(r) * 2.4),
-      new THREE.Vector3(Math.cos(r) * R, 0, Math.sin(r) * R)
-    );
-  }
-  const fanMat = new THREE.LineBasicMaterial({ color: palette().fan, transparent: true, opacity: palette().fanOp });
-  universe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fanPts), fanMat));
-
