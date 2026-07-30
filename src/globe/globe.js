@@ -462,23 +462,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const pos = [], col = [];
     const N = 46;
     for (let i = 0; i < N; i++) {
-      const p = curve.getPoint(i / (N - 1)).add(randDir().multiplyScalar(0.35));
-      pos.push(p.x, p.y, p.z);
-      const c = new THREE.Color(rand() < 0.7 ? 0xffb454 : 0xffd166);
-      col.push(c.r, c.g, c.b);
-    }
-    const pts = makePoints(pos, col, 0.34, 0.9);
-    universe.add(pts);
-    streamMats.push(pts.material);
-  }
-  makeStream();
-  makeStream();
-
-  /* ---------- ambient particles + background stars ---------- */
-  function scatter(count, rMin, rMax, size, opacity, dim) {
-    const pos = [], col = [];
-    for (let i = 0; i < count; i++) {
-      const p = randDir().multiplyScalar(rMin + rand() * (rMax - rMin));
-      pos.push(p.x, p.y, p.z);
-      const c = new THREE.Color(paletteHex[Math.floor(rand() * paletteHex.length)]);
-      c.multiplyScalar(dim);
