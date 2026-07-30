@@ -742,23 +742,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     if (e.key !== 'Escape' || disposed || !visible) return;
     if (selected) select(selected); // toggle off -> fires onHubFocus(null)
   };
-  window.addEventListener('keydown', onKey);
-
-  function updateHover() {
-    if (dragging) { hoverCluster = null; hoverNode = null; tooltip.style.display = 'none'; return; }
-    const hub = pickHub();
-    const dot = hub ? null : pickDot();
-    hoverCluster = hub;
-    hoverNode = dot ? dot.node : null;
-    if (hub || dot) {
-      tooltip.textContent = title(hub ? hub.page : dot.node.page);
-      tooltip.style.display = 'block';
-      tooltip.style.left = tooltipXY[0] + 'px';
-      tooltip.style.top = tooltipXY[1] + 'px';
-      canvas.style.cursor = 'pointer';
-    } else {
-      tooltip.style.display = 'none';
-      canvas.style.cursor = 'grab';
-    }
-  }
-
