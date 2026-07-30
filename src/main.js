@@ -18,3 +18,23 @@ import './styles/import.css';
 import './styles/dev.css';
 import './styles/templates.css';
 import './styles/landing.css';
+
+import { initTheme } from './ui/theme.js';
+import { mountLanding } from './ui/landing.js';
+import { getSession, setSession } from './auth/auth.js';
+import { initStore, seedWorkspace, setDevAvailable } from './data/store.js';
+import { mountApp } from './app.js';
+import { supabaseEnabled, getSupabaseSession, profileFromSession } from './data/supabase.js';
+import { getCanopySession, sessionFromGitHub } from './data/canopy-session.js';
+
+// Auth views load lazily (a separate chunk) so the auth code isn't paid for
+// once a returning, onboarded user is past the gate.
+const authViews = import.meta.glob('./auth/auth-view.js');
+
+// Mount the app shell for a signed-in user, seeding a workspace on first run.
+// Logging out returns to the auth screens without a reload.
+function startApp(root) {
+  const session = getSession();
+  if (!initStore()) seedWorkspace({ name: session?.name || 'Me', email: session?.email || '' });
+  mountApp(root, { onLogOut: () => showAuth(root) });
+}
