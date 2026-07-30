@@ -58,3 +58,23 @@ test('deleted pages are excluded at every level', () => {
   const pages = [P('a'), P('b', 'a', { deleted: true }), P('c', 'a')];
   const { nodes } = buildGraphFromPages(pages);
   expect(nodes.map((n) => n.id).sort()).toEqual(['a', 'c']);
+});
+
+test('same input produces identical output (deterministic rebuild)', () => {
+  const pages = [P('a'), P('b'), P('c', 'a')];
+  expect(buildGraphFromPages(pages)).toEqual(buildGraphFromPages(pages));
+});
+
+// THE LOAD-BEARING ONE. d3-force-3d seeds initial positions from ARRAY INDEX,
+// and the store's page order is not stable — so seeding must be keyed by page
+// id, not by position in the list, or the layout shuffles on reorder.
+test('positions are keyed by page id hash, not call order', () => {
+  const a = buildGraphFromPages([P('one'), P('two'), P('three')]);
+  const b = buildGraphFromPages([P('three'), P('one'), P('two')]);
+  const pos = (g, id) => {
+    const n = g.nodes.find((x) => x.id === id);
+    return [n.x, n.y, n.z];
+  };
+  for (const id of ['one', 'two', 'three']) {
+    expect(pos(a, id)).toEqual(pos(b, id));
+  }
