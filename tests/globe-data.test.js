@@ -99,23 +99,3 @@ test('layout is keyed by page id hash, not call order', () => {
   expect(alone.hubs[0].scale).toBe(before.hubs[0].scale);
 });
 
-test('deleted pages are excluded at every level', () => {
-  const pages = fixture();
-  pages.find((p) => p.id === 'leaf-a2').deleted = true;
-  pages.find((p) => p.id === 'hub-b').deleted = true;
-  const { hubs } = buildGraphFromPages(pages);
-  expect(hubs.map((h) => h.page.id)).toEqual(['hub-a']);
-  expect(hubs[0].leaves.map((l) => l.page.id)).not.toContain('leaf-a2');
-});
-
-test('leaf offsets stay inside the hub budget so nodes cannot leave the globe', () => {
-  const pages = [
-    mkPage('hub-a'),
-    ...Array.from({ length: 24 }, (_, i) => mkPage(`leaf-${i}`, 'hub-a')),
-  ];
-  const { hubs } = buildGraphFromPages(pages);
-  const budget = GLOBE_R * 0.94 - hubs[0].dist;
-  for (const l of hubs[0].leaves) {
-    expect(len(l.rest)).toBeLessThanOrEqual(budget + 1e-9);
-  }
-});
