@@ -322,23 +322,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const pulseMat = new THREE.SpriteMaterial({
       map: dotTex, color: 0xffc2cf, transparent: true, opacity: 0.9,
       depthWrite: false, blending: palette().blending,
-    });
-    const pulse = new THREE.Sprite(pulseMat);
-    pulse.scale.set(0.34, 0.34, 1);
-    universe.add(pulse);
-
-    const thread = {
-      curve, line: tLine, jitterDir, mat: tMat, baseOp: 0.26,
-      pulse, pulseMat, t: rand(), speed: 0.1 + rand() * 0.16, cluster,
-    };
-    thread._op = introDone ? thread.baseOp : 0;
-    if (!introDone) { thread.mat.opacity = 0; thread.pulseMat.opacity = 0; }
-    cluster.thread = thread;
-    threads.push(thread);
-    retetherThread(thread);
-    return cluster;
-  }
-
-  function cacheCluster(c) {
-    hubPosCache.set(c.page.id, c.group.position.clone());
-    for (const n of c.pnodes) nodeCache.set(n.page.id, { pos: n.pos.clone(), vel: n.vel.clone() });
