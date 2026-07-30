@@ -1,4 +1,4 @@
-import { type DB, first, nowIso } from "../db";
+import { type DB, first, run, nowIso } from "../db";
 import type { AccessibleRepo } from "./app";
 
 // The repo-access authorization behind repoGate: is this user allowed to see a repo's
@@ -7,6 +7,24 @@ import type { AccessibleRepo } from "./app";
 // visible iff the repo is CONNECTED and the user is a collaborator.
 
 const DEFAULT_TTL_SEC = 300; // 5 min
+
+/**
+ * Drop a login's ENTIRE cached access set, so the next authorizeRepo re-reads it from
+ * GitHub instead of waiting out the TTL (issue #39).
+ *
+ * The whole set, deliberately — not the one repo that changed. Freshness is decided by
+ * MAX(checked_at) across the login's rows, so deleting a single (login, repo) row would
+ * leave the set looking fresh, skip the refresh, and make the missing row read as
+ * "denied": strictly worse than the staleness it was meant to fix.
+ *
+ * Only the REGAIN path needs this. authorizeRepo checks `repos.status = 'connected'`
+ * before consulting the cache, so a revoked repo is denied immediately regardless of
+ * what is cached; it is re-granting that was invisible for up to 5 minutes, which in
+ * production looked like "I re-added my repo and the hub still 404s".
+ */
+export async function invalidateAccess(db: DB, login: string): Promise<void> {
+  await run(db, `DELETE FROM repo_access WHERE login = ?`, login);
+}
 
 // Replace this user's cached access set with a fresh snapshot — upserts the reachable
 // repos and drops any they've lost (revocation propagates on the next check).

@@ -1,6 +1,7 @@
 import { all, type DB, run } from "../db";
 import type { Env } from "../env";
 import { appJwt, ghGetAll, installationToken } from "./app";
+import { invalidateAccess } from "./access";
 
 // Connect-your-repos: keep the `installations` + `repos` tables in sync with GitHub App
 // installation lifecycle. Mostly driven by the webhook payload (which carries the account
@@ -99,6 +100,9 @@ export async function handleInstallationEvent(
       case "created":
         if (account) await recordInstallation(db, { id: inst.id, account_login: account.login, account_type: account.type }, now);
         await connectRepos(db, inst.id, (p.repositories ?? []).map((r) => r.full_name), sender, now);
+        // The installer is about to look at their new hubs; without this their cached
+        // access set (if any) keeps them out for up to the TTL (issue #39).
+        if (sender) await invalidateAccess(db, sender);
         return { handled: true };
       case "deleted":
         await run(db, `UPDATE repos SET status = 'disconnected' WHERE installation_id = ?`, inst.id);
@@ -126,6 +130,13 @@ export async function handleInstallationEvent(
     await connectRepos(db, inst.id, (p.repositories_added ?? []).map((r) => r.full_name), sender, now);
     await disconnectRepos(db, (p.repositories_removed ?? []).map((r) => r.full_name));
     const rec = await reconcileInstallationRepos(env, db, inst.id, sender, now, opts);
+    // Whoever changed the selection is the person about to reload the UI. Their cached
+    // access set was written BEFORE this change, so without dropping it a re-added repo
+    // stays 404 for up to the TTL while GET /me/repos already lists it — the confusing
+    // split state observed in production (issue #39). Scoped to the sender: a revoked
+    // repo is denied promptly by the `status = 'connected'` check regardless of cache,
+    // so nobody else is left holding a wrong answer worth a cache-wide flush.
+    if (sender) await invalidateAccess(db, sender);
     return { handled: true, reconciled: rec.reconciled, disconnected: rec.disconnected.length };
   }
 
