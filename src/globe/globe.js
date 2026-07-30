@@ -442,23 +442,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     const hubPage = topAncestor(page);
     const cluster = hubPage && clusters.find((c) => c.page.id === hubPage.id);
     if (cluster) rebuildHub(cluster);
-    else rebuildAll();
-  }
-  // Only the store-backed (knowledge) globe subscribes to page events; the
-  // developer globe refreshes on demand via the returned handle's refresh().
-  let unsubscribeStore = null;
-  if (!provider) {
-    onStore('pages', onPagesEvent);
-    unsubscribeStore = () => offStore('pages', onPagesEvent);
-  }
-
-  /* ---------- warm dotted streams along arcs ---------- */
-  const streamMats = [];
-  function makeStream() {
-    const a = randDir().multiplyScalar(R * 0.82);
-    const b = randDir().multiplyScalar(R * 0.82);
-    const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(R * 0.9);
-    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-    const pos = [], col = [];
-    const N = 46;
-    for (let i = 0; i < N; i++) {
