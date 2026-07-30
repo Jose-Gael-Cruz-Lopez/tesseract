@@ -58,3 +58,23 @@ Expected: 27 files / 448 tests passing. Adding a dependency must change nothing.
 ```bash
 git add package.json package-lock.json
 git commit -m "build: add 3d-force-graph (three stays pinned at 0.185.1)"
+```
+
+---
+
+### Task 2: The pure data builder
+
+**Files:**
+- Create: `src/graph/graph-data.js`
+- Test: `tests/graph-data.test.js`
+
+**Interfaces:**
+- Consumes: nothing (pure module — no DOM, no storage, no three.js).
+- Produces:
+  - `buildGraphFromPages(pages) → { nodes, links }`
+  - `nodes[i]` = `{ id, kind: 'hub'|'leaf', page, label, color, val, x, y, z }`
+  - `links[i]` = `{ source: parentId, target: childId }`
+  - `mulberry32(seed) → () => number`
+  - `hashId(str) → uint32`
+  - `PALETTE` — array of 7 hex color strings
+
