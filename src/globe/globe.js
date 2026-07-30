@@ -682,23 +682,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     }
   };
   const onTouchMove = (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-      updateMouse(e.touches[0].clientX, e.touches[0].clientY);
-      onMove(e.touches[0].clientX, e.touches[0].clientY);
-    } else if (e.touches.length === 2 && pinchStart > 0) {
-      camDist = THREE.MathUtils.clamp((pinchBaseDist * pinchStart) / touchDist(e), 10, 55);
-    }
-  };
-  const onTouchEnd = () => { onUp(); pinchStart = 0; };
-  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-  canvas.addEventListener('touchend', onTouchEnd);
-
-  // Toggle-select a hub cluster (null clears). Fires onHubFocus only when the
-  // focus actually changes and only for user-driven calls.
-  function select(c, fire = true) {
-    const prev = selected;
-    const wasFocused = !!selected;
-    selected = selected === c ? null : c;
-    if (selected) {
