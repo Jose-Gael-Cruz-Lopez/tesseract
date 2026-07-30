@@ -362,23 +362,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   // Where the graph comes from. Default (knowledge globe) is the page store —
   // synchronous, so timing is identical to before. A developer provider returns
   // a Promise (a canopy fetch); `withGraph` handles both without making the
-  // knowledge path async.
-  const getGraph = provider && provider.getGraph
-    ? () => provider.getGraph()
-    : () => buildGraphFromPages(getPages());
-
-  function withGraph(fn) {
-    const g = getGraph();
-    if (g && typeof g.then === 'function') g.then((graph) => { if (!disposed) fn(graph); });
-    else fn(g);
-  }
-
-  // Tear down every cluster and rebuild the whole graph from the provider.
-  function rebuildAll() {
-    const focusedId = selected ? selected.page.id : null;
-    for (const c of clusters) { cacheCluster(c); disposeCluster(c); }
-    clusters.length = 0;
-    hubSprites.length = 0;
-    withGraph((graph) => {
-      for (const spec of graph.hubs) makeCluster(spec);
-      if (focusedId) {
