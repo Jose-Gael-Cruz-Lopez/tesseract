@@ -58,3 +58,23 @@ export function buildGraphFromPages(pages) {
     const rng = mulberry32(seed);
     // Uniform point on a sphere, consumed in a fixed order so the mapping from
     // id -> position is total and stable.
+    const u = rng() * 2 - 1;
+    const theta = rng() * Math.PI * 2;
+    const r = Math.sqrt(Math.max(0, 1 - u * u));
+    const hub = isHub(page);
+    return {
+      id: page.id,
+      kind: hub ? 'hub' : 'leaf',
+      page,
+      label: page.title || '(untitled)',
+      color: PALETTE[seed % PALETTE.length],
+      val: hub ? 8 : 3,
+      x: Math.cos(theta) * r * SEED_RADIUS,
+      y: u * SEED_RADIUS,
+      z: Math.sin(theta) * r * SEED_RADIUS,
+    };
+  });
+
+  const links = [];
+  for (const page of alive) {
+    if (!isHub(page)) links.push({ source: page.parentId, target: page.id });
