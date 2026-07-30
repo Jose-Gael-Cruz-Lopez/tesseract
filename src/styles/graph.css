@@ -1,0 +1,20 @@
+/* The 3D force graph fills the shell's content area. Most of the retired
+   globe.css styled decorative chrome (equator ring, star field, ambient dust,
+   tesseract core, year label) that the force layout does not have. */
+.graph-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.graph-stage canvas {
+  display: block;
+}
+
+/* 3d-force-graph renders its node tooltip into a floating div. */
+.graph-stage .scene-tooltip {
+  font: 12px/1.4 var(--font-ui, system-ui, sans-serif);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .72);
+  color: #fff;
