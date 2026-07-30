@@ -98,3 +98,10 @@ async function boot() {
     toast("Developer access isn't enabled for that GitHub account yet — use Google for the Knowledge side.");
     return;
   }
+
+  const session = getSession();
+  if (!session || !session.onboarded) showLanding(root);
+  else startApp(root);
+}
+
+boot();
