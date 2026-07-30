@@ -13,23 +13,3 @@
   background: #060310;
   user-select: none;
 }
-
-.gl-stage canvas {
-  display: block;
-}
-
-.gl-vignette {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 52%, rgba(2, 0, 8, 0.8) 100%);
-}
-
-.gl-tooltip {
-  position: absolute;
-  z-index: 2;
-  padding: 6px 11px;
-  background: rgba(14, 8, 26, 0.85);
-  border: 1px solid rgba(255, 120, 150, 0.35);
-  border-radius: 6px;
-  font-size: 11px;
