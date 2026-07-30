@@ -98,3 +98,23 @@ export function hubGroups(graph) {
   const links = (graph && graph.links) || [];
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const groups = new Map();
+  for (const n of nodes) {
+    if (n.kind === 'hub') groups.set(n.id, { page: n.page, leaves: [] });
+  }
+  for (const l of links) {
+    const group = groups.get(l.source);
+    const child = byId.get(l.target);
+    // Only direct hub->child edges form a sidebar row; deeper edges are skipped.
+    if (group && child) group.leaves.push({ page: child.page });
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Escape text for a context that renders HTML.
+ *
+ * `3d-force-graph` renders `nodeLabel` as HTML in its tooltip, so a page titled
+ * `<img src=x onerror=…>` would execute on hover. The globe this replaces used
+ * `textContent` and was safe by construction; the force graph is not, so the
+ * escaping has to be explicit.
+ */
