@@ -78,3 +78,23 @@ by page id hash, not call order") exists to prevent.
 
 So `graph-data.js` assigns every node an initial `x/y/z` derived from
 `mulberry32(hashId(page.id))` before handing it to the simulation. Identical page set →
+identical starting state → identical settled layout, independent of ordering.
+
+`mulberry32`, `hashId` and `PALETTE` are therefore **salvaged** from `globe-data.js` rather than
+deleted with it.
+
+**Accepted limitation:** adding or removing a page still perturbs its neighbours. That is
+inherent to force-directed layout and was accepted when choosing the stock look. What the seeding
+buys is that a reload, a re-render, or a store reorder does **not** move anything.
+
+## Data model
+
+One shape, emitted by both modes, so the renderer never learns which mode it is in:
+
+```js
+// node
+{ id, kind: 'hub' | 'leaf', page, label, color, val, x, y, z }
+// link
+{ source: parentId, target: id }
+```
+
