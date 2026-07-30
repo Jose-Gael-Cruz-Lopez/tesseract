@@ -342,23 +342,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   function cacheCluster(c) {
     hubPosCache.set(c.page.id, c.group.position.clone());
     for (const n of c.pnodes) nodeCache.set(n.page.id, { pos: n.pos.clone(), vel: n.vel.clone() });
-  }
-
-  function disposeCluster(c) {
-    universe.remove(c.group, c.major, c.minor, c.lineSeg);
-    c.major.geometry.dispose(); c.major.material.dispose();
-    c.minor.geometry.dispose(); c.minor.material.dispose();
-    c.lineSeg.geometry.dispose(); c.lineSeg.material.dispose();
-    c.hubMat.dispose();
-    const th = c.thread;
-    if (th) {
-      universe.remove(th.line, th.pulse);
-      th.line.geometry.dispose(); th.mat.dispose(); th.pulseMat.dispose();
-      const ti = threads.indexOf(th);
-      if (ti >= 0) threads.splice(ti, 1);
-    }
-  }
-
-  // Where the graph comes from. Default (knowledge globe) is the page store —
-  // synchronous, so timing is identical to before. A developer provider returns
-  // a Promise (a canopy fetch); `withGraph` handles both without making the
