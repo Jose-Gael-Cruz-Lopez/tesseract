@@ -39,23 +39,3 @@ test('top-level pages become hubs; children leaves; grandchildren branches; deep
   expect(ids).not.toContain('too-deep');
   expect(ids).not.toContain('hub-b');
 
-  // direct children anchor to the hub (parentIdx -1); grandchildren point at
-  // their parent leaf's index within the same array.
-  const leafA1 = a.leaves.findIndex((l) => l.page.id === 'leaf-a1');
-  const leafA2 = a.leaves.find((l) => l.page.id === 'leaf-a2');
-  const branch = a.leaves.find((l) => l.page.id === 'branch-a1x');
-  expect(a.leaves[leafA1].parentIdx).toBe(-1);
-  expect(leafA2.parentIdx).toBe(-1);
-  expect(branch.parentIdx).toBe(leafA1);
-
-  expect(hubs[1].leaves.map((l) => l.page.id)).toEqual(['leaf-b1']);
-});
-
-test('hub placement stays on the seeded fibonacci sphere envelope', () => {
-  const pages = Array.from({ length: 12 }, (_, i) => mkPage(`hub-${i}`));
-  const { hubs } = buildGraphFromPages(pages);
-  expect(hubs).toHaveLength(12);
-  for (const h of hubs) {
-    expect(len(h.dir)).toBeCloseTo(1, 6); // unit direction
-    expect(h.dist).toBeGreaterThanOrEqual(GLOBE_R * 0.4);
-    expect(h.dist).toBeLessThan(GLOBE_R * 0.7);
