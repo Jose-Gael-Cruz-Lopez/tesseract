@@ -18,3 +18,23 @@ import { mountComments, openShare } from './ui/share.js';
 import { openSearch } from './ui/search.js';
 import { openUpdates } from './ui/updates.js';
 import { openSettings } from './ui/settings.js';
+import { openTemplates } from './ui/templates-modal.js';
+import { openImport } from './ui/import-modal.js';
+import { openTeamspace } from './ui/teamspace-modal.js';
+import { openTrash } from './ui/trash.js';
+import { isConfigured, canopyApi } from './dev/canopy-api.js';
+import { devProvider } from './dev/dev-provider.js';
+import { mountDevSidebar, mountDevSidebarChrome } from './dev/dev-sidebar.js';
+import { mountDevPage } from './dev/dev-page.js';
+import { mountDevHubPicker, shouldClearDevHub } from './dev/dev-hub.js';
+
+const SHELL_HTML = `
+  <div class="shell">
+    <aside class="shell-sidebar" id="shell-sidebar"></aside>
+    <main class="shell-main">
+      <header class="shell-topbar" id="shell-topbar"></header>
+      <div class="shell-content">
+        <div class="shell-globe" id="shell-globe"></div>
+        <section class="shell-page" id="shell-page" aria-hidden="true"></section>
+        <aside class="shell-comments" id="shell-comments"></aside>
+      </div>
