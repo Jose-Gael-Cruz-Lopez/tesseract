@@ -498,3 +498,23 @@ const THEMES = {
 
 const readTheme = () =>
   (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark')
+    ? 'dark' : 'light';
+
+/**
+ * @param {HTMLElement} container renders into this element
+ * @param {{onOpenPage?(pageId), onHubFocus?(pageId|null)}} hooks
+ * @param {{getGraph(): Promise<{nodes,links}>}|null} provider developer mode source
+ * @returns {{focusPage(id), clearFocus(), setVisible(bool), dispose(), refresh()}}
+ */
+export function initGraph(container, hooks = {}, provider = null) {
+  const onOpenPage = hooks.onOpenPage || (() => {});
+  const onHubFocus = hooks.onHubFocus || (() => {});
+
+  container.classList.add('graph-stage');
+  let theme = readTheme();
+  container.classList.toggle('graph-light', theme === 'light');
+
+  const graph = new ForceGraph3D(container)
+    .nodeId('id')
+    .nodeLabel((n) => n.label)
+    .nodeVal((n) => n.val)
