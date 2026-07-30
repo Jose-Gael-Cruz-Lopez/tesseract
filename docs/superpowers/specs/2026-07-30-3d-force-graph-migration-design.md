@@ -138,3 +138,23 @@ Theme awareness is explicitly retained; dropping it would be a visible regressio
 | `src/globe/nodes.js` | 91 |
 | **Total** | **1233** |
 
+`src/styles/globe.css` shrinks to a much smaller `graph.css` — most of its rules style decorative
+chrome (equator ring, star field, ambient dust, particle streams, tesseract core, year label)
+that the stock look does not have.
+
+## Packaging
+
+`3d-force-graph@1.80.0` declares `three: ">=0.179 <1"` as a **regular dependency** (not a peer).
+The repo pins `three@0.185.1`, which satisfies that range and is the current latest, so npm
+hoists to the single root copy rather than nesting a second one. `three-forcegraph` requires
+`three >=0.118.3` — also satisfied.
+
+`vite.config.js` already carries `resolve.dedupe: ['three']` with a comment naming
+`3d-force-graph` specifically, so the bundle-time guarantee against two copies of three is
+already in place. **No version bump is required.**
+
+## Testing
+
+**Ported** — behaviour that outlives the sphere:
+
+- deterministic rebuild (same input → same output)
