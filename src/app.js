@@ -78,3 +78,23 @@ export function mountApp(root, { onLogOut } = {}) {
     store,
     auth,
     mode: () => mode,
+    devAvailable: () => store.isDevAvailable(),
+    currentPageId: () => currentId,
+
+    // ---- Knowledge mode page routing ----
+    openPage(id) {
+      const page = store.getPage(id);
+      if (!page || page.deleted) return;
+      currentId = id;
+      editor.open(id);
+      topbar.setPage(page);
+      sidebar.setActivePage && sidebar.setActivePage(id);
+      globe.focusPage(id);
+      if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+    },
+    closePage() {
+      if (currentId == null) return;
+      currentId = null;
+      editor.close();
+      comments.close();
+      topbar.setPage(null);
