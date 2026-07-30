@@ -278,3 +278,19 @@ export function mountApp(root, { onLogOut } = {}) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       ctx.openSearch();
+      return;
+    }
+    if (e.key === '/' && !inEditableFocus() && !overlayOpen()) {
+      e.preventDefault();
+      ctx.openSearch();
+      return;
+    }
+    if (e.key === 'Escape' && !overlayOpen() && currentId != null) {
+      e.preventDefault();
+      ctx.goHome();
+    }
+  }
+  document.addEventListener('keydown', onKeydown);
+
+  return { ctx, get sidebar() { return sidebar; }, topbar, editor, comments, get globe() { return globe; } };
+}
