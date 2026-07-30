@@ -69,23 +69,3 @@ export function buildTesseract() {
   function tick(dt) {
     // whole group spins about the sphere center
     group.rotation.x += 0.03 * dt;
-    group.rotation.y += 0.09 * dt;
-    group.rotation.z += 0.02 * dt;
-    // each cube counter-rotates at its own pace
-    solid.rotation.x += 0.35 * dt;
-    solid.rotation.y += 0.5 * dt;
-    wireA.rotation.x -= 0.22 * dt;
-    wireA.rotation.z += 0.3 * dt;
-    wireB.rotation.y += 0.16 * dt;
-    wireB.rotation.x += 0.1 * dt;
-    shells[0].rotation.y += 0.12 * dt;
-    shells[0].rotation.x += 0.05 * dt;
-    shells[1].rotation.z -= 0.08 * dt;
-    shells[1].rotation.y -= 0.05 * dt;
-    shells[2].rotation.x += 0.04 * dt;
-    shells[2].rotation.z += 0.03 * dt;
-  }
-
-  // parts ordered inside-out by size, for a one-by-one intro reveal.
-  return { group, tick, parts: [solid, wireA, shells[0], wireB, shells[1], shells[2]] };
-}
