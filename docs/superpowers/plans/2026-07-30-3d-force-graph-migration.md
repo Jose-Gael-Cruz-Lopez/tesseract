@@ -578,3 +578,23 @@ export function initGraph(container, hooks = {}, provider = null) {
     graph.linkColor(() => THEMES[theme].link);
   }
   document.addEventListener('mnemosphere:themechange', onThemeChange);
+
+  /* ---------- sizing ---------- */
+  const resize = () => {
+    graph.width(container.clientWidth || 800).height(container.clientHeight || 600);
+  };
+  let ro = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(resize);
+    ro.observe(container);
+  }
+  window.addEventListener('resize', resize);
+
+  /* ---------- public handle ---------- */
+  let visible = true;
+
+  function focusPage(id) {
+    const node = graph.graphData().nodes.find((n) => n.id === id);
+    if (node) focusNode(node);
+  }
+
