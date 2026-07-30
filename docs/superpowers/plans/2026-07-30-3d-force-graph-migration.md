@@ -758,3 +758,23 @@ git add -A
 git commit -m "feat: render both modes with 3d-force-graph; delete the globe"
 ```
 
+---
+
+### Task 6: Verify in a real browser
+
+**Files:** none — this task changes no code. If it finds a defect, fix it with a test first.
+
+**Interfaces:**
+- Consumes: the fully wired app from Task 5.
+
+The renderer has no automated coverage by design (it needs WebGL). This task is the compensating control, and the contract's five methods are the checklist.
+
+- [ ] **Step 1: Build and serve the fused app**
+
+```bash
+cd canopy && npm run dev
+```
+
+Serves the built UI at `http://localhost:8787/`. Note `DEV_LOGIN` in `canopy/.dev.vars` auto-authenticates, so the app boots straight into Developer mode.
+
+- [ ] **Step 2: Verify Developer mode**
