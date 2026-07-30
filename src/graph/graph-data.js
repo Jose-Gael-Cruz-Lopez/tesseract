@@ -38,3 +38,23 @@ export function hashId(str) {
 
 // Radius of the shell the simulation starts from. Not a constraint — the force
 // layout is free to move nodes anywhere from here.
+const SEED_RADIUS = 120;
+
+/**
+ * @param {Array} pages flat page records ({id, parentId, deleted, title, ...})
+ * @returns {{nodes: Array, links: Array}}
+ */
+export function buildGraphFromPages(pages) {
+  const alive = (pages || []).filter((p) => p && !p.deleted);
+  const liveIds = new Set(alive.map((p) => p.id));
+
+  // A page is a hub when it has no REACHABLE parent: either genuinely
+  // top-level, or its parent was deleted. Without the second case a live child
+  // of a deleted parent would emit a link to a node that does not exist.
+  const isHub = (p) => p.parentId == null || !liveIds.has(p.parentId);
+
+  const nodes = alive.map((page) => {
+    const seed = hashId(page.id);
+    const rng = mulberry32(seed);
+    // Uniform point on a sphere, consumed in a fixed order so the mapping from
+    // id -> position is total and stable.
