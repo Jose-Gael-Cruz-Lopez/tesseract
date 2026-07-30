@@ -78,3 +78,23 @@ git commit -m "build: add 3d-force-graph (three stays pinned at 0.185.1)"
   - `hashId(str) → uint32`
   - `PALETTE` — array of 7 hex color strings
 
+Task 3 and Task 4 both import `buildGraphFromPages` from this module.
+
+**Key rule (do not deviate):** a node is a `hub` when it has no *reachable* parent — that is, `parentId == null` **or** the parent is not among the live pages. This is what prevents orphan links when a parent is deleted but a child is not, and it means every node is either a hub or has exactly one link to a live parent.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/graph-data.test.js`:
+
+```js
+// @vitest-environment happy-dom
+import { test, expect } from 'vitest';
+import { buildGraphFromPages, hashId, mulberry32, PALETTE } from '../src/graph/graph-data.js';
+
+const P = (id, parentId = null, extra = {}) => ({ id, parentId, title: id, ...extra });
+
+test('every non-deleted page becomes exactly one node', () => {
+  const { nodes } = buildGraphFromPages([P('a'), P('b'), P('c', 'a')]);
+  expect(nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'c']);
+});
+
