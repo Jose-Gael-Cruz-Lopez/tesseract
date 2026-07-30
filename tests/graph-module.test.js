@@ -38,3 +38,23 @@ test('exposes initGraph and re-exports the builder', async () => {
 // `hooks` and `provider` are optional (they carry defaults, so Function.length
 // is 1 — asserting on that would test JS semantics, not our contract). What
 // matters is that a container-only call still yields a working handle, since
+// that is the shape Knowledge mode uses.
+test('hooks and provider are genuinely optional', async () => {
+  vi.resetModules();
+  const { inst } = makeStub();
+  vi.doMock('3d-force-graph', () => ({ default: function () { return inst; } }));
+
+  const { initGraph } = await import('../src/graph/graph.js');
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+
+  const handle = initGraph(el);
+  for (const method of REQUIRED) expect(typeof handle[method]).toBe('function');
+  handle.dispose();
+
+  vi.doUnmock('3d-force-graph');
+  vi.resetModules();
+});
+
+test('the handle carries all five contract methods, and disposal is safe', async () => {
+  vi.resetModules();
