@@ -22,23 +22,3 @@ export { buildGraphFromPages };
  */
 export function initGlobe(container, hooks = {}, provider = null) {
   const onOpenPage = hooks.onOpenPage || (() => {});
-  const onHubFocus = hooks.onHubFocus || (() => {});
-
-  // Match the reference's r128 color look: no sRGB<->linear conversion, raw
-  // output. (three r152+ enables color management by default.)
-  THREE.ColorManagement.enabled = false;
-
-  // Decorative-only RNG (streams, dust, stars, tether jitter, pulse phases).
-  // Cluster layout randomness lives in globe-data.js, keyed by page id.
-  const rand = mulberry32(42);
-
-  const R = GLOBE_R;
-  const paletteHex = [0xffd166, 0xffb454, 0xff5d8f, 0xff2d55, 0xc8b6ff, 0xe8ecff, 0x86d1ff];
-
-  /* ---------- chrome elements inside the container ---------- */
-  container.classList.add('gl-stage');
-  const mkDiv = (cls, text) => {
-    const d = document.createElement('div');
-    d.className = cls;
-    if (text) d.textContent = text;
-    container.appendChild(d);
