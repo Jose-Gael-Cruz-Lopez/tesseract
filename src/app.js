@@ -138,3 +138,23 @@ export function mountApp(root, { onLogOut } = {}) {
     },
     refreshDev() { if (mode === 'developer') remountMode(); },
 
+    // ---- Developer hub dimension (which /r/:owner/:repo the sphere reads) ----
+    devHub: () => store.getDevHub(),
+    devHubs: () => devHubs,
+    setDevHub(repo) {
+      if (repo === store.getDevHub()) return;
+      store.setDevHub(repo);
+      if (mode === 'developer') remountMode();
+    },
+
+    openSearch: () => openSearch(ctx),
+    openSettings: (panel) => openSettings(ctx, panel),
+    openUpdates: (anchor) => openUpdates(anchor, ctx),
+    openTemplates: () => openTemplates(ctx),
+    openImport: () => openImport(ctx),
+    openTeamspace: () => openTeamspace(ctx),
+    openTrash: (anchor) => openTrash(anchor, ctx),
+    openShare: (anchor, pageId) => openShare(anchor, pageId ?? currentId, ctx),
+    toggleComments: (pageId) => comments.toggle(pageId ?? currentId),
+
+    async logOut() {
