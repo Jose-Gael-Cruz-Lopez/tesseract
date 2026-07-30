@@ -962,23 +962,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     if (window.__SBG__ === devHandle) delete window.__SBG__;
   }
 
-  // Dev handle for inspecting the scene from the console.
-  const devHandle = {
-    scene, camera, renderer, universe, clusters, hubs: hubSprites, yearLabel, raycaster, mouse,
-    grabbed: () => draggedHub && title(draggedHub.page),
-    select: (name) => select(clusters.find((c) => c.page.id === name || title(c.page) === name)),
-    rebuild: rebuildAll,
-    refresh: rebuildAll,   // developer globe: re-fetch + rebuild from the provider
-    // Scrub the intro reveal to an absolute time (seconds), freeze it there,
-    // and render one frame (so the running loop won't advance past it).
-    scrub: (tt) => { introElapsed = tt; applyReveal(tt); introDone = true; renderer.render(scene, camera); },
-    // Dev: step the leaf physics n times at a fixed dt and render (for testing).
-    stepPhysics: (n = 1, dt = 0.016) => { for (let s = 0; s < n; s++) simulateClusters(dt); renderer.render(scene, camera); },
-    // Snap the focus camera to its converged position and render (skips the ease).
-    snapFocus: () => {
-      if (selected) selected.hub.getWorldPosition(lookGoal); else lookGoal.set(0, 0, 0);
-      lookTarget.copy(lookGoal); curDist = camDist;
-      camera.position.copy(camDir).multiplyScalar(curDist).add(lookTarget);
-      camera.lookAt(lookTarget); renderer.render(scene, camera);
-    },
-    // Dev: drive the real drag clamp toward a requested radius; returns the result.
