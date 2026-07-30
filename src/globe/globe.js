@@ -422,23 +422,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
 
   // Store subscription: content edits are free (pnodes hold live page records,
   // so titles refresh on the next tooltip); structural changes rebuild the
-  // affected hub, and top-level changes rebuild the whole graph.
-  function onPagesEvent(detail) {
-    if (disposed) return;
-    const page = detail && detail.page;
-    if (!page) { rebuildAll(); return; }
-    if (page.parentId == null) {
-      if (detail.type === 'update' && clusters.some((c) => c.page.id === page.id)) return;
-      rebuildAll();
-      return;
-    }
-    if (detail.type === 'update') {
-      const holder = findClusterForPage(page.id);
-      const node = holder && holder.pnodes.find((n) => n.page.id === page.id);
-      if (node && node.parentPageId === page.parentId) return; // content-only edit
-      rebuildAll(); // re-parented (or previously unknown) page
-      return;
-    }
-    const hubPage = topAncestor(page);
-    const cluster = hubPage && clusters.find((c) => c.page.id === hubPage.id);
-    if (cluster) rebuildHub(cluster);
