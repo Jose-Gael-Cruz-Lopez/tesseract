@@ -262,23 +262,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     major.userData = { cluster: c, kind: 'maj' };
     minor.userData = { cluster: c, kind: 'min' };
 
-    c.major = major; c.minor = minor; c.lineSeg = lineSeg;
-    c.majorMat = major.material; c.minorMat = minor.material; c.lineMat = lineSeg.material;
-    // Keep the currently-eased opacity so nothing pops when geometry swaps.
-    const rv = c.revealFactor ?? 1;
-    c.majorMat.opacity = (c._majOp ?? c.baseMajOp) * rv;
-    c.minorMat.opacity = (c._minOp ?? c.baseMinOp) * rv;
-    c.lineMat.opacity = (c._lineOp ?? c.baseLineOp) * rv;
-  }
-
-  // Build one cluster (hub sprite + spring nodes + tether) from a graph spec.
-  function makeCluster(spec) {
-    const g = new THREE.Group();
-    const cachedPos = hubPosCache.get(spec.page.id);
-    if (cachedPos) g.position.copy(cachedPos);
-    else g.position.set(spec.dir[0], spec.dir[1], spec.dir[2]).multiplyScalar(spec.dist);
-
-    const hubMat = new THREE.SpriteMaterial({
-      map: dotTex, color: palette().hub, transparent: true, opacity: 0.95,
-      depthWrite: false, blending: palette().blending,
-    });
