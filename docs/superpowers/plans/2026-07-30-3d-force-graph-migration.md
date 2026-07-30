@@ -698,3 +698,23 @@ import { initGlobe } from './globe/globe.js';
 ```
 
 to:
+
+```js
+import { initGraph } from './graph/graph.js';
+```
+
+Then change the two call sites (in `mountKnowledge()` and `mountDevSphere()`) from `initGlobe(globeEl, {` to `initGraph(globeEl, {`. Leave the hook bodies, the `globe` variable name, and every `globe.focusPage(...)` / `globe.dispose()` call exactly as they are — the contract is unchanged, so they still work. Renaming the local variable is optional churn; do **not** do it in this task.
+
+- [ ] **Step 2: Swap the stylesheet import**
+
+In `src/main.js`, change:
+
+```js
+import './styles/globe.css';
+```
+
+to:
+
+```js
+import './styles/graph.css';
+```
