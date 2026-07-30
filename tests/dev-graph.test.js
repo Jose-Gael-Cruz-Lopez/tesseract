@@ -38,3 +38,12 @@ test('empty / missing sections yield hubs with zero items (no crash)', () => {
   expect(hubs(g)).toHaveLength(5);
   expect(g.links).toEqual([]);
 });
+
+test('every link resolves to a real node', () => {
+  const g = buildDevGraph({ docs: { docs: [{ slug: 'a', title: 'A' }] } });
+  const ids = new Set(g.nodes.map((n) => n.id));
+  for (const l of g.links) {
+    expect(ids.has(l.source)).toBe(true);
+    expect(ids.has(l.target)).toBe(true);
+  }
+});
