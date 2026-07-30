@@ -718,3 +718,23 @@ to:
 ```js
 import './styles/graph.css';
 ```
+
+- [ ] **Step 3: Delete the retired module and its obsolete tests**
+
+```bash
+git rm src/globe/globe.js src/globe/globe-data.js src/globe/nodes.js src/styles/globe.css tests/globe-data.test.js
+```
+
+`tests/globe-data.test.js` goes because four of its seven tests assert sphere math that no longer exists (fibonacci envelope, leaf-offset budget, palette accent by hub index, the 3-level cap). Its three surviving behaviours — deterministic rebuild, id-keyed not order-keyed, deleted-excluded — were re-expressed against the new builder in Task 2 and must already be passing there.
+
+- [ ] **Step 4: Prove nothing references the globe any more**
+
+```bash
+grep -rn "globe/globe\|initGlobe\|globe-data\|globe.css" src tests
+```
+
+Expected: **no output.** If anything matches, fix it before continuing. (`globeEl` and the local `globe` variable inside `app.js` are fine — they do not match these patterns.)
+
+- [ ] **Step 5: Run the whole suite**
+
+```bash
