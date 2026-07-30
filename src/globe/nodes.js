@@ -49,23 +49,3 @@ export function buildTesseract() {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(s, s, s),
       new THREE.MeshBasicMaterial({
-        color: 0xcabfd6,
-        transparent: true,
-        opacity: shellOps[i],
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
-    m.rotation.set(
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-      Math.random() * Math.PI
-    );
-    return m;
-  });
-
-  group.add(solid, wireA, wireB, ...shells);
-
-  function tick(dt) {
-    // whole group spins about the sphere center
-    group.rotation.x += 0.03 * dt;
