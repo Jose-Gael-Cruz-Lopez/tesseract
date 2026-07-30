@@ -62,23 +62,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   // structure lines; dark mode keeps the original deep-space look.
   const GLOBE_THEMES = {
     dark: {
-      clear: 0x060310, blending: THREE.AdditiveBlending,
-      thin: 0xa9b0d6, thinOp: 0.14, equator: 0xdfe4ff, equatorOp: 0.5,
-      fan: 0x9aa0c8, fanOp: 0.06, clusterLine: 0xd6dbf5, hub: 0xfff3dd,
-    },
-    light: {
-      clear: 0xedeef5, blending: THREE.NormalBlending,
-      thin: 0x8087b0, thinOp: 0.55, equator: 0x515da6, equatorOp: 0.6,
-      fan: 0x8087b0, fanOp: 0.2, clusterLine: 0x8e95c6, hub: 0x474459,
-    },
-  };
-  let currentTheme = (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
-  const palette = () => GLOBE_THEMES[currentTheme];
-  container.classList.toggle('gl-light', currentTheme === 'light');
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // raw output, like r128
-  renderer.setClearColor(palette().clear, 1);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(width(), height());
-  container.appendChild(renderer.domElement);
