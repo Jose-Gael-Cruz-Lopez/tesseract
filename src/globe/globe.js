@@ -522,23 +522,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   reg(equatorMat, 'globe');
   reg(fanMat, 'globe');
   ringGroup.traverse((o) => { if (o.material) reg(o.material, 'globe'); });
-  streamMats.forEach((m) => reg(m, 'ambiance'));
-  reg(ambientParticles.material, 'ambiance');
-  reg(bgStars.material, 'ambiance');
-  reg(yearLabel.material, 'ambiance');
-
-  // The squares (tesseract cubes) appear one by one, inside-out.
-  const SQUARES_START = 0.3, SQUARES_STAGGER = 0.26, SQUARES_PART_DUR = 0.55;
-  const cubeParts = tesseract.parts.map((obj, i) => ({
-    obj, mat: obj.material, target: obj.material.opacity,
-    start: SQUARES_START + i * SQUARES_STAGGER,
-  }));
-  const SQUARES_END = SQUARES_START + (tesseract.parts.length - 1) * SQUARES_STAGGER + SQUARES_PART_DUR;
-
-  const BEATS = {
-    globe: { start: SQUARES_END - 0.1, dur: 1.9 },
-    ambiance: { start: 4.9, dur: 2.2 },
-  };
-  const NODE_START = 4.0, NODE_STAGGER = 0.16, NODE_DUR = 1.0;
-  const INTRO_END = 7.3;
-  const clamp01 = (x) => Math.min(1, Math.max(0, x));
