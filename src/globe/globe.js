@@ -602,23 +602,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
 
   // Camera focus: clicking a hub flies the look-at + distance to it.
   const FOCUS_DIST = 13;
-  const lookTarget = new THREE.Vector3(0, 0, 0);
-  const lookGoal = new THREE.Vector3(0, 0, 0);
-  let preFocusDist = camDist;
-
-  // Hub dragging: grab a glowing hub and slide its whole cluster around inside
-  // the globe. The hub can't cross into the central cubes or leave the shell.
-  let draggedHub = null;
-  const dragPlane = new THREE.Plane();
-  const dragHit = new THREE.Vector3();
-  const dragNormal = new THREE.Vector3();
-  const CUBE_RADIUS = 3.6; // hub can't get closer than this (blocked by the cubes)
-  const GLOBE_INNER = R * 0.97; // the cluster's farthest node stays inside the shell
-
-  function updateMouse(cx, cy) {
-    const r = canvas.getBoundingClientRect();
-    mouse.x = ((cx - r.left) / (r.width || 1)) * 2 - 1;
-    mouse.y = -((cy - r.top) / (r.height || 1)) * 2 + 1;
-    tooltipXY = [cx - r.left, cy - r.top];
-  }
-  function maybeGrabHub() {
