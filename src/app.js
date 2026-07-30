@@ -98,3 +98,23 @@ export function mountApp(root, { onLogOut } = {}) {
       editor.close();
       comments.close();
       topbar.setPage(null);
+      sidebar.setActivePage && sidebar.setActivePage(null);
+      globe.clearFocus();
+      history.replaceState(null, '', location.pathname + location.search);
+    },
+
+    // ---- Developer mode item viewing (read-only) ----
+    openDevItem(node) {
+      if (node.devKind === 'category') { globe.focusPage(node.id); return; }
+      currentId = 'dev:' + node.id;
+      mountDevPage(pageEl, node);
+      globe.focusPage(node.id);
+    },
+    closeDevPage() {
+      currentId = null;
+      pageEl.classList.remove('show');
+      pageEl.setAttribute('aria-hidden', 'true');
+      globe.clearFocus();
+    },
+
+    goHome() {
