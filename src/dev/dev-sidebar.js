@@ -98,3 +98,17 @@ export function mountDevSidebar(container, ctx, graph) {
     header.appendChild(el('span', 'dev-sb-group-title', escapeText(hub.page.title)));
     header.appendChild(el('span', 'dev-sb-count', String(hub.leaves.length)));
     group.appendChild(header);
+
+    for (const leaf of hub.leaves) {
+      const row = el('button', 'dev-sb-row');
+      row.type = 'button';
+      row.appendChild(el('span', 'dev-sb-row-title', escapeText(leaf.page.title)));
+      row.addEventListener('click', () => ctx.openDevItem(leaf.page));
+      group.appendChild(row);
+    }
+    root.appendChild(group);
+  }
+
+  container.appendChild(root);
+  return { root };
+}
