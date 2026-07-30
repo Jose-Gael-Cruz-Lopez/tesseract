@@ -778,3 +778,23 @@ cd canopy && npm run dev
 Serves the built UI at `http://localhost:8787/`. Note `DEV_LOGIN` in `canopy/.dev.vars` auto-authenticates, so the app boots straight into Developer mode.
 
 - [ ] **Step 2: Verify Developer mode**
+
+Open `http://localhost:8787/` and confirm:
+- the force graph renders, with five category hubs visible
+- nodes settle rather than drifting forever
+- clicking a **hub** focuses the camera on it and does not open a page
+- clicking an **item** node opens the corresponding dev item panel
+- dragging orbits the camera; scroll zooms
+- the browser console has **no** errors (especially none mentioning "THREE" or multiple instances)
+
+- [ ] **Step 3: Verify Knowledge mode**
+
+Switch to Knowledge mode from the sidebar workspace menu, then confirm:
+- the graph rebuilds with the workspace's pages
+- creating a page adds a node **without a full-page reload**
+- clicking a leaf opens that page
+- deleting a page removes its node and leaves no dangling link
+- a page nested 4+ levels deep **is visible** (this is the bug the migration fixes — create one to check)
+
+- [ ] **Step 4: Verify the theme and lifecycle paths**
+
