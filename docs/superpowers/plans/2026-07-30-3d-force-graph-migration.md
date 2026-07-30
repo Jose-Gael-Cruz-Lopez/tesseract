@@ -798,3 +798,19 @@ Switch to Knowledge mode from the sidebar workspace menu, then confirm:
 
 - [ ] **Step 4: Verify the theme and lifecycle paths**
 
+- toggle light/dark: the background and link colors repaint immediately
+- reload the page: the layout settles the same way it did before (id-seeded determinism)
+- switch modes back and forth several times: no leaked canvases (`document.querySelectorAll('canvas').length` stays at 1), and no growth in listener count
+
+- [ ] **Step 5: Stop the server and commit any fixes**
+
+If Steps 2-4 found nothing, there is nothing to commit and the migration is done.
+
+---
+
+## Notes for the implementer
+
+- **Do not bump three.** If something looks like a three.js version problem, report it rather than upgrading — the pin is deliberate and the dedupe is already configured.
+- **`new ForceGraph3D(el)`.** If you find yourself writing `ForceGraph3D()(el)`, you are working from outdated documentation.
+- **The contract is the boundary.** If a change seems to require editing `sidebar.js`, `topbar.js`, `dev-sidebar.js` or `dev-hub.js`, stop — that means the contract drifted, which this plan explicitly avoids.
+- **Uncommitted work exists** in `src/ui/landing.js` and `src/styles/landing.css` (removing a landing sound toggle). It is unrelated to this migration. Do not commit, revert, or otherwise touch it.
