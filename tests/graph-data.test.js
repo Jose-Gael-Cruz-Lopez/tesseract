@@ -38,3 +38,23 @@ test('a child of a deleted parent becomes a hub, with no dangling link', () => {
   const { nodes, links } = buildGraphFromPages([
     P('gone', null, { deleted: true }),
     P('orphan', 'gone'),
+  ]);
+  expect(nodes.map((n) => n.id)).toEqual(['orphan']);
+  expect(nodes[0].kind).toBe('hub');
+  expect(links).toEqual([]);
+});
+
+test('link integrity: every source and target resolves to a real node', () => {
+  const pages = [P('a'), P('b', 'a'), P('c', 'b'), P('d')];
+  const { nodes, links } = buildGraphFromPages(pages);
+  const ids = new Set(nodes.map((n) => n.id));
+  for (const l of links) {
+    expect(ids.has(l.source)).toBe(true);
+    expect(ids.has(l.target)).toBe(true);
+  }
+});
+
+test('deleted pages are excluded at every level', () => {
+  const pages = [P('a'), P('b', 'a', { deleted: true }), P('c', 'a')];
+  const { nodes } = buildGraphFromPages(pages);
+  expect(nodes.map((n) => n.id).sort()).toEqual(['a', 'c']);
