@@ -58,3 +58,23 @@ function showLanding(root) {
 
 async function boot() {
   initTheme();
+  const root = document.getElementById('root');
+
+  // Preview the intro landing on demand, regardless of session: /?landing
+  if (new URLSearchParams(location.search).has('landing')) {
+    showLanding(root);
+    return;
+  }
+
+  // A real Supabase (Google) session takes precedence over the mock flow.
+  // getSupabaseSession() awaits URL detection, so it also resolves the session
+  // right after the OAuth redirect back from Google.
+  if (supabaseEnabled) {
+    const sbSession = await getSupabaseSession();
+    if (sbSession) {
+      setSession(profileFromSession(sbSession));
+      history.replaceState(null, '', location.pathname); // drop the OAuth token/code from the URL
+      startApp(root);
+      return;
+    }
+  }
