@@ -38,3 +38,13 @@ export function buildDevGraph({ docs, roadmap, feed, triage, dashboard } = {}) {
     push('cat:triage', 'triage:' + i, t.raw || t.reason, 'triage', t.id ?? i);
   });
   for (const pr of dashboard?.previousActivity || []) {
+    push('cat:mywork', 'pr:' + pr.number, pr.displayTitle || pr.title, 'pr', pr.number);
+  }
+  for (const td of dashboard?.todo || []) {
+    push('cat:mywork', 'todo:' + td.number, td.displayTitle || td.title, 'todo', td.number);
+  }
+
+  return buildGraphFromPages(pages);
+}
+
+export { CATEGORIES };
