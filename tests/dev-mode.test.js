@@ -38,3 +38,23 @@ beforeEach(() => {
   });
 });
 
+test('devProvider.getGraph fetches + maps to the five hubs', async () => {
+  const graph = await devProvider(fakeApi()).getGraph();
+  const hubs = hubGroups(graph);
+  expect(hubs.map((h) => h.page.title)).toEqual(['Docs', 'Roadmap', 'Feed', 'Triage', 'My Work']);
+  expect(hubs[0].leaves.length).toBe(1); // one doc
+});
+
+test('a failed surface is omitted, not fatal', async () => {
+  const api = fakeApi({ getFeed: async () => ({ ok: false, status: 401 }) });
+  const hubs = hubGroups(await devProvider(api).getGraph());
+  expect(hubs.find((h) => h.page.title === 'Feed').leaves.length).toBe(0);
+  expect(hubs.find((h) => h.page.title === 'Docs').leaves.length).toBe(1);
+});
+
+// Regression: the dev node index is what turns a graph click into an open-item
+// call. It was silently empty after the {hubs} -> {nodes, links} change, so
+// every Developer-mode item click became a no-op with no test noticing.
+test('every node exposes page.id, so the dev click index can be built', async () => {
+  const graph = await devProvider(fakeApi()).getGraph();
+  const byId = new Map(graph.nodes.map((n) => [n.page.id, n.page]));
