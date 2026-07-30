@@ -138,3 +138,23 @@ test('hub picker error state offers retry instead of connect guidance', () => {
   expect(container.querySelector('h2').textContent).toBe('Hubs unavailable');
   expect(container.querySelector('.dev-hub-connect')).toBeNull();
   container.querySelector('.dev-hub-retry').click();
+  expect(onRetry).toHaveBeenCalled();
+});
+
+test('hubInstallUrl falls back to the GitHub installations page without an app slug', () => {
+  expect(hubInstallUrl(null)).toBe('https://github.com/settings/installations');
+  expect(hubInstallUrl('canopy-app')).toBe('https://github.com/apps/canopy-app/installations/new');
+});
+
+test('shouldClearDevHub clears only when a successful non-empty list excludes the hub', () => {
+  const okList = (repos) => ({ ok: true, status: 200, data: { repos } });
+  // Positively excluded by a real list → clear.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/other' }]), 'acme/widgets')).toBe(true);
+  // Still present in the list → keep.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/widgets' }]), 'acme/widgets')).toBe(false);
+  // No hub selected → nothing to clear.
+  expect(shouldClearDevHub(okList([{ repo: 'acme/other' }]), '')).toBe(false);
+});
+
+test('shouldClearDevHub never wipes the hub on a degraded or failed /me/repos', () => {
+  // canopy's /me/repos returns 200 { repos: [] } on EVERY server-side failure
