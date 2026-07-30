@@ -902,23 +902,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     scene.traverse((o) => {
       const m = o.material;
       if (!m) return;
-      if (o.isPoints) { m.blending = P.blending; m.needsUpdate = true; }
-      else if (o.isSprite) {
-        m.blending = P.blending; m.needsUpdate = true;
-        if (o.userData.cluster) m.color.setHex(P.hub); // hub sprites (not pulses / label)
-      } else if (o.isLineSegments && m !== fanMat) {
-        m.color.setHex(P.clusterLine); // per-cluster connector lines
-      }
-    });
-    container.classList.toggle('gl-light', currentTheme === 'light');
-    if (!rafId) renderer.render(scene, camera); // repaint even if the loop is paused
-  }
-  function onThemeChange(e) {
-    applyGlobeTheme(e.detail && e.detail.theme ? e.detail.theme : (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
-  }
-  document.addEventListener('mnemosphere:themechange', onThemeChange);
-
-  /* ---------- public handle ---------- */
-  function focusPage(id) {
-    const c = findClusterForPage(id);
-    if (c && c !== selected) select(c, false);
