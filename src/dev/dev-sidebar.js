@@ -78,3 +78,23 @@ export function mountDevSidebar(container, ctx, graph) {
           pop.appendChild(el('div', 'sb-menu-label', 'Switch hub'));
           // A failed /me/repos leaves the list empty — still show the active hub.
           const hubs = (ctx.devHubs && ctx.devHubs()) || [];
+          for (const r of hubs.length ? hubs : [{ repo: activeHub }]) {
+            const active = r.repo === activeHub;
+            const item = el('button', 'sb-menu-item' + (active ? ' is-active' : ''), (active ? '✓ ' : '') + escapeText(r.repo));
+            item.type = 'button';
+            item.addEventListener('click', () => { close(); ctx.setDevHub && ctx.setDevHub(r.repo); });
+            pop.appendChild(item);
+          }
+        },
+      });
+    });
+    root.appendChild(hubBtn);
+  }
+
+  for (const hub of hubGroups(graph)) {
+    const group = el('div', 'dev-sb-group');
+    const header = el('div', 'dev-sb-group-head');
+    header.appendChild(el('span', 'dev-sb-icon', hub.page.icon || ''));
+    header.appendChild(el('span', 'dev-sb-group-title', escapeText(hub.page.title)));
+    header.appendChild(el('span', 'dev-sb-count', String(hub.leaves.length)));
+    group.appendChild(header);
