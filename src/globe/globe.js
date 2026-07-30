@@ -82,23 +82,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(width(), height());
   container.appendChild(renderer.domElement);
-  const canvas = renderer.domElement;
-  canvas.style.touchAction = 'none';
-  canvas.style.cursor = 'grab';
-
-  const vignette = mkDiv('gl-vignette');
-  const tooltip = mkDiv('gl-tooltip');
-  const hint = mkDiv('gl-hint', 'drag to rotate · scroll to zoom · click a hub or a dot');
-
-  const universe = new THREE.Group();
-  scene.add(universe);
-
-  // Lights for the lit tesseract cube (everything else is MeshBasic / points /
-  // sprites / lines and ignores them).
-  scene.add(new THREE.AmbientLight(0xffffff, 2.1));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
-  keyLight.position.set(1, 1.2, 1);
-  scene.add(keyLight);
-
-  const dotTex = makeDotTexture();
-
