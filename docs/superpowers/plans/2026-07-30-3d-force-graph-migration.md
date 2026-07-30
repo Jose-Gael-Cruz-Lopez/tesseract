@@ -258,3 +258,23 @@ export function buildGraphFromPages(pages) {
   // A page is a hub when it has no REACHABLE parent: either genuinely
   // top-level, or its parent was deleted. Without the second case a live child
   // of a deleted parent would emit a link to a node that does not exist.
+  const isHub = (p) => p.parentId == null || !liveIds.has(p.parentId);
+
+  const nodes = alive.map((page) => {
+    const seed = hashId(page.id);
+    const rng = mulberry32(seed);
+    // Uniform point on a sphere, consumed in a fixed order so the mapping from
+    // id -> position is total and stable.
+    const u = rng() * 2 - 1;
+    const theta = rng() * Math.PI * 2;
+    const r = Math.sqrt(Math.max(0, 1 - u * u));
+    const hub = isHub(page);
+    return {
+      id: page.id,
+      kind: hub ? 'hub' : 'leaf',
+      page,
+      label: page.title || '(untitled)',
+      color: PALETTE[seed % PALETTE.length],
+      val: hub ? 8 : 3,
+      x: Math.cos(theta) * r * SEED_RADIUS,
+      y: u * SEED_RADIUS,
