@@ -18,3 +18,23 @@ test('parent -> child edges become links', () => {
 // invisible. The force layout has no such limit, so depth 4+ must render.
 test('the full tree renders at any depth (no 3-level cap)', () => {
   const pages = [P('l1'), P('l2', 'l1'), P('l3', 'l2'), P('l4', 'l3'), P('l5', 'l4')];
+  const { nodes, links } = buildGraphFromPages(pages);
+  expect(nodes).toHaveLength(5);
+  expect(links).toHaveLength(4);
+  expect(links).toContainEqual({ source: 'l4', target: 'l5' });
+});
+
+test('top-level pages are hubs, everything else is a leaf', () => {
+  const { nodes } = buildGraphFromPages([P('a'), P('c', 'a')]);
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  expect(byId.a.kind).toBe('hub');
+  expect(byId.c.kind).toBe('leaf');
+});
+
+// Orphan protection: a live child of a DELETED parent must not emit a link to a
+// node that does not exist, or the force engine will throw on an unresolvable
+// link target.
+test('a child of a deleted parent becomes a hub, with no dangling link', () => {
+  const { nodes, links } = buildGraphFromPages([
+    P('gone', null, { deleted: true }),
+    P('orphan', 'gone'),
