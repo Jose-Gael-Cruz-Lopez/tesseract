@@ -162,23 +162,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
   const fanMat = new THREE.LineBasicMaterial({ color: palette().fan, transparent: true, opacity: palette().fanOp });
   universe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fanPts), fanMat));
 
-  /* ---------- tesseract core ---------- */
-  const core = new THREE.Group();
-  universe.add(core);
-  const tesseract = buildTesseract();
-  core.add(tesseract.group);
-
-  /* ---------- crimson orbital rings ---------- */
-  const ringGroup = new THREE.Group();
-  universe.add(ringGroup);
-  function makeRing(radius, color, op, tiltX, tiltY, tube) {
-    const m = new THREE.Mesh(
-      new THREE.TorusGeometry(radius, tube, 8, 220),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op })
-    );
-    m.rotation.set(Math.PI / 2 + tiltX, tiltY, 0);
-    return m;
-  }
-  ringGroup.add(makeRing(4.3, 0xe0356b, 0.75, 0.16, 0.4, 0.028));
-  ringGroup.add(makeRing(5.6, 0xc22f5f, 0.5, -0.1, -0.7, 0.022));
-  ringGroup.add(makeRing(7.6, 0x93264a, 0.4, 0.24, 1.4, 0.02));
