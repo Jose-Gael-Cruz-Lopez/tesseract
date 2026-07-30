@@ -822,23 +822,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
         universe.rotation.x = THREE.MathUtils.clamp(universe.rotation.x + velX, -0.85, 0.85);
       }
       velY *= 0.94; velX *= 0.94;
-    }
-
-    // Focus: ease the look-at toward the selected hub's world position, or
-    // back to the globe center when released.
-    if (selected) selected.hub.getWorldPosition(lookGoal);
-    else lookGoal.set(0, 0, 0);
-    lookTarget.lerp(lookGoal, 0.08);
-
-    curDist += (camDist - curDist) * 0.07;
-    camera.position.copy(camDir).multiplyScalar(curDist).add(lookTarget);
-    camera.lookAt(lookTarget);
-
-    tesseract.tick(dt);
-    ringGroup.rotation.y += 0.06 * dt;
-
-    simulateClusters(dt);
-
-    clusters.forEach((c) => {
-      // --- opacity / reveal / hub scale ---
-      const f = selected ? (c === selected ? 1 : 0.1) : 1;
