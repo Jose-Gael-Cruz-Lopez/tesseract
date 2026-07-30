@@ -278,3 +278,23 @@ export function buildGraphFromPages(pages) {
       val: hub ? 8 : 3,
       x: Math.cos(theta) * r * SEED_RADIUS,
       y: u * SEED_RADIUS,
+      z: Math.sin(theta) * r * SEED_RADIUS,
+    };
+  });
+
+  const links = [];
+  for (const page of alive) {
+    if (!isHub(page)) links.push({ source: page.parentId, target: page.id });
+  }
+
+  return { nodes, links };
+}
+```
+
+- [ ] **Step 4: Run the tests and watch them pass**
+
+```bash
+npx vitest run tests/graph-data.test.js
+```
+
+Expected: PASS, 12 tests.
