@@ -76,23 +76,3 @@ const golden = Math.PI * (3 - Math.sqrt(5));
  * the globe shell (|hub| + |offset| <= 0.94·R).
  */
 export function buildGraphFromPages(pages) {
-  const alive = (pages || []).filter((p) => p && !p.deleted);
-  const byParent = new Map();
-  for (const p of alive) {
-    const key = p.parentId ?? null;
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key).push(p);
-  }
-  const tops = byParent.get(null) || [];
-  const n = tops.length;
-
-  const hubs = tops.map((page, i) => {
-    const rng = mulberry32(hashId(page.id));
-
-    // Fibonacci sphere base direction (index-spread), id-seeded jitter —
-    // ported from the old cluster placement.
-    const yy = 1 - ((i + 0.5) * 2) / n;
-    const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
-    const th = golden * i;
-    const j = randDir(rng);
-    const dir = setLength(
