@@ -58,3 +58,23 @@ test('hooks and provider are genuinely optional', async () => {
 
 test('the handle carries all five contract methods, and disposal is safe', async () => {
   vi.resetModules();
+  const { inst, calls } = makeStub();
+  vi.doMock('3d-force-graph', () => ({ default: function () { return inst; } }));
+
+  const { initGraph } = await import('../src/graph/graph.js');
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const handle = initGraph(el, {}, { getGraph: async () => ({ nodes: [], links: [] }) });
+
+  for (const method of REQUIRED) {
+    expect(typeof handle[method], `handle.${method} must be a function`).toBe('function');
+  }
+
+  // app.js disposes on mode switch AND on log out, so a double dispose is a real
+  // sequence, not a hypothetical.
+  expect(() => { handle.dispose(); handle.dispose(); }).not.toThrow();
+  expect(calls.destructor).toBe(1); // torn down exactly once
+
+  // After disposal the handle must be inert. Without the guard, setVisible(true)
+  // restarts an animation loop on a destroyed renderer.
+  expect(() => {
