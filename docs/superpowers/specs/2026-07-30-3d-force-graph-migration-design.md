@@ -178,3 +178,12 @@ three-level cap.
 there is no renderer harness in this repo. It will be verified against the running app in a real
 browser instead.
 
+## Risks
+
+1. **three.js duplication** — resolved above; verified against the actual published ranges rather
+   than assumed. Re-check if either package is upgraded.
+2. **Layout stability** — mitigated by id-seeded initial positions (§4), with the residual
+   perturbation-on-change limitation stated and accepted.
+3. **Renderer regressions are not caught by CI** — `graph.js` has no automated coverage, matching
+   the status quo for `globe.js`. Browser verification is the compensating control, and the
+   contract's five methods are the checklist to exercise.
