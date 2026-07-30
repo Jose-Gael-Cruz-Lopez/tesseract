@@ -118,3 +118,23 @@ test('distinct ids get distinct seeded positions (not all-zero)', () => {
 // could not fail for the case it is named after.
 test('link integrity holds when a mid-tree parent is deleted', () => {
   const pages = [P('a'), P('mid', 'a', { deleted: true }), P('deep', 'mid')];
+  const { nodes, links } = buildGraphFromPages(pages);
+  const ids = new Set(nodes.map((n) => n.id));
+  expect(ids).toEqual(new Set(['a', 'deep']));
+  for (const l of links) {
+    expect(ids.has(l.source)).toBe(true);
+    expect(ids.has(l.target)).toBe(true);
+  }
+});
+
+test('nodes carry the label, color and val the renderer binds', () => {
+  const { nodes } = buildGraphFromPages([P('a', null, { title: 'Alpha' }), P('b', 'a', { title: 'Beta' })]);
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  expect(byId.a.label).toBe('Alpha');
+  expect(byId.b.label).toBe('Beta');
+  expect(byId.a.color).toMatch(/^#[0-9a-f]{6}$/i);
+  expect(byId.a.val).toBeGreaterThan(byId.b.val); // hubs render larger than leaves
+});
+
+test('an untitled page still gets a label', () => {
+  const { nodes } = buildGraphFromPages([{ id: 'x', parentId: null }]);
