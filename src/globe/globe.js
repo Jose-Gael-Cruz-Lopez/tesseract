@@ -942,23 +942,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     if (disposed) return;
     disposed = true;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-    if (unsubscribeStore) unsubscribeStore();
-    document.removeEventListener('mnemosphere:themechange', onThemeChange);
-    if (ro) ro.disconnect();
-    window.removeEventListener('resize', resize);
-    window.removeEventListener('mousemove', onWinMove);
-    window.removeEventListener('mouseup', onUp);
-    window.removeEventListener('keydown', onKey);
-    scene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
-    });
-    renderer.dispose();
-    canvas.remove(); vignette.remove(); tooltip.remove(); hint.remove();
-    container.classList.remove('gl-stage');
-    if (window.__SBG__ === devHandle) delete window.__SBG__;
-  }
-
