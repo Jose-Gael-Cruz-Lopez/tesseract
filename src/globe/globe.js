@@ -722,23 +722,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
     for (const c of clusters) { targets.push(c.major, c.minor); }
     const hit = raycaster.intersectObjects(targets)[0];
     if (!hit) return null;
-    const { cluster, kind } = hit.object.userData;
-    const idxs = kind === 'maj' ? cluster.majIdx : cluster.minIdx;
-    const node = cluster.pnodes[idxs[hit.index]];
-    return node ? { cluster, node } : null;
-  }
-
-  const onClick = () => {
-    if (moved > 6) return;
-    const hub = pickHub();
-    if (hub) { select(hub); return; }
-    const dot = pickDot();
-    if (dot) { onOpenPage(dot.node.page.id); return; }
-    select(null); // empty space clears focus
-  };
-  canvas.addEventListener('click', onClick);
-
-  const onKey = (e) => {
-    if (e.key !== 'Escape' || disposed || !visible) return;
-    if (selected) select(selected); // toggle off -> fires onHubFocus(null)
-  };
