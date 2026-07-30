@@ -58,3 +58,23 @@ export function mountApp(root, { onLogOut } = {}) {
   const topbarEl = root.querySelector('#shell-topbar');
   const pageEl = root.querySelector('#shell-page');
   const commentsEl = root.querySelector('#shell-comments');
+  const globeEl = root.querySelector('#shell-globe');
+
+  // Developer mode requires an available canopy session; a persisted 'developer' from a
+  // prior GitHub login must not strand a Google/knowledge-only user in a broken sphere.
+  let mode = store.getMode();
+  if (mode === 'developer' && !store.isDevAvailable()) mode = 'knowledge';
+  let currentId = null;      // knowledge: open page id
+  let devNodesById = null;   // developer: leaf-node lookup for globe dot-clicks
+  let devHubs = [];          // developer: connected hubs from /me/repos (for the switcher)
+
+  let sidebar;
+  let topbar;
+  let editor;
+  let comments;
+  let globe;
+
+  const ctx = {
+    store,
+    auth,
+    mode: () => mode,
