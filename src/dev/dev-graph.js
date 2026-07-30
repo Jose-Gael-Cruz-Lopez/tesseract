@@ -18,3 +18,23 @@ const CATEGORIES = [
 // which may be missing. Robust to either the wrapped ({docs:[…]}) or bare-array
 // forms.
 export function buildDevGraph({ docs, roadmap, feed, triage, dashboard } = {}) {
+  const pages = CATEGORIES.map((c) => ({
+    id: c.id, parentId: null, title: c.title, icon: c.icon, devKind: 'category',
+  }));
+
+  const push = (catId, id, title, devKind, devRef) =>
+    pages.push({ id, parentId: catId, title: title || '(untitled)', devKind, devRef });
+
+  for (const d of docs?.docs || (Array.isArray(docs) ? docs : [])) {
+    push('cat:docs', 'doc:' + d.slug, d.title || d.slug, 'doc', d.slug);
+  }
+  for (const m of roadmap?.milestones || []) {
+    push('cat:roadmap', 'milestone:' + m.id, m.title, 'milestone', m.id);
+  }
+  (feed?.feed || (Array.isArray(feed) ? feed : [])).forEach((f, i) => {
+    push('cat:feed', 'feed:' + i, f.summary, 'feed', f.id ?? i);
+  });
+  (triage?.items || (Array.isArray(triage) ? triage : [])).forEach((t, i) => {
+    push('cat:triage', 'triage:' + i, t.raw || t.reason, 'triage', t.id ?? i);
+  });
+  for (const pr of dashboard?.previousActivity || []) {
