@@ -178,3 +178,20 @@ test('mountDevSidebarChrome keeps mode switch, settings, and log out reachable w
   const logOut = vi.fn();
   mountDevSidebarChrome(container, { setMode, openSettings, logOut });
 
+  const label = container.querySelector('.dev-sb-label');
+  expect(label).not.toBeNull();
+  label.click();
+  const items = [...document.querySelectorAll('.pop-root .sb-menu-item')];
+  expect(items.map((i) => i.textContent)).toEqual(['Knowledge', '✓ Developer', 'Developer settings', 'Log out']);
+  items[0].click();
+  expect(setMode).toHaveBeenCalledWith('knowledge');
+
+  label.click();
+  [...document.querySelectorAll('.pop-root .sb-menu-item')].find((i) => i.textContent === 'Developer settings').click();
+  expect(openSettings).toHaveBeenCalledWith('developer');
+
+  label.click();
+  [...document.querySelectorAll('.pop-root .sb-menu-item')].find((i) => i.textContent === 'Log out').click();
+  expect(logOut).toHaveBeenCalled();
+  document.body.innerHTML = '';
+});
