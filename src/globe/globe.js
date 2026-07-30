@@ -782,23 +782,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
         _force.copy(_anchor).sub(n.pos).multiplyScalar(SPRING_K * dt);
         n.vel.add(_force).multiplyScalar(Math.max(0, 1 - SPRING_DAMP * dt));
         n.pos.addScaledVector(n.vel, dt);
-        const r2 = n.pos.lengthSq(); // never let a node leave the globe
-        if (r2 > NODE_BOUND_SQ) { n.pos.multiplyScalar(NODE_BOUND / Math.sqrt(r2)); n.vel.multiplyScalar(0.4); }
-      }
-      const ma = c.major.geometry.attributes.position.array;
-      for (let j = 0; j < c.majIdx.length; j++) { const p = c.pnodes[c.majIdx[j]].pos; ma[j * 3] = p.x; ma[j * 3 + 1] = p.y; ma[j * 3 + 2] = p.z; }
-      c.major.geometry.attributes.position.needsUpdate = true;
-      const mi = c.minor.geometry.attributes.position.array;
-      for (let j = 0; j < c.minIdx.length; j++) { const p = c.pnodes[c.minIdx[j]].pos; mi[j * 3] = p.x; mi[j * 3 + 1] = p.y; mi[j * 3 + 2] = p.z; }
-      c.minor.geometry.attributes.position.needsUpdate = true;
-      const la = c.lineSeg.geometry.attributes.position.array;
-      for (let k = 0; k < c.pnodes.length; k++) {
-        const n = c.pnodes[k];
-        const from = n.parent < 0 ? hubPos : c.pnodes[n.parent].pos;
-        la[k * 6] = from.x; la[k * 6 + 1] = from.y; la[k * 6 + 2] = from.z;
-        la[k * 6 + 3] = n.pos.x; la[k * 6 + 4] = n.pos.y; la[k * 6 + 5] = n.pos.z;
-      }
-      c.lineSeg.geometry.attributes.position.needsUpdate = true;
-    });
-  }
-
