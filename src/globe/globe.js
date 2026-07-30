@@ -102,23 +102,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
 
   const dotTex = makeDotTexture();
 
-  function randDir() {
-    const v = new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1);
-    if (v.lengthSq() < 1e-4) v.set(1, 0, 0);
-    return v.normalize();
-  }
-
-  function makePoints(positions, colors, size, opacity) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      size, map: dotTex, vertexColors: true, transparent: true, opacity,
-      depthWrite: false, blending: palette().blending, sizeAttenuation: true,
-    });
-    return new THREE.Points(geo, mat);
-  }
-
-  /* ---------- globe wireframe ---------- */
-  const thinLine = new THREE.LineBasicMaterial({ color: palette().thin, transparent: true, opacity: palette().thinOp });
-
