@@ -402,23 +402,3 @@ export function initGlobe(container, hooks = {}, provider = null) {
       cluster.maxOffset = maxOff;
       rebuildClusterGeometry(cluster);
       if (hoverNode && hoverNode.cluster === cluster) hoverNode = null;
-    });
-  }
-
-  // Walk parentId links up to the top-level ancestor (the hub page).
-  function topAncestor(page) {
-    let p = page, guard = 0;
-    while (p && p.parentId != null && guard++ < 100) p = getPage(p.parentId);
-    return p || null;
-  }
-
-  function findClusterForPage(id) {
-    return (
-      clusters.find((c) => c.page.id === id) ||
-      clusters.find((c) => c.pnodes.some((n) => n.page.id === id)) ||
-      null
-    );
-  }
-
-  // Store subscription: content edits are free (pnodes hold live page records,
-  // so titles refresh on the next tooltip); structural changes rebuild the
