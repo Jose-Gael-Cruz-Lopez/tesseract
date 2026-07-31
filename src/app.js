@@ -11,6 +11,7 @@ import * as auth from './auth/auth.js';
 import { supabaseSignOut } from './data/supabase.js';
 import { canopyLogout } from './data/canopy-session.js';
 import { toast, el } from './ui/popover.js';
+import { resetTheme } from './ui/theme.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountTopbar } from './ui/topbar.js';
 import { mountEditor } from './ui/editor.js';
@@ -166,6 +167,11 @@ export function mountApp(root, { onLogOut } = {}) {
       // sign-out re-derives a session on the very next reload and drops the user straight
       // back into the app they just left. Neither call throws, so awaiting both is safe.
       await Promise.all([supabaseSignOut(), canopyLogout()]);
+      // The theme pref is keyed to the browser, not the account, so it outlives
+      // the session: a user who had picked Dark was handed dark landing and
+      // sign-in screens after signing out. Reset before the hand-back so the
+      // auth screen renders light on its first paint rather than flashing.
+      resetTheme();
       if (typeof onLogOut === 'function') onLogOut();
       else location.reload();
     },
