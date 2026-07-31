@@ -110,3 +110,18 @@ export function getTheme() {
   const prefs = readPrefs();
   return prefs.theme || DEFAULT_MODE;
 }
+
+/**
+ * Return the app to its default (light) look, persisting the choice.
+ *
+ * The theme pref outlives the session — it is keyed to the browser, not the
+ * account — so a user who had picked Dark was still handed dark landing and
+ * sign-in screens after logging out. Sign-out resets it.
+ *
+ * Deliberately sets `light` rather than `system`: "follow the system" would
+ * still serve a dark sign-in screen on a dark-mode OS, which is the thing being
+ * fixed.
+ */
+export function resetTheme() {
+  setTheme(DEFAULT_MODE);
+}

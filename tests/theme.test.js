@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { test, expect, beforeEach, vi } from 'vitest';
-import { initTheme, setTheme, getTheme } from '../src/ui/theme.js';
+import { initTheme, setTheme, getTheme, resetTheme } from '../src/ui/theme.js';
 
 const PREFS_KEY = 'ms:prefs';
 
@@ -111,4 +111,41 @@ test('setTheme writes only under the ms: namespace (never mnemo:*)', () => {
   setTheme('dark');
   expect(localStorage.getItem('mnemo:prefs')).toBeNull();
   expect(localStorage.getItem(PREFS_KEY)).not.toBeNull();
+});
+
+// ── Reset on sign-out ───────────────────────────────────────────────────────
+// The theme pref lives in localStorage and outlives the session, so a user who
+// had picked Dark was still handed dark auth/landing screens after logging out.
+// Signing out returns the app to its default (light) look.
+
+test('resetTheme returns the app to the light default', () => {
+  setTheme('dark');
+  expect(document.documentElement.dataset.theme).toBe('dark');
+
+  resetTheme();
+
+  expect(document.documentElement.dataset.theme).toBe('light');
+  expect(getTheme()).toBe('light');
+});
+
+test('resetTheme persists light, so the next load is light too', () => {
+  setTheme('dark');
+  resetTheme();
+  expect(JSON.parse(localStorage.getItem(PREFS_KEY)).theme).toBe('light');
+
+  initTheme(); // simulate a fresh page load reading the saved pref
+  expect(document.documentElement.dataset.theme).toBe('light');
+});
+
+test('resetTheme overrides a system preference for dark', () => {
+  mockMatchMedia(true); // system says dark
+  setTheme('system');
+  expect(document.documentElement.dataset.theme).toBe('dark');
+
+  resetTheme();
+
+  // Light is explicit, not "follow the system" — otherwise a dark-mode OS would
+  // still hand a dark sign-in screen to a signed-out visitor.
+  expect(document.documentElement.dataset.theme).toBe('light');
+  expect(getTheme()).toBe('light');
 });
