@@ -75,6 +75,26 @@ export function mountApp(root, { onLogOut } = {}) {
   let comments;
   let globe;
 
+  // Pause the WebGL loop while the page slide-over covers the graph (the
+  // migration doc's setVisible contract — previously dead API, so the graph
+  // burned battery animating pixels nobody could see). The pause waits out the
+  // 600ms camera fly-to (graph.js focusNode) — freezing mid-flight looks
+  // broken; resume is immediate. The timer is cancelled on close/teardown so a
+  // stale pause can never freeze a graph that is visible again (or a new one).
+  let pauseTimer = null;
+  function pauseGraphSoon() {
+    clearTimeout(pauseTimer);
+    pauseTimer = setTimeout(() => {
+      pauseTimer = null;
+      if (globe) globe.setVisible(false);
+    }, 700);
+  }
+  function resumeGraphNow() {
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
+    if (globe) globe.setVisible(true);
+  }
+
   const ctx = {
     store,
     auth,
@@ -91,6 +111,7 @@ export function mountApp(root, { onLogOut } = {}) {
       topbar.setPage(page);
       sidebar.setActivePage && sidebar.setActivePage(id);
       globe.focusPage(id);
+      pauseGraphSoon();
       if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
     },
     closePage() {
@@ -100,21 +121,25 @@ export function mountApp(root, { onLogOut } = {}) {
       comments.close();
       topbar.setPage(null);
       sidebar.setActivePage && sidebar.setActivePage(null);
+      resumeGraphNow();
       globe.clearFocus();
       history.replaceState(null, '', location.pathname + location.search);
     },
 
     // ---- Developer mode item viewing (read-only) ----
     openDevItem(node) {
+      // A category is focused, not opened — the graph stays visible, so no pause.
       if (node.devKind === 'category') { globe.focusPage(node.id); return; }
       currentId = 'dev:' + node.id;
       mountDevPage(pageEl, node);
       globe.focusPage(node.id);
+      pauseGraphSoon();
     },
     closeDevPage() {
       currentId = null;
       pageEl.classList.remove('show');
       pageEl.setAttribute('aria-hidden', 'true');
+      resumeGraphNow();
       globe.clearFocus();
     },
 
@@ -188,6 +213,8 @@ export function mountApp(root, { onLogOut } = {}) {
   // ---- Mode mounting ----
   function teardownMode() {
     currentId = null;
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
     if (globe) { globe.dispose(); globe = null; }
     pageEl.classList.remove('show');
     pageEl.setAttribute('aria-hidden', 'true');

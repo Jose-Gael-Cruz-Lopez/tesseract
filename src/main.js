@@ -26,6 +26,7 @@ import { initStore, seedWorkspace, setDevAvailable } from './data/store.js';
 import { mountApp } from './app.js';
 import { supabaseEnabled, getSupabaseSession, profileFromSession } from './data/supabase.js';
 import { getCanopySession, sessionFromGitHub } from './data/canopy-session.js';
+import { decideBoot } from './auth/boot-decision.js';
 
 // Auth views load lazily (a separate chunk) so the auth code isn't paid for
 // once a returning, onboarded user is past the gate.
@@ -60,62 +61,54 @@ async function boot() {
   initTheme();
   const root = document.getElementById('root');
 
-  // Preview the intro landing on demand, regardless of session: /?landing
-  if (new URLSearchParams(location.search).has('landing')) {
-    showLanding(root);
-    return;
+  // Gather the resolved facts, then let the PURE decision table
+  // (src/auth/boot-decision.js — tested) say what to do. getSupabaseSession()
+  // awaits URL detection, so it also resolves the session right after the OAuth
+  // redirect back from Google; both providers are consulted together because
+  // they answer DIFFERENT questions (Supabase: who owns the Knowledge side;
+  // canopy: whether Developer is unlocked) — the PR #47 bug was consulting one
+  // short of the other.
+  const params = new URLSearchParams(location.search);
+  const inputs = {
+    landing: params.has('landing'),
+    denied: params.get('denied') === '1',
+    sbSession: null,
+    canopyMe: null,
+    localSession: getSession(),
+  };
+  if (!inputs.landing) {
+    [inputs.sbSession, inputs.canopyMe] = await Promise.all([
+      supabaseEnabled ? getSupabaseSession() : Promise.resolve(null),
+      getCanopySession(),
+    ]);
+  }
+  const d = decideBoot(inputs);
+
+  if (d.sessionSource === 'supabase') setSession(profileFromSession(inputs.sbSession));
+  else if (d.sessionSource === 'github') setSession(sessionFromGitHub(inputs.canopyMe));
+  if (d.devAvailable) setDevAvailable(true);
+  if (d.stripQuery) history.replaceState(null, '', location.pathname); // drop OAuth/denied query params
+  if (d.sync) {
+    // Cloud sync (Google users only — the row is keyed on the Supabase user).
+    // PULL-FIRST and BEFORE startApp's seed: a fresh browser with remote data
+    // must import it rather than race a starter seed over it. The 5s race
+    // keeps a dead network from blocking boot — if sync resolves late, its
+    // import lands through store events and the UI updates live.
+    const syncReady = import('./data/sync.js').then((m) => m.startWorkspaceSync()).catch(() => {});
+    await Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
 
-  // A real Supabase (Google) session takes precedence over the mock flow.
-  // getSupabaseSession() awaits URL detection, so it also resolves the session
-  // right after the OAuth redirect back from Google.
-  if (supabaseEnabled) {
-    const sbSession = await getSupabaseSession();
-    if (sbSession) {
-      setSession(profileFromSession(sbSession));
-      history.replaceState(null, '', location.pathname); // drop the OAuth token/code from the URL
-      // The two sessions answer DIFFERENT questions: Supabase says who owns the
-      // Knowledge side, canopy says whether Developer is unlocked. Returning here
-      // without asking canopy meant a Google-signed-in user could never unlock
-      // Developer — "Continue with GitHub" completed the OAuth round trip and
-      // minted a valid session cookie, then boot ignored it on the way back and
-      // landed on the same page, looking like the button did nothing.
-      if (await getCanopySession()) setDevAvailable(true);
-      // Cloud sync (Google users only — the row is keyed on the Supabase user).
-      // PULL-FIRST and BEFORE startApp's seed: a fresh browser with remote data
-      // must import it rather than race a starter seed over it. The 5s race
-      // keeps a dead network from blocking boot — if sync resolves late, its
-      // import lands through store events and the UI updates live.
-      const syncReady = import('./data/sync.js').then((m) => m.startWorkspaceSync()).catch(() => {});
-      await Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
-      startApp(root);
-      return;
-    }
-  }
-
-  // A canopy GitHub session (same-origin, fused deploy) grants BOTH sides: derive a
-  // knowledge session from the GitHub identity and unlock the developer side.
-  const me = await getCanopySession();
-  if (me) {
-    setSession(sessionFromGitHub(me));
-    setDevAvailable(true);
-    history.replaceState(null, '', location.pathname); // drop ?denied / OAuth query
+  if (d.show === 'app') {
     startApp(root);
-    return;
+  } else if (d.show === 'auth') {
+    await showAuth(root);
+    if (d.toast) {
+      const { toast } = await import('./ui/popover.js');
+      toast(d.toast);
+    }
+  } else {
+    showLanding(root);
   }
-  // A GitHub sign-in that was denied (not allow-listed yet) returns as ?denied=1 with
-  // no session — show the auth screen with a note to use Google for the Knowledge side.
-  if (new URLSearchParams(location.search).get('denied') === '1') {
-    history.replaceState(null, '', location.pathname);
-    showAuth(root);
-    const { toast } = await import('./ui/popover.js');
-    toast("Developer access isn't enabled for that GitHub account yet — use Google for the Knowledge side.");
-    return;
-  }
-
-  const session = getSession();
-  if (!session || !session.onboarded) showLanding(root);
-  else startApp(root);
 }
 
 boot();
