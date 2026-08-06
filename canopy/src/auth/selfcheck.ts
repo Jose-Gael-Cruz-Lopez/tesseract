@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { logEvent } from "../log";
+import { first } from "../db";
 import { hmacSeal, hmacUnseal } from "./crypto";
 import { appJwt } from "./app";
 
@@ -194,6 +195,52 @@ function probeWebhookSecret(env: Env): ProbeOutcome {
   };
 }
 
+/**
+ * How many migrations this build ships (migrations/*.sql). A test asserts it
+ * equals env.TEST_MIGRATIONS.length, so the constant cannot silently drift when
+ * a migration is added — updating it is part of adding one.
+ */
+export const EXPECTED_MIGRATION_COUNT = 28;
+
+/**
+ * D1 schema/migration state — not a secret, but the same class of silent,
+ * invisible-for-days config drift this check exists to end. The 2026-07-17
+ * outage: Workers Builds deployed the CODE on merge, while the remote migration
+ * apply — a separate manual step — silently no-oped against the wrong Cloudflare
+ * account, and every /auth/* request 500'd for ~10 days. `d1_migrations` is the
+ * ledger `wrangler d1 migrations apply` maintains (the test harness's
+ * applyD1Migrations writes the same table), so comparing its row count against
+ * the compiled-in expectation catches code-ahead-of-schema within one cron run.
+ * `>=` not `===`: a migration applied ahead of its deploy is the safe ordering.
+ */
+async function probeSchema(env: Env): Promise<ProbeOutcome> {
+  try {
+    const row = await first<{ n: number }>(env.DB, `SELECT COUNT(*) AS n FROM d1_migrations`);
+    const n = row?.n ?? 0;
+    if (n >= EXPECTED_MIGRATION_COUNT) {
+      return { status: "pass", verified: true, note: `all ${EXPECTED_MIGRATION_COUNT} migrations this build expects are recorded`, reason: "ok" };
+    }
+    return {
+      status: "fail",
+      verified: true,
+      note: `d1_migrations records ${n} of the ${EXPECTED_MIGRATION_COUNT} migrations this build expects — the remote apply did not complete`,
+      reason: "migrations_pending",
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/no such table/i.test(msg)) {
+      return {
+        status: "fail",
+        verified: true,
+        note: "d1_migrations does not exist — migrations were never applied to this database",
+        reason: "migrations_table_missing",
+      };
+    }
+    // A transient D1 fault proves nothing about the schema — never page on it.
+    return unreachable("probe_error", "could not read d1_migrations");
+  }
+}
+
 const OUTCOME: Record<SecretStatus, "success" | "failure" | "indeterminate" | "degraded"> = {
   pass: "success",
   fail: "failure", // the only failure-class outcome → console.error → alertable
@@ -209,10 +256,11 @@ const OUTCOME: Record<SecretStatus, "success" | "failure" | "indeterminate" | "d
 export async function runSelfCheck(env: Env, opts?: { fetchImpl?: typeof fetch }): Promise<SelfCheckReport> {
   const doFetch = opts?.fetchImpl ?? _selfCheckTestHooks.fetchImpl ?? fetch;
 
-  const [appOutcome, clientOutcome, cookieOutcome] = await Promise.all([
+  const [appOutcome, clientOutcome, cookieOutcome, schemaOutcome] = await Promise.all([
     probeAppJwt(env, doFetch),
     probeClientCredentials(env, doFetch),
     probeCookieSecret(env),
+    probeSchema(env),
   ]);
 
   // One probe can cover a pair of secrets: a rejected client credential could be either
@@ -223,6 +271,7 @@ export async function runSelfCheck(env: Env, opts?: { fetchImpl?: typeof fetch }
     { secrets: ["COOKIE_SECRET"], outcome: cookieOutcome },
     { secrets: ["GEMINI_API_KEY"], outcome: probeGemini(env) },
     { secrets: ["GITHUB_WEBHOOK_SECRET"], outcome: probeWebhookSecret(env) },
+    { secrets: ["D1_MIGRATIONS"], outcome: schemaOutcome },
   ];
 
   const secrets: SecretReport[] = [];

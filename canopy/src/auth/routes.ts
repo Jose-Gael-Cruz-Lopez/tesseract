@@ -76,7 +76,11 @@ authApp.post("/logout", async (c) => {
 // GATED: mint a personal MCP bearer token; the raw token is shown ONCE. Minting is
 // rate-limited per login (issue #21): tokens are long-lived credentials, so unbounded
 // minting from one session is a real abuse surface now that login is open.
+// SESSION-ONLY (never a bearer): a leaked bearer that could mint a sibling gains
+// persistence — revoking the stolen token would no longer end the compromise. 403,
+// not 401: the credential is valid, this surface is just not for it.
 authApp.post("/mcp-token", async (c) => {
+  if (c.get("principalSource") === "bearer") return c.json({ error: "session required" }, 403);
   const login = c.get("principal").login;
   const gate = await createD1RateLimiter(c.env.DB).hit(MCP_TOKEN_RATE, login);
   if (!gate.allowed) return tooManyRequests(c, gate);

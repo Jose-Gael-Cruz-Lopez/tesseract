@@ -294,7 +294,8 @@ export async function runBackfill(
 
       const existing = await first<IssueSummaryRow>(
         env.DB,
-        `SELECT model, title FROM issue_summaries WHERE issue_number = ?`,
+        `SELECT model, title FROM issue_summaries WHERE repo = ? AND issue_number = ?`,
+        repo,
         issue.number
       );
       const alreadySummarized = existing !== null && existing.model !== "excerpt" && existing.title !== null;
@@ -343,7 +344,8 @@ export async function runBackfill(
       // excerpt summary, not just brand-new ones.
       const existing = await first<PrSummaryRow>(
         env.DB,
-        `SELECT model, title FROM pr_summaries WHERE semantic_key = ?`,
+        `SELECT model, title FROM pr_summaries WHERE repo = ? AND semantic_key = ?`,
+        repo,
         ev.semantic_key
       );
       // "Done" = a real (non-excerpt) summary that is ALSO structured — title

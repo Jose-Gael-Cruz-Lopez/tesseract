@@ -3,7 +3,7 @@
 // `.map().join('')`, `sc-if` to ternaries, and `onClick="{{ fn }}"` to
 // `data-act` / `data-arg` attributes dispatched in main.ts.
 
-import type { Me, StagedProposal, IdentityTask, Repo } from "./api";
+import type { Me, StagedProposal, IdentityTask, Repo, McpTokenMeta } from "./api";
 import type { FeedRow, DocRow, DocVersionRow, AdrRow, NeedsTriageRow } from "@shared/rows";
 import type { QueryResult, QueryPrimary, QueryPointer, Authority, MilestoneWithProgress, PlanView } from "./api";
 import type { DashboardData, MyWorkPr, MyWorkTodo } from "@shared/dashboard";
@@ -82,6 +82,8 @@ export interface AppState {
   displayName: string;
   revealedToken: string | null;
   tokenCopied: boolean;
+  /** The caller's ACTIVE MCP tokens (GET /me/tokens) — metadata only, never raws. */
+  myTokens: Loadable<McpTokenMeta[]>;
   confirmedMilestones: Record<string, boolean>;
   toast: string | null;
   /** ADMIN Sync GitHub progress — null when idle; present while a (possibly
@@ -133,6 +135,7 @@ export function initialState(): AppState {
     displayName: "",
     revealedToken: null,
     tokenCopied: false,
+    myTokens: { status: "idle", data: [] },
     confirmedMilestones: {},
     toast: null,
     backfillSync: null,
@@ -1018,14 +1021,15 @@ function guideView(s: AppState): string {
     <p style="${gP};margin-top:14px">${gStrong("Easiest — install the Canopy plugin.")} It bundles the three skills below ${gStrong("and")} the MCP connection, so there's nothing to wire by hand. In Claude Code:</p>
     ${gPre(`/plugin marketplace add Jose-Gael-Cruz-Lopez/canopy
 /plugin install canopy@canopy`)}
-    <p style="${gP};margin-top:12px">The plugin reads your token from an environment variable — export it in the shell that launches your agent (add it to your shell profile to make it stick), then restart:</p>
-    ${gPre(`export CANOPY_MCP_TOKEN=canopy_mcp_…`)}
-    <p style="${gP};margin-top:14px">${gStrong("Prefer to wire it by hand")} — or running your own Canopy? Skip the plugin and drop a <code style="font-family:var(--mono);font-size:13px">.mcp.json</code> in your project with the token as a bearer header, then restart your agent:</p>
+    <p style="${gP};margin-top:12px">The plugin reads your token ${gStrong("and your repo")} from environment variables — export both in the shell that launches your agent (add them to your shell profile to make them stick), then restart:</p>
+    ${gPre(`export CANOPY_MCP_TOKEN=canopy_mcp_…
+export CANOPY_REPO=${esc(s.activeRepo ?? "owner/repo")}`)}
+    <p style="${gP};margin-top:14px">${gStrong("Prefer to wire it by hand")} — or running your own Canopy? Skip the plugin and drop a <code style="font-family:var(--mono);font-size:13px">.mcp.json</code> in your project with the token as a bearer header, then restart your agent. The agent surface is ${gStrong("per repo")} — <code style="font-family:var(--mono);font-size:13px">/mcp/&lt;owner&gt;/&lt;repo&gt;</code>, a connected repo you're a collaborator on (bare <code style="font-family:var(--mono);font-size:13px">/mcp</code> is admin-only):</p>
     ${gPre(`{
   "mcpServers": {
     "canopy": {
       "type": "streamable-http",
-      "url": "https://&lt;your-canopy-host&gt;/mcp",
+      "url": "https://&lt;your-canopy-host&gt;/mcp/${esc(s.activeRepo ?? "&lt;owner&gt;/&lt;repo&gt;")}",
       "headers": { "Authorization": "Bearer canopy_mcp_…" }
     }
   }
@@ -1080,8 +1084,26 @@ function settingsView(s: AppState): string {
       </div>
     </div>` : "";
 
-  // No GET route for existing tokens — list is empty with a note.
-  const tokenListBody = `<div style="display:flex;align-items:center;gap:11px;padding:15px 18px;font-size:12.5px;color:var(--fg-40)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="flex:none;opacity:.8"><circle cx="8" cy="15" r="4.5"></circle><path d="m11.2 11.8 7.3-7.3M16 5l3 3M18.5 7.5l-2.2 2.2"></path></svg><span>Tokens are shown once when minted and never stored in readable form, so they can't be listed here.</span></div>`;
+  // Active tokens from GET /me/tokens — metadata only (raws are shown once at
+  // mint and stored hashed). Revoke is per-row and takes effect immediately.
+  const fmtStamp = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const keyIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="flex:none;opacity:.8"><circle cx="8" cy="15" r="4.5"></circle><path d="m11.2 11.8 7.3-7.3M16 5l3 3M18.5 7.5l-2.2 2.2"></path></svg>`;
+  const tokenListBody = s.myTokens.data.length
+    ? s.myTokens.data.map((t, i) => `<div style="display:flex;align-items:center;gap:12px;padding:13px 18px;${i > 0 ? "border-top:1px solid var(--border)" : ""}">
+        ${keyIcon}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;font-family:var(--mono)">Token #${t.id}</div>
+          <div style="font-size:11.5px;color:var(--fg-40);margin-top:2px">Minted ${fmtStamp(t.created_at)} · ${t.last_used_at ? `Last used ${fmtStamp(t.last_used_at)}` : "Never used"}</div>
+        </div>
+        <button data-act="revokeToken" data-arg="${t.id}" class="cnpy-revoke" style="flex:none;padding:6px 12px;border-radius:7px;border:1px solid var(--border-strong);background:transparent;color:var(--red);font-size:12px;font-weight:600;transition:all .12s ease">Revoke</button>
+      </div>`).join("")
+    : `<div style="display:flex;align-items:center;gap:11px;padding:15px 18px;font-size:12.5px;color:${s.myTokens.status === "error" ? "var(--red)" : "var(--fg-40)"}">${keyIcon}<span>${
+        s.myTokens.status === "loading" ? "Loading tokens…"
+        // A failed fetch must NEVER read as the authoritative empty state — during a
+        // compromise response, "no tokens" and "couldn't check" are opposite answers.
+        : s.myTokens.status === "error" ? esc(s.myTokens.error ?? "Couldn't load tokens — reload to retry.")
+        : "No active tokens — mint one to connect an agent."
+      }</span></div>`;
 
   const meLogin = s.me?.login ?? "";
   const meName = s.me?.name ?? meLogin;

@@ -54,6 +54,9 @@ async function runTool(meta: { tool: string; login: string; repo?: string }, fn:
  * — passing `repo` straight through keeps the flat /mcp path byte-for-byte
  * unscoped, while /mcp/:owner/:repo's explicit repo now isolates them too
  * (closing what would otherwise be a cross-tenant read leak on those tools).
+ * Because the flat path's reads ARE unscoped, that surface is admin-gated at the
+ * fetch entry (src/index.ts) — only /mcp/:owner/:repo is open to non-admin
+ * collaborators.
  *
  * `canPush` (issue #20) is the per-repo push flag authorizeRepoAccess computed for
  * the /mcp/:owner/:repo entry point. It only matters when `repo` is given: the

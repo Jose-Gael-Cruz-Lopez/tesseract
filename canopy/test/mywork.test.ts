@@ -226,6 +226,78 @@ describe("getMyWork — todo carries the issue summary", () => {
   });
 });
 
+describe("getMyWork — summary joins are repo-scoped (0021 composite PKs)", () => {
+  it("does not attach another repo's PR summary to this repo's event, and never fans out", async () => {
+    await run(env.DB, `INSERT INTO people (login, person) VALUES ('dev', 'Dev')`);
+    // The SAME PR number merged in two connected repos → identical semantic_key,
+    // distinct (repo, semantic_key) rows since migration 0021.
+    await ingestEvent(env.DB, prEvent({ number: 7, login: "dev" }), "github-webhook", "a/one");
+    await ingestEvent(env.DB, prEvent({ number: 7, login: "dev" }), "github-webhook", "b/two");
+    const stubB: Summarizer<PrSummary> = {
+      model: "stub-model",
+      summarize: async () => ({ title: "B seven", what: "B change", why: null, impact: null }),
+    };
+    await storePrSummary(env.DB, stubB, { semantic_key: "gh:pr:7:merged", pr_number: 7, title: "t", body: "b", repo: "b/two" });
+
+    // Scoped to a/one: b/two's summary must NOT cross-attach.
+    let work = await getMyWork(env.DB, "dev", "a/one");
+    expect(work.previousActivity.map((p) => p.number)).toEqual([7]);
+    expect(work.previousActivity[0].displayTitle).toBeNull();
+
+    // With a summary in BOTH repos the join must not fan the one event out into two rows.
+    const stubA: Summarizer<PrSummary> = {
+      model: "stub-model",
+      summarize: async () => ({ title: "A seven", what: "A change", why: null, impact: null }),
+    };
+    await storePrSummary(env.DB, stubA, { semantic_key: "gh:pr:7:merged", pr_number: 7, title: "t", body: "b", repo: "a/one" });
+    work = await getMyWork(env.DB, "dev", "a/one");
+    expect(work.previousActivity.map((p) => p.number)).toEqual([7]);
+    expect(work.previousActivity[0].displayTitle).toBe("A seven");
+  });
+
+  it("does not attach another repo's issue summary to this repo's todo", async () => {
+    await run(env.DB, `INSERT INTO people (login, person) VALUES ('dev', 'Dev')`);
+    const assigned = issueEvent({ number: 5, login: "dev", action: "assigned", state: "open", updatedAt: NOW });
+    await ingestEvent(env.DB, assigned, "github-webhook", "a/one");
+    await ingestEvent(env.DB, { ...assigned }, "github-webhook", "b/two");
+    const stubB: Summarizer<IssueSummary> = {
+      model: "stub-model",
+      summarize: async () => ({ title: "B five", summary: "B's summary.", next_step: null }),
+    };
+    await storeIssueSummary(env.DB, stubB, { issue_number: 5, title: "t", body: "b", repo: "b/two" });
+
+    const work = await getMyWork(env.DB, "dev", "a/one");
+    expect(work.todo.map((t) => t.number)).toEqual([5]);
+    expect(work.todo[0].summary).toBeNull();
+    expect(work.todo[0].displayTitle).toBeNull();
+  });
+
+  it("unscoped: another repo's newer snapshot of the same issue number does not suppress this repo's open todo", async () => {
+    await run(env.DB, `INSERT INTO people (login, person) VALUES ('dev', 'Dev')`);
+    // Open + assigned in a/one; the SAME number closed LATER in b/two. The
+    // latest-snapshot window must be per (repo, number) — repo-relative issue
+    // numbers are different issues.
+    await ingestEvent(
+      env.DB,
+      issueEvent({ number: 5, login: "dev", action: "assigned", state: "open", updatedAt: "2026-07-01T10:00:00.000Z" }),
+      "github-webhook",
+      "a/one"
+    );
+    await ingestEvent(
+      env.DB,
+      issueEvent({ number: 5, login: "dev", action: "closed", state: "closed", updatedAt: "2026-07-02T10:00:00.000Z" }),
+      "github-webhook",
+      "b/two"
+    );
+
+    const flat = await getMyWork(env.DB, "dev"); // the unscoped /me/dashboard path
+    expect(flat.todo.map((t) => t.number)).toEqual([5]); // a/one's open issue survives
+
+    const scoped = await getMyWork(env.DB, "dev", "b/two");
+    expect(scoped.todo).toHaveLength(0); // b/two's own latest snapshot is closed
+  });
+});
+
 describe("getMyWork — structured fields", () => {
   it("projects the structured PR summary columns and base.ref into the DTO", async () => {
     await run(env.DB, `INSERT INTO people (login, person) VALUES ('dev', 'Dev')`);

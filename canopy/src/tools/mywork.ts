@@ -75,7 +75,7 @@ export async function getMyWork(db: DB, login: string, repo?: string): Promise<M
       db,
       `SELECT e.*, s.title AS s_title, s.what AS s_what, s.why AS s_why, s.impact AS s_impact
          FROM events e
-         LEFT JOIN pr_summaries s ON s.semantic_key = e.semantic_key
+         LEFT JOIN pr_summaries s ON s.repo = e.repo AND s.semantic_key = e.semantic_key
         WHERE e.event_type IN ('pr_merged', 'pr_closed')
           AND e.subject_login = ?${repo !== undefined ? " AND e.repo = ?" : ""}
         ORDER BY e.occurred_at DESC, e.id DESC
@@ -105,10 +105,10 @@ export async function getMyWork(db: DB, login: string, repo?: string): Promise<M
       db,
       `SELECT e.ref_number, e.raw, s.summary AS summary, s.title AS s_title, s.next_step AS s_next_step
        FROM (
-         SELECT ref_number, raw, ROW_NUMBER() OVER (PARTITION BY ref_number ORDER BY occurred_at DESC, id DESC) rn
+         SELECT repo, ref_number, raw, ROW_NUMBER() OVER (PARTITION BY repo, ref_number ORDER BY occurred_at DESC, id DESC) rn
          FROM events WHERE event_type = 'issue'${repo !== undefined ? " AND repo = ?" : ""}
        ) e
-       LEFT JOIN issue_summaries s ON s.issue_number = e.ref_number
+       LEFT JOIN issue_summaries s ON s.repo = e.repo AND s.issue_number = e.ref_number
        WHERE e.rn = 1
        ORDER BY e.ref_number ASC`,
       ...rp

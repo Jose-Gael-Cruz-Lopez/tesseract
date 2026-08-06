@@ -181,18 +181,18 @@ describe("flat /mcp — the global-isAdmin gate is unchanged", () => {
     expect(plan?.updated_by).toBe(ADMIN);
   });
 
-  it("a non-admin push collaborator does NOT get update_plan — per-repo canPush never leaks into the flat gate", async () => {
+  it("a non-admin (even a full push collaborator) cannot reach flat /mcp at all — per-repo canPush never leaks into the flat gate", async () => {
     const raw = await seedCollaborator(AGENT, true); // full per-repo push state, ignored by /mcp
-    const client = await mcpClient("/mcp", raw);
-    try {
-      expect(await toolNames(client)).not.toContain("update_plan");
-
-      const res = await callTool(client, "update_plan", { narrative: "should not land" });
-      expect(res.isError).toBeTruthy();
-      expect(res.text.toLowerCase()).toContain("not found");
-    } finally {
-      await client.close();
-    }
+    // The flat surface is admin-gated at the fetch entry (audit hardening): the
+    // deny happens before any MCP protocol exchange, so there is no tool list to
+    // inspect — the 403 IS the assertion.
+    const res = await worker.fetch(
+      new Request("https://canopy.example/mcp", { method: "POST", headers: { authorization: `Bearer ${raw}` } }),
+      env as unknown as Env,
+      ctx
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "admin only" });
 
     // The bootstrap-seeded plan singleton is untouched.
     const plan = await first<PlanRow>(env.DB, `SELECT * FROM plan WHERE repo = ?`, defaultRepo(env));

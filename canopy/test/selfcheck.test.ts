@@ -4,7 +4,8 @@ import worker from "../src/index";
 import { app } from "../src/routes";
 import { authedCookie } from "./helpers/session";
 import { mintToken } from "../src/auth/tokens";
-import { runSelfCheck, _selfCheckTestHooks, _resetSelfCheckTestHooks } from "../src/auth/selfcheck";
+import { runSelfCheck, EXPECTED_MIGRATION_COUNT, _selfCheckTestHooks, _resetSelfCheckTestHooks } from "../src/auth/selfcheck";
+import { first, run } from "../src/db";
 import type { Env } from "../src/env";
 
 // Spec: specs/secret-selfcheck.md
@@ -310,5 +311,61 @@ describe("GET /admin/selfcheck — authorization (DoD 1, 2, 3, 4)", () => {
       APP_ENV()
     );
     expect(res.status).toBe(401);
+  });
+});
+
+// ── D1 schema/migration-state probe (audit hardening) ────────────────────────
+// The 2026-07-17 outage class: Workers Builds deploys CODE on merge, but remote
+// migrations are a separate manual step that silently no-ops when wrangler is
+// logged into the wrong Cloudflare account. This probe compares d1_migrations
+// (written identically by `wrangler d1 migrations apply` and the test harness's
+// applyD1Migrations) against the count this build was compiled with, so schema
+// drift alerts through the existing error-level selfcheck channel within 6h.
+describe("runSelfCheck — D1 schema/migration-state probe", () => {
+  const jsonLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls
+      .map((c) => { try { return JSON.parse(String(c[0])) as Record<string, unknown>; } catch { return null; } })
+      .filter((r): r is Record<string, unknown> => r !== null && r.event === "selfcheck");
+
+  it("the compiled-in expectation tracks the migrations directory — adding a migration means bumping the constant", () => {
+    expect(EXPECTED_MIGRATION_COUNT).toBe(env.TEST_MIGRATIONS.length);
+  });
+
+  it("passes, verified, when every compiled-in migration is recorded in d1_migrations", async () => {
+    const r = await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({}) });
+    const row = find(r, "D1_MIGRATIONS");
+    expect(row.status).toBe("pass");
+    expect(row.verified).toBe(true);
+  });
+
+  it("fails — one error-level selfcheck line — when d1_migrations records fewer migrations than this build expects", async () => {
+    const removed = await first<{ id: number; name: string }>(env.DB, `SELECT id, name FROM d1_migrations ORDER BY id DESC LIMIT 1`);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await run(env.DB, `DELETE FROM d1_migrations WHERE id = ?`, removed!.id);
+    try {
+      const r = await runSelfCheck(APP_ENV(), { fetchImpl: stubFetch({}) });
+      const row = find(r, "D1_MIGRATIONS");
+      expect(row.status).toBe("fail");
+      expect(r.ok).toBe(false);
+      const lines = jsonLines(errorSpy).filter((l) => l.secret === "D1_MIGRATIONS");
+      expect(lines).toHaveLength(1);
+      expect(lines[0].reason).toBe("migrations_pending");
+    } finally {
+      // Restore the harness-applied ledger row so later suites in this worker
+      // never see a half-recorded migration state.
+      await run(env.DB, `INSERT INTO d1_migrations (id, name) VALUES (?, ?)`, removed!.id, removed!.name);
+    }
+  });
+
+  it("a missing d1_migrations table is fail (never applied); any other read error is indeterminate (a fault must not page)", async () => {
+    const throwingDb = (msg: string): Env["DB"] =>
+      ({ prepare: () => ({ bind: () => ({ first: () => Promise.reject(new Error(msg)) }) }) }) as unknown as Env["DB"];
+
+    const missing = await runSelfCheck(APP_ENV({ DB: throwingDb("no such table: d1_migrations") }), { fetchImpl: stubFetch({}) });
+    expect(find(missing, "D1_MIGRATIONS").status).toBe("fail");
+    expect(find(missing, "D1_MIGRATIONS").verified).toBe(true);
+
+    const transient = await runSelfCheck(APP_ENV({ DB: throwingDb("D1_ERROR: network blip") }), { fetchImpl: stubFetch({}) });
+    expect(find(transient, "D1_MIGRATIONS").status).toBe("indeterminate");
   });
 });

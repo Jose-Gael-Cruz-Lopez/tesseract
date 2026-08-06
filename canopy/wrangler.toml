@@ -19,8 +19,20 @@ workers_dev = true
 directory = "./web/dist"
 binding = "ASSETS"
 
-# D1. For local dev and tests the id is a placeholder (Miniflare uses a local sqlite).
-# Run `npm run db:create` to provision the real database and paste its id here before deploy.
+# WRONG-ACCOUNT GUARD (the 2026-07-17 outage: `db:migrate:remote` silently no-oped
+# against a different Cloudflare account while Workers Builds deployed the code, and
+# sign-in 500'd for ~10 days). Pin the account that owns the prod D1 below so any
+# wrangler command from a workstation logged into another account FAILS LOUDLY
+# instead of targeting the wrong place. To fill it in: `npx wrangler login` into the
+# account whose `npx wrangler d1 list` shows database 53c1314d-…, then `npx wrangler
+# whoami` and paste the Account ID here. (Left commented until verified — this
+# machine's current login cannot see the prod D1, which is itself the failure mode.)
+# account_id = "<prod account id — see above>"
+
+# D1: the PROD database id (Miniflare uses a local sqlite for dev and tests, ignoring
+# this id). The in-Worker selfcheck (src/auth/selfcheck.ts, D1_MIGRATIONS) compares
+# d1_migrations against the compiled-in migration count every 6h, so a deploy whose
+# remote migrations were not applied alerts through the error-level log channel.
 [[d1_databases]]
 binding = "DB"
 database_name = "canopy"

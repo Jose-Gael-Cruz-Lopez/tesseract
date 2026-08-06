@@ -1,5 +1,14 @@
 # Secret Self-Check — Spec
 
+> **Extension (2026-08-06, audit hardening).** The report now carries one
+> non-secret row, `D1_MIGRATIONS`: the live database's `d1_migrations` count
+> versus the compiled-in `EXPECTED_MIGRATION_COUNT` (pinned to the
+> `migrations/` directory by a test). Fewer rows than expected, or a missing
+> table, is `fail` (`migrations_pending` / `migrations_table_missing`) —
+> code-ahead-of-schema, the class behind the 2026-07-17 ten-day auth outage;
+> any other read error is `indeterminate`. Same registry shape, same alerting
+> contract, same containment as every other probe (`test/selfcheck.test.ts`).
+
 ## Objective
 
 A self-check that **functionally exercises** each of canopy's configured secrets, rather than merely confirming a name exists. It runs unattended on the existing 6-hour cron and is also callable on demand, so a credential that is *present but wrong* is detected automatically and pinned to the exact secret in one request.
