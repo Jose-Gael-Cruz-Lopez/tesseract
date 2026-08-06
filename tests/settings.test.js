@@ -106,8 +106,10 @@ describe('nav', () => {
     expect(document.body.textContent).toContain('These settings are coming soon.');
   });
 
-  test('the other 6 stub nav items also render "H = label + coming soon"', () => {
-    const stubs = ['My connections', 'Language & region', 'Settings', 'Security', 'Identity & provisioning', 'Connections'];
+  test('the other 5 stub nav items also render "H = label + coming soon"', () => {
+    // 'Settings' left this list when it became the real Workspace panel
+    // (export / import — tests/settings-data.test.js).
+    const stubs = ['My connections', 'Language & region', 'Security', 'Identity & provisioning', 'Connections'];
     for (const label of stubs) {
       openSettings(makeCtx());
       const row = navRowByLabel(label);

@@ -81,6 +81,13 @@ async function boot() {
       // minted a valid session cookie, then boot ignored it on the way back and
       // landed on the same page, looking like the button did nothing.
       if (await getCanopySession()) setDevAvailable(true);
+      // Cloud sync (Google users only — the row is keyed on the Supabase user).
+      // PULL-FIRST and BEFORE startApp's seed: a fresh browser with remote data
+      // must import it rather than race a starter seed over it. The 5s race
+      // keeps a dead network from blocking boot — if sync resolves late, its
+      // import lands through store events and the UI updates live.
+      const syncReady = import('./data/sync.js').then((m) => m.startWorkspaceSync()).catch(() => {});
+      await Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
       startApp(root);
       return;
     }

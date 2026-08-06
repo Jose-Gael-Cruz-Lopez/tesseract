@@ -196,6 +196,66 @@ export function resetStore() {
   removeLS(KEYS.prefs);
 }
 
+/**
+ * Drop the workspace + pages (content only — prefs and listeners survive).
+ * Used by sync when the local tree belongs to a DIFFERENT signed-in account
+ * than the current one: that content lives in its owner's cloud row, and
+ * keeping it here would leak it into the new account's workspace.
+ */
+export function clearWorkspaceContent() {
+  _workspace = null;
+  _pages = [];
+  removeLS(KEYS.workspace);
+  removeLS(KEYS.pages);
+  emit('workspace');
+  emit('pages', { type: 'clear' });
+}
+
+// ---------- export / import ----------
+
+const EXPORT_FORMAT = 'mnemosphere-workspace';
+const EXPORT_VERSION = 1;
+
+/**
+ * A portable snapshot of the workspace + every page (including trashed ones,
+ * so a restore is lossless). Prefs are deliberately EXCLUDED: they are
+ * device-local settings and carry the canopy dev token — a credential that
+ * must never land in a shareable file or a sync payload.
+ */
+export function exportWorkspace() {
+  return {
+    format: EXPORT_FORMAT,
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    workspace: structuredClone(_workspace),
+    pages: structuredClone(_pages),
+  };
+}
+
+/**
+ * Replace the current workspace + pages with a snapshot from exportWorkspace().
+ * Validates before touching anything — a rejected import leaves the store
+ * byte-for-byte as it was. Prefs are untouched (content, not device settings).
+ * Throws Error with a user-facing message on invalid input.
+ */
+export function importWorkspace(data) {
+  if (!data || typeof data !== 'object') throw new Error('Not a Mnemosphere export');
+  if (data.format !== EXPORT_FORMAT) throw new Error('Not a Mnemosphere export');
+  if (data.version !== EXPORT_VERSION) throw new Error(`Unsupported export version: ${data.version}`);
+  if (!data.workspace || typeof data.workspace !== 'object') throw new Error('Export has no workspace');
+  if (!Array.isArray(data.pages)) throw new Error('Export has no pages');
+  for (const p of data.pages) {
+    if (!p || typeof p !== 'object' || !p.id) throw new Error('Export contains an invalid page');
+  }
+  _workspace = structuredClone(data.workspace);
+  _pages = structuredClone(data.pages);
+  persistWorkspace();
+  persistPages();
+  emit('workspace');
+  emit('pages', { type: 'import' });
+  return _workspace;
+}
+
 // ---------- workspace ----------
 
 export function getWorkspace() {
@@ -204,7 +264,9 @@ export function getWorkspace() {
 
 export function updateWorkspace(patch) {
   if (!_workspace) _workspace = defaultWorkspace();
-  Object.assign(_workspace, patch);
+  // `edited` feeds the sync last-write-wins comparison (src/data/sync.js) —
+  // without it a rename-only change would look older than any remote row.
+  Object.assign(_workspace, patch, { edited: Date.now() });
   persistWorkspace();
   emit('workspace');
   return _workspace;
