@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sha256Hex, randomToken, pkceChallenge, hmacSeal, hmacUnseal } from "../src/auth/crypto";
+import { sha256Hex, randomToken, hmacSeal, hmacUnseal } from "../src/auth/crypto";
 
 describe("auth crypto", () => {
   it("sha256Hex matches the known vector for 'abc'", async () => {
@@ -16,14 +16,6 @@ describe("auth crypto", () => {
     expect(a).not.toBe(b);
   });
 
-  it("pkceChallenge equals base64url(sha256(verifier))", async () => {
-    const v = "test-verifier";
-    const ch = await pkceChallenge(v);
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
-    const expected = btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    expect(ch).toBe(expected);
-  });
 
   it("hmacSeal/hmacUnseal round-trips and rejects tampering and wrong secret", async () => {
     const sealed = await hmacSeal("session-id-123", "secret");

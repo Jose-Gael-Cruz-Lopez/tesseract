@@ -13,8 +13,10 @@ One `npm run deploy` builds and ships everything. Because the UI and canopy shar
 one origin, Developer mode reads canopy **same-origin** — no CORS, no separate host.
 Everything runs from `canopy/`.
 
-> Multi-repo (one canopy tracking several repos) is sub-project **B** — not yet
-> built. Today canopy tracks **one** repo via `GITHUB_REPO`.
+> **Multi-repo shipped** (Phase 3): connect any number of repos through the GitHub App
+> and each gets its own hub at `/r/:owner/:repo` (and agent surface at
+> `/mcp/:owner/:repo`). `GITHUB_REPO` remains only as the flat single-tenant
+> default repo for the legacy admin-gated flat routes.
 
 ## 1. Prerequisites
 
@@ -46,52 +48,67 @@ database_name = "canopy"
 database_id = "PASTE-YOUR-ID-HERE"
 ```
 
-## 4. Create a GitHub OAuth app (so you can log in to /admin)
+## 4. Create a GitHub App (sign-in AND repo connections use it)
 
-GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**:
+Sign-in is the GitHub App user-authorization flow — a legacy OAuth App will NOT
+work (`/auth/login` 503s `app_not_configured` without the App client id). GitHub →
+**Settings → Developer settings → GitHub Apps → New GitHub App**:
 
-- **Application name:** anything (e.g. `My Canopy`)
+- **App name:** anything (its URL slug becomes `GITHUB_APP_SLUG`)
 - **Homepage URL:** `https://<worker-name>.<your-subdomain>.workers.dev`
   (you'll know the exact host after the first `npm run deploy`; edit it later)
-- **Authorization callback URL:**
-  `https://<worker-name>.<your-subdomain>.workers.dev/auth/callback`
+- **Callback URLs** (add BOTH): `https://<host>/auth/callback` and
+  `https://<host>/auth/app/callback` — check **Request user authorization (OAuth)
+  during installation**.
+- **Webhook URL** (optional but recommended): `https://<host>/webhook/github`,
+  with a secret you generate (becomes `GITHUB_WEBHOOK_SECRET`).
+- **Permissions:** Repository → Issues (read), Pull requests (read), Metadata
+  (read). Subscribe to Issues + Pull request events if you enabled the webhook.
 
-Copy the **Client ID**, and **Generate a new client secret**.
+Copy the **App ID** and **Client ID**, **generate a client secret**, and
+**generate a private key** (downloads a PKCS#1 `.pem` — convert it:
+`openssl pkcs8 -topk8 -nocrypt -in downloaded.pem`).
 
 ## 5. Set secrets
 
+Pipe values — an interactive `secret put` through an automation shell silently
+stores an EMPTY value (see `docs/runbooks/secrets-and-observability.md`):
+
 ```bash
-npm exec wrangler secret put GITHUB_CLIENT_ID       # paste the OAuth Client ID
-npm exec wrangler secret put GITHUB_CLIENT_SECRET   # paste the OAuth client secret
-npm exec wrangler secret put COOKIE_SECRET          # any long random string, e.g. `openssl rand -hex 32`
+printf '%s' 'THE-CLIENT-ID'     | npm exec wrangler secret put GITHUB_APP_CLIENT_ID
+printf '%s' 'THE-CLIENT-SECRET' | npm exec wrangler secret put GITHUB_APP_CLIENT_SECRET
+printf '%s' 'THE-APP-ID'        | npm exec wrangler secret put GITHUB_APP_ID
+cat converted-pkcs8.pem         | npm exec wrangler secret put GITHUB_APP_PRIVATE_KEY
+printf '%s' "$(openssl rand -hex 32)" | npm exec wrangler secret put COOKIE_SECRET
 ```
 
 Optional (features degrade gracefully if absent):
 
 ```bash
-npm exec wrangler secret put GEMINI_API_KEY         # Google Gemini key — PR/issue summaries (else excerpt fallback)
-npm exec wrangler secret put GITHUB_WEBHOOK_SECRET  # HMAC secret if you wire the GitHub webhook (/webhook/github)
+printf '%s' 'THE-KEY'    | npm exec wrangler secret put GEMINI_API_KEY        # PR/issue summaries (else excerpt fallback)
+printf '%s' 'THE-SECRET' | npm exec wrangler secret put GITHUB_WEBHOOK_SECRET # HMAC for /webhook/github
 ```
 
-Live roadmap progress (the scheduled recompute + the admin backfill) no longer uses a
-standalone service token — it authenticates per connected repo via the GitHub App's own
-installation tokens (`GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`; see the GitHub App setup
-docs for connect-your-repos). Absent an App install for a repo, those two features simply
-no-op / 503 for it — everything else still works.
+Verify what actually landed with `GET /admin/selfcheck` after deploy — it
+functionally exercises every secret (a present-but-wrong value is the failure
+mode `wrangler secret list` cannot see). The retired `GITHUB_CLIENT_ID` /
+`GITHUB_CLIENT_SECRET` OAuth-App pair is gone — do not set it.
 
 ## 6. Set your repo + who can log in (`wrangler.toml` `[vars]`)
 
 ```toml
 [vars]
-GITHUB_REPO = "Jose-Gael-Cruz-Lopez/your-repo"   # the repo canopy tracks
-AUTH_ORG = ""                                    # leave EMPTY for a personal repo
-ADMIN_LOGINS = "Jose-Gael-Cruz-Lopez"            # your GitHub login — who may log in when AUTH_ORG is empty
+GITHUB_REPO = "Jose-Gael-Cruz-Lopez/your-repo"   # the flat single-tenant default repo
+ADMIN_LOGINS = "Jose-Gael-Cruz-Lopez"            # admin actions + the flat admin surfaces (case-insensitive)
+LOGIN_ALLOWLIST = ""                             # EMPTY = open signup (any GitHub user); set logins to gate sign-in
+GITHUB_APP_SLUG = "your-app-slug"                # the "Connect repos" install link
 ```
 
-- **Personal repo (most common):** leave `AUTH_ORG` empty, put your GitHub login in
-  `ADMIN_LOGINS`. Add teammates by appending logins (comma-separated).
-- **Org repo:** set `AUTH_ORG` to your org; login is gated by **active membership**.
-  `ADMIN_LOGINS` then only controls admin actions.
+- **Sign-in gate:** `LOGIN_ALLOWLIST` is the ONLY login gate — empty means any
+  GitHub user who completes the App flow gets a session (they see only repos
+  they're collaborators on). `ADMIN_LOGINS` does not gate login; it gates admin
+  actions and the flat single-tenant surfaces (including bare `/mcp`).
+- `AUTH_ORG` is display-only (echoed in `/auth/me`) — it is NOT a login gate.
 - `CORS_ORIGINS` is **not needed** for the fused deploy (Developer mode reads
   same-origin). Only set it if you also run the UI on a *different* origin.
 
@@ -134,10 +151,8 @@ the GitHub OAuth dance with `DEV_LOGIN`:
 
 ```bash
 cd canopy
-cp .dev.vars.example .dev.vars
-# edit .dev.vars: GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET / COOKIE_SECRET (any values
-# work locally); add DEV_LOGIN to act as yourself without OAuth:
-echo 'DEV_LOGIN=Jose-Gael-Cruz-Lopez' >> .dev.vars
+cp .dev.vars.example .dev.vars   # COOKIE_SECRET (any value works locally) + DEV_LOGIN
+                                 # (skips the OAuth dance and acts as that seeded user)
 
 npm run db:migrate:local     # migrate the local D1
 npm run seed                 # optional: seed sample data
