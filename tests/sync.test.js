@@ -6,9 +6,10 @@
 //  - offline-safe: if the initial pull fails, NOTHING is ever pushed (a stale
 //    local tree must not overwrite a healthy remote through a blind write)
 //  - edits push debounced, as one upsert per quiet period
+// @vitest-environment happy-dom
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as store from '../src/data/store.js';
-import { startWorkspaceSync } from '../src/data/sync.js';
+import { startWorkspaceSync, flushAndStopWorkspaceSync } from '../src/data/sync.js';
 
 function installMemoryLocalStorage() {
   const map = new Map();
@@ -104,7 +105,9 @@ describe('initial reconcile', () => {
     expect(upsertRow).toHaveBeenCalledTimes(1);
   });
 
-  test('a corrupt remote row is skipped (local survives) and local is pushed over it', async () => {
+  test('a corrupt or future-version remote row is NEVER overwritten: local survives, nothing pushes, sync goes inert', async () => {
+    // A blob this build cannot parse may be a future client's format — pushing
+    // over it would destroy data a newer app version wrote. Treat like offline.
     store.seedWorkspace({ name: 'Local' });
     const upsertRow = vi.fn(async () => {});
     const handle = await sync({
@@ -112,7 +115,11 @@ describe('initial reconcile', () => {
       upsertRow,
     });
     expect(store.getWorkspace().name).toBe("Local's Mnemosphere");
-    expect(handle.status).toBe('pushed');
+    expect(handle.status).toBe('remote-invalid');
+    expect(upsertRow).not.toHaveBeenCalled();
+    store.createPage({ title: 'x' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(upsertRow).not.toHaveBeenCalled(); // the edit subscription never armed
   });
 });
 
@@ -258,5 +265,103 @@ describe('push-on-change', () => {
     expect(upsertRow).toHaveBeenCalledTimes(3);
     // the retry carries the earlier edit too — the payload is always the whole tree
     expect(upsertRow.mock.calls[2][0].pages.map((p) => p.title)).toEqual(expect.arrayContaining(['lost?', 'retry carrier']));
+  });
+});
+
+describe('reconcile decision is immune to state created after the pull began', () => {
+  test("boot's seed landing while the pull is in flight cannot flip the decision — remote still wins", async () => {
+    store.seedWorkspace({ name: 'Remote' });
+    const remote = store.exportWorkspace();
+    store.resetStore();
+    installMemoryLocalStorage();
+
+    let resolveFetch;
+    const fetchRow = () => new Promise((res) => { resolveFetch = res; });
+    const upsertRow = vi.fn(async () => {});
+    const pending = startWorkspaceSync({ debounceMs: 1000, fetchRow, upsertRow });
+    // The 5s boot race fired and startApp seeded a starter workspace:
+    store.seedWorkspace({ name: 'Seed' });
+    // The remote row is OLDER than the seed — pre-fix, LWW let the seed win and
+    // pushed it over the user's real workspace.
+    resolveFetch(remoteRowFrom(remote, new Date(Date.now() - 60_000).toISOString()));
+    const handle = await pending;
+    stop = handle.stop;
+
+    expect(handle.status).toBe('imported');
+    expect(store.getWorkspace().name).toBe("Remote's Mnemosphere");
+    expect(upsertRow.mock.calls.every(([x]) => !JSON.stringify(x).includes('Seed'))).toBe(true);
+  });
+});
+
+describe('cross-tab: storage events reload the in-memory tree', () => {
+  test("another tab's write lands in this tab's store instead of being clobbered by the next push", async () => {
+    store.seedWorkspace({ name: 'Local' });
+    const upsertRow = vi.fn(async () => {});
+    await sync({ fetchRow: async () => null, upsertRow });
+
+    const pages = JSON.parse(localStorage.getItem('ms:pages'));
+    pages[0].title = 'edited in tab A';
+    localStorage.setItem('ms:pages', JSON.stringify(pages));
+    const ev = new Event('storage');
+    Object.defineProperty(ev, 'key', { value: 'ms:pages' });
+    window.dispatchEvent(ev);
+
+    expect(store.getPages()[0].title).toBe('edited in tab A');
+  });
+});
+
+describe('flushAndStopWorkspaceSync — sign-out must not drop the last edit', () => {
+  test('delivers the pending debounced edit as ONE final push without waiting out the debounce, then goes inert', async () => {
+    store.seedWorkspace({ name: 'Local' });
+    const upsertRow = vi.fn(async () => {});
+    await sync({ fetchRow: async () => null, upsertRow });
+    upsertRow.mockClear();
+
+    store.createPage({ title: 'last edit before sign-out' });
+    await flushAndStopWorkspaceSync(); // no timer advance — sign-out cannot wait
+    expect(upsertRow).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(upsertRow.mock.calls[0][0])).toContain('last edit before sign-out');
+
+    store.createPage({ title: 'after sign-out' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(upsertRow).toHaveBeenCalledTimes(1); // subscriptions released
+    stop = null;
+  });
+
+  test('with nothing pending it pushes nothing and is safe to call when sync never started', async () => {
+    await flushAndStopWorkspaceSync(); // no active sync — must not throw
+    store.seedWorkspace({ name: 'Local' });
+    const upsertRow = vi.fn(async () => {});
+    await sync({ fetchRow: async () => null, upsertRow });
+    upsertRow.mockClear();
+    await flushAndStopWorkspaceSync();
+    expect(upsertRow).not.toHaveBeenCalled();
+    stop = null;
+  });
+});
+
+describe('status honesty + invalid-remote safety', () => {
+  test("a failed reconcile push reports 'push-failed', never 'pushed'", async () => {
+    store.seedWorkspace({ name: 'Local' });
+    const handle = await sync({
+      fetchRow: async () => null,
+      upsertRow: vi.fn(async () => { throw new Error('x'); }),
+    });
+    expect(handle.status).toBe('push-failed');
+  });
+
+  test('an eviction stashes a recovery snapshot before wiping — unsynced edits are never destroyed outright', async () => {
+    store.seedWorkspace({ name: 'User A Leftover' });
+    const first = await sync({ getUserId: async () => 'user-a', fetchRow: async () => null, upsertRow: vi.fn(async () => {}) });
+    first.stop();
+    stop = null;
+    store.createPage({ title: 'unsynced edit' }); // after stop — exists nowhere else
+
+    const handle = await sync({ getUserId: async () => 'user-b', fetchRow: async () => null, upsertRow: vi.fn(async () => {}) });
+    expect(store.getWorkspace()).toBeNull();
+    const stash = JSON.parse(localStorage.getItem('ms:evicted:user-a'));
+    expect(stash.format).toBe('mnemosphere-workspace');
+    expect(JSON.stringify(stash)).toContain('unsynced edit');
+    expect(handle.status).toBe('synced');
   });
 });

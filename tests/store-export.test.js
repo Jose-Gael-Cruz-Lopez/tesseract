@@ -100,3 +100,40 @@ describe('importWorkspace', () => {
     expect(store.getPages().length).toBe(before);
   });
 });
+
+describe('the LWW clock advances on EVERY content mutation', () => {
+  // Sync's last-write-wins compares remote updated_at against the newest local
+  // `edited`. A mutation that doesn't advance the clock is silently undone by
+  // any remote row written after the last stamped edit.
+  test('deletePage and restorePage stamp the whole affected subtree', () => {
+    store.seedWorkspace({ name: 'Ada' });
+    const parent = store.createPage({ title: 'p' });
+    const child = store.createPage({ title: 'c', parentId: parent.id });
+    store.getPage(parent.id).edited = 1000;
+    store.getPage(child.id).edited = 1000;
+
+    store.deletePage(parent.id);
+    expect(store.getPage(parent.id).edited).toBeGreaterThan(1000);
+    expect(store.getPage(child.id).edited).toBeGreaterThan(1000);
+
+    store.getPage(parent.id).edited = 1000;
+    store.restorePage(parent.id);
+    expect(store.getPage(parent.id).edited).toBeGreaterThan(1000);
+  });
+
+  test('toggleFavorite stamps the page', () => {
+    store.seedWorkspace({ name: 'Ada' });
+    const page = store.createPage({ title: 'f' });
+    store.getPage(page.id).edited = 1000;
+    store.toggleFavorite(page.id);
+    expect(store.getPage(page.id).edited).toBeGreaterThan(1000);
+  });
+
+  test('destroyPage advances the workspace clock (the destroyed page cannot carry the evidence)', () => {
+    store.seedWorkspace({ name: 'Ada' });
+    const page = store.createPage({ title: 'd' });
+    store.getWorkspace().edited = 1000;
+    store.destroyPage(page.id);
+    expect(store.getWorkspace().edited).toBeGreaterThan(1000);
+  });
+});
