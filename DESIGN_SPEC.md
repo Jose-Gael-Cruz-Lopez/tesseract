@@ -1,3 +1,9 @@
+HISTORICAL RECORD (2026-08-06): everything below describes the RETIRED bespoke
+three.js globe (src/globe/, deleted 2026-07-30 when PR #46 replaced it with a
+3d-force-graph renderer in src/graph/). Kept for design history only — for the
+current Home view see
+docs/superpowers/specs/2026-07-30-3d-force-graph-migration-design.md.
+
 SECOND BRAIN GLOBE · DESIGN SPEC
 
 NOTE (2026-07-08): the app is now the Mnemosphere Notion-style workspace; the

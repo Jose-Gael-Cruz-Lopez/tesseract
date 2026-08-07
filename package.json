@@ -1,19 +1,19 @@
 {
-  "name": "second-brain-globe",
+  "name": "mnemosphere",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "An interactive 3D knowledge globe. Every cluster of thought, tethered to a single core.",
+  "description": "A Notion-style knowledge workspace whose Home is a 3D force-directed knowledge graph, fused with the canopy shared-context backend.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jose-Gael-Cruz-Lopez/second-brain-globe.git"
+    "url": "git+https://github.com/Jose-Gael-Cruz-Lopez/tesseract.git"
   },
   "keywords": [
-    "threejs",
     "knowledge-graph",
     "second-brain",
-    "data-visualization",
+    "3d-force-graph",
+    "notion",
     "webgl"
   ],
   "scripts": {

@@ -7,17 +7,17 @@ DELETE FROM sqlite_sequence;
 
 INSERT INTO docs (slug, section, title, body, current_version, updated_at, updated_by, space) VALUES ('mcp-server', 'reference', 'MCP Server', 'The MCP server is the only write path into Canopy. Coding agents connect over the Model Context Protocol and post the output of a work session through a typed contract; nothing else can mutate the store.
 
-The endpoint lives at /mcp on the same origin as everything else and is bearer-only. Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
+The agent endpoint lives at /mcp/<owner>/<repo> on the same origin as everything else — one per connected repo, authorized like the hub routes (you must be a collaborator on that repo) — and is bearer-only. Bare /mcp is the single-tenant admin surface (ADMIN_LOGINS only). Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
 
 A fresh MCP server instance is constructed per request (the SDK guards against reuse), and the handler is stateless — there is no Durable Object or long-lived agent. The write tools (append_feed, propose_doc_update, propose_milestone) do not write directly: they funnel through the same gate as the HTTP /ingest path, so an agent can never bypass review.', 1, '2026-06-24T10:00:00Z', 'AndresL230', 'canopy');
 INSERT INTO doc_versions (slug, version, body, summary, status, confidence, created_at, created_by) VALUES ('mcp-server', 1, 'The MCP server is the only write path into Canopy. Coding agents connect over the Model Context Protocol and post the output of a work session through a typed contract; nothing else can mutate the store.
 
-The endpoint lives at /mcp on the same origin as everything else and is bearer-only. Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
+The agent endpoint lives at /mcp/<owner>/<repo> on the same origin as everything else — one per connected repo, authorized like the hub routes (you must be a collaborator on that repo) — and is bearer-only. Bare /mcp is the single-tenant admin surface (ADMIN_LOGINS only). Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
 
 A fresh MCP server instance is constructed per request (the SDK guards against reuse), and the handler is stateless — there is no Durable Object or long-lived agent. The write tools (append_feed, propose_doc_update, propose_milestone) do not write directly: they funnel through the same gate as the HTTP /ingest path, so an agent can never bypass review.', 'Initial published version', 'promoted', 'high', '2026-06-24T10:00:00Z', 'AndresL230');
 INSERT INTO doc_versions (slug, version, body, summary, status, confidence, created_at, created_by) VALUES ('mcp-server', 2, 'The MCP server is the only write path into Canopy. Coding agents connect over the Model Context Protocol and post the output of a work session through a typed contract; nothing else can mutate the store.
 
-The endpoint lives at /mcp and is bearer-only: a personal token in the Authorization header (Bearer canopy_mcp_…), compared by SHA-256 hash, never logged. Bad credentials get a bare 401 — no WWW-Authenticate, no OAuth discovery.
+The agent endpoint lives at /mcp/<owner>/<repo> (bare /mcp is admin-only) and is bearer-only: a personal token in the Authorization header (Bearer canopy_mcp_…), compared by SHA-256 hash, never logged. Bad credentials get a bare 401 — no WWW-Authenticate, no OAuth discovery.
 
 Rotation: tokens never expire on their own. Revoke and mint a new one from Settings; the old value stops working immediately. A fresh, stateless server is built per request, and the write tools funnel through the same gate as /ingest — an agent can never bypass human review.', 'Document token rotation + the per-request server lifecycle', 'staged', 'high', '2026-06-25T20:00:00Z', 'AndresL230');
 INSERT INTO docs (slug, section, title, body, current_version, updated_at, updated_by, space) VALUES ('connect-over-mcp', 'reference', 'Connect to Canopy over MCP', 'Canopy exposes its context store to coding agents over the Model Context Protocol. Once connected, your agent can read the docs library, feed, and roadmap, and stage new context for human review — all through the same gate that guards every write. Here is how to connect from nothing.
@@ -30,23 +30,23 @@ Open Canopy in your browser and sign in with GitHub. Access is gated to active m
 
 Go to Settings, find MCP access tokens, and click Mint new token. Canopy shows the raw token — it begins with canopy_mcp_ — exactly once. Copy it immediately: only its SHA-256 hash is stored, so it can never be displayed again. This token is your personal credential, and any write made with it is attributed to you.
 
-## 3. Point your agent at /mcp
+## 3. Point your agent at /mcp/<owner>/<repo>
 
-Add Canopy to your MCP client with the token as a bearer header, using the /mcp path on the same origin where you use Canopy. In Claude Code, drop a `.mcp.json` into your project (or run `claude mcp add`):
+Add Canopy to your MCP client with the token as a bearer header, using the repo-scoped /mcp/<owner>/<repo> path on the same origin where you use Canopy — <owner>/<repo> is the connected repo (hub) your agent works in, and you must be a collaborator on it. In Claude Code, drop a `.mcp.json` into your project (or run `claude mcp add`):
 
 ```json
 {
   "mcpServers": {
     "canopy": {
       "type": "streamable-http",
-      "url": "https://your-canopy-host/mcp",
+      "url": "https://your-canopy-host/mcp/owner/repo",
       "headers": { "Authorization": "Bearer canopy_mcp_…" }
     }
   }
 }
 ```
 
-The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact.
+The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact. (Bare /mcp without a repo is the single-tenant admin surface and answers 403 "admin only" to everyone else.)
 
 ## 4. Use the tools
 
@@ -65,23 +65,23 @@ Open Canopy in your browser and sign in with GitHub. Access is gated to active m
 
 Go to Settings, find MCP access tokens, and click Mint new token. Canopy shows the raw token — it begins with canopy_mcp_ — exactly once. Copy it immediately: only its SHA-256 hash is stored, so it can never be displayed again. This token is your personal credential, and any write made with it is attributed to you.
 
-## 3. Point your agent at /mcp
+## 3. Point your agent at /mcp/<owner>/<repo>
 
-Add Canopy to your MCP client with the token as a bearer header, using the /mcp path on the same origin where you use Canopy. In Claude Code, drop a `.mcp.json` into your project (or run `claude mcp add`):
+Add Canopy to your MCP client with the token as a bearer header, using the repo-scoped /mcp/<owner>/<repo> path on the same origin where you use Canopy — <owner>/<repo> is the connected repo (hub) your agent works in, and you must be a collaborator on it. In Claude Code, drop a `.mcp.json` into your project (or run `claude mcp add`):
 
 ```json
 {
   "mcpServers": {
     "canopy": {
       "type": "streamable-http",
-      "url": "https://your-canopy-host/mcp",
+      "url": "https://your-canopy-host/mcp/owner/repo",
       "headers": { "Authorization": "Bearer canopy_mcp_…" }
     }
   }
 }
 ```
 
-The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact.
+The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact. (Bare /mcp without a repo is the single-tenant admin surface and answers 403 "admin only" to everyone else.)
 
 ## 4. Use the tools
 
@@ -200,10 +200,10 @@ the gate — the single set of functions every write passes through, deciding wr
 needs-triage — the catch-all for agent output that could not be placed automatically and is waiting on a human.', 'Initial published version', 'promoted', 'high', '2026-06-25T16:00:00Z', 'AndresL230');
 INSERT INTO docs (slug, section, title, body, current_version, updated_at, updated_by, space) VALUES ('deployment', 'context', 'How Canopy is Deployed', 'Canopy is a single Cloudflare Worker named canopy, deployed from the main branch via Cloudflare Workers Builds (build command npm run build:web, deploy command wrangler deploy). The web app is built by Vite into web/dist and served by the Worker''s ASSETS binding, on the same origin as the API.
 
-State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. Three secrets configure the runtime: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the GitHub OAuth app, and COOKIE_SECRET (which also seals the stored org token). The public origin is canopy.saplinglearn.com; the GitHub OAuth app''s callback is that origin''s /auth/callback over https.', 1, '2026-06-25T20:00:00Z', 'AndresL230', 'canopy');
+State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. The runtime is configured by COOKIE_SECRET plus the GitHub App credentials (GITHUB_APP_ID / GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET / GITHUB_APP_PRIVATE_KEY) — the legacy OAuth-app pair was retired with the App login flip. The public origin is memo-sphere.com; the App''s callback is that origin''s /auth/callback over https.', 1, '2026-06-25T20:00:00Z', 'AndresL230', 'canopy');
 INSERT INTO doc_versions (slug, version, body, summary, status, confidence, created_at, created_by) VALUES ('deployment', 1, 'Canopy is a single Cloudflare Worker named canopy, deployed from the main branch via Cloudflare Workers Builds (build command npm run build:web, deploy command wrangler deploy). The web app is built by Vite into web/dist and served by the Worker''s ASSETS binding, on the same origin as the API.
 
-State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. Three secrets configure the runtime: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the GitHub OAuth app, and COOKIE_SECRET (which also seals the stored org token). The public origin is canopy.saplinglearn.com; the GitHub OAuth app''s callback is that origin''s /auth/callback over https.', 'Initial published version', 'promoted', 'high', '2026-06-25T20:00:00Z', 'AndresL230');
+State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. The runtime is configured by COOKIE_SECRET plus the GitHub App credentials (GITHUB_APP_ID / GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET / GITHUB_APP_PRIVATE_KEY) — the legacy OAuth-app pair was retired with the App login flip. The public origin is memo-sphere.com; the App''s callback is that origin''s /auth/callback over https.', 'Initial published version', 'promoted', 'high', '2026-06-25T20:00:00Z', 'AndresL230');
 INSERT INTO docs (slug, section, title, body, current_version, updated_at, updated_by, space) VALUES ('adr-001-single-write-path', 'decisions', 'ADR-001 · One gated write path', 'Context: agents produce output in many shapes, and without a single chokepoint, writes arrived inconsistently and some bypassed review entirely.
 
 Decision: every write — MCP tools and the HTTP ingest path alike — funnels through one set of per-entry gate functions. Adding a new write means extending the gate, never introducing a second write surface.
