@@ -184,6 +184,14 @@ export function mountApp(root, { onLogOut } = {}) {
     toggleComments: (pageId) => comments.toggle(pageId ?? currentId),
 
     async logOut() {
+      // First: deliver any pending debounced sync push while the Supabase
+      // session is still valid, and release the store subscriptions — after
+      // sign-out a push would 401 (or worse, land as another user). No-op when
+      // sync never started; dynamic import keeps the module lazy like boot's.
+      try {
+        const { flushAndStopWorkspaceSync } = await import('./data/sync.js');
+        await flushAndStopWorkspaceSync();
+      } catch { /* sync module unavailable — nothing to flush */ }
       auth.logOut();
       if (globe) globe.dispose();
       // Local state alone is not the credential. The canopy session lives in an httpOnly
@@ -209,6 +217,19 @@ export function mountApp(root, { onLogOut } = {}) {
   editor = mountEditor(pageEl, ctx);
   comments = mountComments(commentsEl, ctx);
   topbar.setPage(null);
+
+  // Workspace replacement (import / eviction / cross-tab reload) with a page
+  // open: the editor renders from the store only at open(), so a page left
+  // open is a stale DOM whose next keystroke or checkbox click saves the OLD
+  // content back over the freshly replaced tree (and sync pushes the
+  // corruption to the cloud). Close it — the store is the source of truth.
+  store.onStore('pages', (detail) => {
+    const type = detail?.type;
+    if (type !== 'import' && type !== 'clear' && type !== 'reload') return;
+    if (mode === 'developer' || currentId == null) return;
+    if (type === 'reload' && store.getPage(currentId)) { editor.open(currentId); return; }
+    ctx.closePage();
+  });
 
   // ---- Mode mounting ----
   function teardownMode() {

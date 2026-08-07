@@ -197,6 +197,23 @@ export function resetStore() {
 }
 
 /**
+ * Re-read workspace/pages/prefs from localStorage into memory and notify every
+ * surface. Used by sync's cross-tab listener: another tab's write lands in
+ * localStorage (the storage event fires only in OTHER tabs), and without this
+ * reload this tab's next whole-blob persist or push would clobber it.
+ */
+export function reloadFromStorage() {
+  const ws = readLS(KEYS.workspace);
+  const pages = readLS(KEYS.pages);
+  const prefs = readLS(KEYS.prefs);
+  _workspace = ws && typeof ws === 'object' ? ws : null;
+  _pages = Array.isArray(pages) ? pages : [];
+  _prefs = prefs && typeof prefs === 'object' ? prefs : {};
+  emit('workspace');
+  emit('pages', { type: 'reload' });
+}
+
+/**
  * Drop the workspace + pages (content only — prefs and listeners survive).
  * Used by sync when the local tree belongs to a DIFFERENT signed-in account
  * than the current one: that content lives in its owner's cloud row, and
@@ -316,10 +333,15 @@ export function updatePage(id, patch = {}) {
   return page;
 }
 
+// delete/restore/favorite/destroy all stamp the LWW clock: sync's last-write-
+// wins compares remote updated_at against the newest local `edited`, so a
+// mutation that doesn't advance a clock is silently undone by any remote row
+// written after the last stamped edit.
 export function deletePage(id) {
   const page = getPage(id);
   if (!page) return null;
-  for (const p of [page, ...descendantsOf(id)]) p.deleted = true;
+  const now = Date.now();
+  for (const p of [page, ...descendantsOf(id)]) { p.deleted = true; p.edited = now; }
   persistPages();
   emit('pages', { type: 'delete', page });
   return page;
@@ -328,7 +350,8 @@ export function deletePage(id) {
 export function restorePage(id) {
   const page = getPage(id);
   if (!page) return null;
-  for (const p of [page, ...descendantsOf(id)]) p.deleted = false;
+  const now = Date.now();
+  for (const p of [page, ...descendantsOf(id)]) { p.deleted = false; p.edited = now; }
   persistPages();
   emit('pages', { type: 'restore', page });
   return page;
@@ -339,6 +362,8 @@ export function destroyPage(id) {
   if (!page) return null;
   const doomed = new Set([id, ...descendantsOf(id).map((p) => p.id)]);
   _pages = _pages.filter((p) => !doomed.has(p.id));
+  // The destroyed pages can't carry the clock — advance the workspace's own.
+  if (_workspace) { _workspace.edited = Date.now(); persistWorkspace(); }
   persistPages();
   emit('pages', { type: 'destroy', page });
   return page;
@@ -387,6 +412,7 @@ export function toggleFavorite(id) {
   const page = getPage(id);
   if (!page) return null;
   page.favorite = !page.favorite;
+  page.edited = Date.now();
   persistPages();
   emit('pages', { type: 'update', page });
   return page;
