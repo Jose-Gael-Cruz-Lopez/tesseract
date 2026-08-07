@@ -22,6 +22,31 @@
 //   stripQuery    — drop OAuth/denied query params from the URL
 //   toast         — a message to show after mounting (optional)
 
+/**
+ * Execute a boot decision. `fx` carries every effect injected (main.js supplies
+ * the real ones), so the wiring — which session seeds the app, when Developer
+ * unlocks, that sync starts BEFORE the app seeds — is testable
+ * (tests/boot-exec.test.js); main.js stays a thin composition root.
+ */
+export async function executeBoot(inputs, fx) {
+  const d = decideBoot(inputs);
+  if (d.sessionSource === 'supabase') fx.setSession(fx.profileFromSession(inputs.sbSession));
+  else if (d.sessionSource === 'github') fx.setSession(fx.sessionFromGitHub(inputs.canopyMe));
+  if (d.devAvailable) fx.setDevAvailable(true);
+  if (d.stripQuery) fx.stripQuery();
+  // Pull-first: sync's reconcile must run (or time out) before startApp can
+  // seed a starter workspace over unclaimed remote data.
+  if (d.sync) await fx.startSync();
+  if (d.show === 'app') fx.startApp();
+  else if (d.show === 'auth') {
+    await fx.showAuth();
+    if (d.toast) await fx.toast(d.toast);
+  } else {
+    fx.showLanding();
+  }
+  return d;
+}
+
 export function decideBoot({ landing = false, denied = false, sbSession = null, canopyMe = null, localSession = null } = {}) {
   const base = { sessionSource: null, devAvailable: false, sync: false, stripQuery: false, toast: null };
   if (landing) return { ...base, show: 'landing' };

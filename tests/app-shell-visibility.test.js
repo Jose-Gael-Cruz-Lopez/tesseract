@@ -23,6 +23,29 @@ vi.mock('../src/graph/graph.js', () => ({
   }),
 }));
 
+// The remount test needs the developer sphere to actually MOUNT a second graph
+// (a vacuous remount that creates no graph proves nothing about the cancelled
+// pause). Stub the canopy API at the module boundary: a connected hub list and
+// empty read surfaces are enough for mountDevSphere → initGraph to run.
+vi.mock('../src/dev/canopy-api.js', () => {
+  const ok = (data) => async () => ({ ok: true, status: 200, data });
+  return {
+    isConfigured: () => true,
+    canopyApi: {
+      getMyRepos: ok({ repos: [{ repo: 'o/r', can_push: true }], appSlug: null }),
+      getDocs: ok({ docs: [] }),
+      getRoadmap: ok({ narrative: '', milestones: [] }),
+      getFeed: ok({ feed: [] }),
+      getTriage: ok({ items: [] }),
+      getDashboard: ok({ previousActivity: [], todo: [] }),
+      getMe: ok({ login: 'dev' }),
+      getDoc: ok({ body: '' }),
+      search: ok({ result: { primary: [], pointers: [] } }),
+    },
+    makeCanopyApi: () => ({}),
+  };
+});
+
 function installMemoryLocalStorage() {
   const map = new Map();
   const storage = {
@@ -86,16 +109,33 @@ describe('graph visibility across the page slide-over', () => {
     expect(calls).not.toContain(false); // the pending pause was cancelled
   });
 
-  test('a mode remount within the window never pauses the NEW graph', () => {
-    handle.ctx.openPage(pageId);
-    const first = globe();
-    // Simulate a teardown/remount (e.g. mode switch) before the pause fires.
+  test('a mode remount within the window never pauses the NEW graph', async () => {
     store.setDevAvailable(true);
+    store.setDevHub('o/r'); // the dev sphere mounts a REAL second graph
+    handle.ctx.openPage(pageId); // pause pending on graph #1
+    const first = globe();
+
     handle.ctx.setMode('developer');
+    // mountDeveloper resolves /me/repos then mounts the sphere — drain the
+    // microtask queue (fake timers leave promise jobs runnable).
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(graphs.instances.length).toBeGreaterThan(1); // the remount actually created one
+    expect(globe()).not.toBe(first);
+
     vi.advanceTimersByTime(2000);
-    expect(first.setVisible).not.toHaveBeenCalledWith(false);
+    // The pause scheduled against #1 was cancelled by the teardown: it must
+    // hit neither the disposed graph nor the freshly mounted one.
     for (const g of graphs.instances) {
       expect(g.setVisible).not.toHaveBeenCalledWith(false);
     }
+  });
+
+  test('goHome in a developer state with no sphere mounted (globe null) does not crash', () => {
+    // Regression guard for a pre-existing crash: closeDevPage called
+    // globe.clearFocus() unguarded, and the topbar home button reaches it in
+    // every developer no-sphere state (hub picker / connect prompt).
+    store.setDevAvailable(true);
+    handle.ctx.setMode('developer'); // async sphere mount hasn't resolved: globe is null
+    expect(() => handle.ctx.goHome()).not.toThrow();
   });
 });

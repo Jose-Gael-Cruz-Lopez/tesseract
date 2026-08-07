@@ -140,7 +140,9 @@ export function mountApp(root, { onLogOut } = {}) {
       pageEl.classList.remove('show');
       pageEl.setAttribute('aria-hidden', 'true');
       resumeGraphNow();
-      globe.clearFocus();
+      // Reachable with NO sphere mounted (hub picker / connect prompt — the
+      // topbar home button routes here), where globe is null.
+      if (globe) globe.clearFocus();
     },
 
     goHome() {

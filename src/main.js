@@ -26,7 +26,7 @@ import { initStore, seedWorkspace, setDevAvailable } from './data/store.js';
 import { mountApp } from './app.js';
 import { supabaseEnabled, getSupabaseSession, profileFromSession } from './data/supabase.js';
 import { getCanopySession, sessionFromGitHub } from './data/canopy-session.js';
-import { decideBoot } from './auth/boot-decision.js';
+import { executeBoot } from './auth/boot-decision.js';
 
 // Auth views load lazily (a separate chunk) so the auth code isn't paid for
 // once a returning, onboarded user is past the gate.
@@ -82,33 +82,32 @@ async function boot() {
       getCanopySession(),
     ]);
   }
-  const d = decideBoot(inputs);
-
-  if (d.sessionSource === 'supabase') setSession(profileFromSession(inputs.sbSession));
-  else if (d.sessionSource === 'github') setSession(sessionFromGitHub(inputs.canopyMe));
-  if (d.devAvailable) setDevAvailable(true);
-  if (d.stripQuery) history.replaceState(null, '', location.pathname); // drop OAuth/denied query params
-  if (d.sync) {
+  // Execute via the injected-effects executor (tests/boot-exec.test.js pins
+  // the wiring; main.js is only the composition root supplying real effects).
+  await executeBoot(inputs, {
+    profileFromSession,
+    sessionFromGitHub,
+    setSession,
+    setDevAvailable,
+    stripQuery: () => history.replaceState(null, '', location.pathname), // drop OAuth/denied query params
     // Cloud sync (Google users only — the row is keyed on the Supabase user).
     // PULL-FIRST and BEFORE startApp's seed: a fresh browser with remote data
     // must import it rather than race a starter seed over it. The 5s race
-    // keeps a dead network from blocking boot — if sync resolves late, its
-    // import lands through store events and the UI updates live.
-    const syncReady = import('./data/sync.js').then((m) => m.startWorkspaceSync()).catch(() => {});
-    await Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
-  }
-
-  if (d.show === 'app') {
-    startApp(root);
-  } else if (d.show === 'auth') {
-    await showAuth(root);
-    if (d.toast) {
+    // keeps a dead network from blocking boot — the reconcile is race-proof
+    // (sync.js captures pre-pull state), so a late resolve imports safely and
+    // the UI updates live through store events.
+    startSync: () => {
+      const syncReady = import('./data/sync.js').then((m) => m.startWorkspaceSync()).catch(() => {});
+      return Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    },
+    startApp: () => startApp(root),
+    showAuth: () => showAuth(root),
+    showLanding: () => showLanding(root),
+    toast: async (msg) => {
       const { toast } = await import('./ui/popover.js');
-      toast(d.toast);
-    }
-  } else {
-    showLanding(root);
-  }
+      toast(msg);
+    },
+  });
 }
 
 boot();
