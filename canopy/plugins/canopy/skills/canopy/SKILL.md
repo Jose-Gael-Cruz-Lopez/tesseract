@@ -78,12 +78,15 @@ Mint a personal token first: Canopy web app → Settings → MCP access tokens (
 claude plugin marketplace add SaplingLearn/canopy
 claude plugin install canopy@canopy
 export CANOPY_MCP_TOKEN=canopy_mcp_…        # the plugin's MCP config reads this
+export CANOPY_REPO=owner/repo               # the connected repo (hub) your agent works in
 ```
 
-**Manual fallback** — wire the MCP server and copy the skills yourself:
+**Manual fallback** — wire the MCP server and copy the skills yourself. The agent surface
+is repo-scoped: `/mcp/<owner>/<repo>` for a repo you're a collaborator on and that is
+connected to Canopy (bare `/mcp` is the single-tenant admin surface — admins only):
 
 ```bash
-claude mcp add --transport http canopy https://canopy.saplinglearn.com/mcp \
+claude mcp add --transport http canopy https://memo-sphere.com/mcp/owner/repo \
   --header "Authorization: Bearer canopy_mcp_…"
 # then copy the skill folders into another repo / your home dir:
 cp -r .claude/skills/{canopy,load-context,record-session} ~/.claude/skills/

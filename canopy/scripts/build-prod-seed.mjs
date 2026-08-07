@@ -18,14 +18,14 @@ const docs = [
     body:
 `The MCP server is the only write path into Canopy. Coding agents connect over the Model Context Protocol and post the output of a work session through a typed contract; nothing else can mutate the store.
 
-The endpoint lives at /mcp on the same origin as everything else and is bearer-only. Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
+The agent endpoint lives at /mcp/<owner>/<repo> on the same origin as everything else — one per connected repo, authorized like the hub routes (you must be a collaborator on that repo) — and is bearer-only. Bare /mcp is the single-tenant admin surface (ADMIN_LOGINS only). Each request carries a personal access token in the Authorization header (Bearer canopy_mcp_…). On a missing or invalid credential the server returns a bare 401 with no WWW-Authenticate header and no OAuth discovery — clients must use the configured token. The token is compared by SHA-256 hash against the store and never logged.
 
 A fresh MCP server instance is constructed per request (the SDK guards against reuse), and the handler is stateless — there is no Durable Object or long-lived agent. The write tools (append_feed, propose_doc_update, propose_milestone) do not write directly: they funnel through the same gate as the HTTP /ingest path, so an agent can never bypass review.`,
     staged: { summary: "Document token rotation + the per-request server lifecycle",
       body:
 `The MCP server is the only write path into Canopy. Coding agents connect over the Model Context Protocol and post the output of a work session through a typed contract; nothing else can mutate the store.
 
-The endpoint lives at /mcp and is bearer-only: a personal token in the Authorization header (Bearer canopy_mcp_…), compared by SHA-256 hash, never logged. Bad credentials get a bare 401 — no WWW-Authenticate, no OAuth discovery.
+The agent endpoint lives at /mcp/<owner>/<repo> (bare /mcp is admin-only) and is bearer-only: a personal token in the Authorization header (Bearer canopy_mcp_…), compared by SHA-256 hash, never logged. Bad credentials get a bare 401 — no WWW-Authenticate, no OAuth discovery.
 
 Rotation: tokens never expire on their own. Revoke and mint a new one from Settings; the old value stops working immediately. A fresh, stateless server is built per request, and the write tools funnel through the same gate as /ingest — an agent can never bypass human review.` } },
 
@@ -41,23 +41,23 @@ Open Canopy in your browser and sign in with GitHub. Access is gated to active m
 
 Go to Settings, find MCP access tokens, and click Mint new token. Canopy shows the raw token — it begins with canopy_mcp_ — exactly once. Copy it immediately: only its SHA-256 hash is stored, so it can never be displayed again. This token is your personal credential, and any write made with it is attributed to you.
 
-## 3. Point your agent at /mcp
+## 3. Point your agent at /mcp/<owner>/<repo>
 
-Add Canopy to your MCP client with the token as a bearer header, using the /mcp path on the same origin where you use Canopy. In Claude Code, drop a \`.mcp.json\` into your project (or run \`claude mcp add\`):
+Add Canopy to your MCP client with the token as a bearer header, using the repo-scoped /mcp/<owner>/<repo> path on the same origin where you use Canopy — <owner>/<repo> is the connected repo (hub) your agent works in, and you must be a collaborator on it. In Claude Code, drop a \`.mcp.json\` into your project (or run \`claude mcp add\`):
 
 \`\`\`json
 {
   "mcpServers": {
     "canopy": {
       "type": "streamable-http",
-      "url": "https://your-canopy-host/mcp",
+      "url": "https://your-canopy-host/mcp/owner/repo",
       "headers": { "Authorization": "Bearer canopy_mcp_…" }
     }
   }
 }
 \`\`\`
 
-The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact.
+The endpoint is bearer-only. A missing or invalid token gets a bare 401 with no OAuth discovery, so the token must be present and exact. (Bare /mcp without a repo is the single-tenant admin surface and answers 403 "admin only" to everyone else.)
 
 ## 4. Use the tools
 

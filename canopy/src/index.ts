@@ -2,7 +2,7 @@ import { app } from "./routes";
 import { handleMcp } from "./mcp";
 import { handleGithubWebhook } from "./webhook";
 import { logEvent } from "./log";
-import { resolveBearerPrincipal } from "./auth/principal";
+import { resolveBearerPrincipal, isAdmin } from "./auth/principal";
 import { loginAllowed, evictStaleAbuseState } from "./auth/rate-limit";
 import { runSelfCheck } from "./auth/selfcheck";
 import { authorizeRepoAccess } from "./auth/repo-gate";
@@ -64,7 +64,20 @@ export default {
         return jsonError("unauthorized", 401);
       }
 
-      if (!repoMatch) return handleMcp(request, env, ctx, principal);
+      if (!repoMatch) {
+        // Flat /mcp is the single-tenant admin surface, mirroring the flat HTTP
+        // reads (issue #9 review): its read tools are deliberately unscoped
+        // (every repo's rows), and signup is open, so any GitHub user can mint a
+        // bearer — an unscoped surface must be admin-only. Multi-tenant agents
+        // live on /mcp/:owner/:repo (collaborator-gated) below. The principal is
+        // verified here, so the deny line may carry the login (repo_gate's
+        // convention) — unlike the detail-free pre-auth 401 above.
+        if (!isAdmin(env, principal.login)) {
+          logEvent({ event: "mcp_auth", outcome: "deny", login: principal.login });
+          return jsonError("admin only", 403);
+        }
+        return handleMcp(request, env, ctx, principal);
+      }
 
       // /mcp/:owner/:repo (Phase 3, additive): authorize exactly like the hub gate
       // (repoGate) — connected + collaborator — but for the bearer/agent surface. A

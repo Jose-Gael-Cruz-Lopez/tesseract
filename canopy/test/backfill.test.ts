@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { all, first, run, nowIso } from "../src/db";
 import { runBackfill } from "../src/tools/backfill";
+import { storePrSummary, storeIssueSummary } from "../src/tools/summarize";
 import type { Env } from "../src/env";
 import type { Summarizer, PrSummary, IssueSummary } from "../src/tools/summarize";
 import type { EventRow, PrSummaryRow, IssueSummaryRow } from "@shared/rows";
@@ -470,5 +471,42 @@ describe("runBackfill — issue summarization", () => {
     expect(issueSummarizer.calls).toBe(1); // already structured → skipped, not re-called
     expect(secondRun.summarized).toBe(2); // the 2 remaining PRs
     expect(summarizer.calls).toBe(3); // all 3 PRs summarized across the two runs
+  });
+});
+
+describe("already-summarized skip-checks are repo-scoped (0021 composite PKs)", () => {
+  // Another tenant captured the SAME PR/issue number (numbers are repo-relative,
+  // so collisions are inevitable). Its summary row must never suppress THIS
+  // repo's summary generation.
+  const otherStub = { model: "stub-model", summarize: async () => ({ title: "Other tenant", what: "their change", why: null, impact: null }) };
+  const otherIssueStub = { model: "stub-model", summarize: async () => ({ title: "Other tenant", summary: "theirs", next_step: null }) };
+
+  it("still summarizes this repo's PR when another repo has a real summary under the same semantic_key", async () => {
+    await storePrSummary(env.DB, otherStub, { semantic_key: "gh:pr:10:merged", pr_number: 10, title: "t", body: "b", repo: "other/tenant" });
+
+    const summarizer = countingSummarizer({ ...PR_STUB, what: "Ours." });
+    const res = await backfill({ fetchImpl: stubFetch([mergedPr], []), summarizer, summaryCallDelayMs: 0 });
+
+    expect(summarizer.calls).toBe(1); // NOT skipped by other/tenant's row
+    expect(res.prSummarizedCount).toBe(1);
+    const rows = await all<PrSummaryRow>(env.DB, `SELECT * FROM pr_summaries WHERE semantic_key = 'gh:pr:10:merged' ORDER BY repo`);
+    expect(rows.map((r) => r.repo)).toEqual(["o/r", "other/tenant"]);
+  });
+
+  it("still summarizes this repo's assigned issue when another repo has a real summary under the same issue number", async () => {
+    await storeIssueSummary(env.DB, otherIssueStub, { issue_number: 20, title: "t", body: "b", repo: "other/tenant" });
+
+    const issueSummarizer = countingSummarizer({ ...ISSUE_STUB, summary: "Ours." });
+    const res = await backfill({
+      fetchImpl: stubFetch([], [openIssue]),
+      summarizer: countingSummarizer({ ...PR_STUB, what: "unused" }),
+      issueSummarizer,
+      summaryCallDelayMs: 0,
+    });
+
+    expect(issueSummarizer.calls).toBe(1); // NOT skipped by other/tenant's row
+    expect(res.issueSummarizedCount).toBe(1);
+    const rows = await all<IssueSummaryRow>(env.DB, `SELECT * FROM issue_summaries WHERE issue_number = 20 ORDER BY repo`);
+    expect(rows.map((r) => r.repo)).toEqual(["o/r", "other/tenant"]);
   });
 });

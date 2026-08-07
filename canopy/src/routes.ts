@@ -6,7 +6,7 @@ import { runSelfCheck } from "./auth/selfcheck";
 import { authApp } from "./auth/routes";
 import { syncInstallationFromApp } from "./auth/connect";
 import { consume } from "./consumer";
-import { defaultRepo, nowIso } from "./db";
+import { all, defaultRepo, nowIso, run } from "./db";
 import { runBackfill } from "./tools/backfill";
 import { get_doc, list_docs, get_feed, query, list_needs_triage, list_adrs, list_milestone_proposals, list_proposals, list_identity_tasks } from "./tools/reads";
 import { map_identity } from "./tools/writes";
@@ -212,6 +212,36 @@ app.get("/me/dashboard", async (c) => {
     const empty: DashboardData = { person: null, previousActivity: [], todo: [], degraded: true };
     return c.json(empty);
   }
+});
+
+// The caller's own active MCP bearer tokens. Tokens are stored hashed and never
+// expire, so the metadata here (id, created_at, last_used_at) is deliberately all
+// there is to list — the raw token was shown once at mint and is unrecoverable.
+// SESSION-ONLY, like mint and revoke: the token lifecycle is a human action, and a
+// leaked bearer must get neither recon (list) nor persistence (mint) from it.
+app.get("/me/tokens", async (c) => {
+  if (c.get("principalSource") === "bearer") return c.json({ error: "session required" }, 403);
+  const login = c.get("principal").login;
+  const tokens = await all<{ id: number; created_at: string; last_used_at: string | null }>(
+    c.env.DB,
+    `SELECT id, created_at, last_used_at FROM mcp_tokens WHERE user = ? AND revoked = 0 ORDER BY id DESC`,
+    login
+  );
+  return c.json({ tokens });
+});
+
+// Revoke one of the caller's own tokens: the lifecycle exit for a never-expiring
+// credential (resolveToken already honors revoked = 1 on every request). Scoped
+// to the caller — a foreign, unknown, or already-revoked id is the same 404, so
+// the route is no existence oracle for other users' token ids.
+app.post("/me/tokens/:id/revoke", async (c) => {
+  if (c.get("principalSource") === "bearer") return c.json({ error: "session required" }, 403);
+  const login = c.get("principal").login;
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "not found" }, 404);
+  const res = await run(c.env.DB, `UPDATE mcp_tokens SET revoked = 1 WHERE id = ? AND user = ? AND revoked = 0`, id, login);
+  if (!res.meta.changes) return c.json({ error: "not found" }, 404);
+  return c.json({ ok: true });
 });
 
 // The signed-in user's connected hubs (GitHub-accessible ∩ connected). Feeds the web

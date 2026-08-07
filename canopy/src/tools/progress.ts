@@ -2,6 +2,7 @@ import type { MilestoneRow, MilestoneProgressRow } from "@shared/rows";
 import { type DB, all, run, nowIso } from "../db";
 import { progressFromIssueEvent } from "../webhook";
 import { installationToken } from "../auth/app";
+import { logEvent } from "../log";
 import type { Env } from "../env";
 
 const GH_API = "application/vnd.github+json";
@@ -220,6 +221,18 @@ export async function recomputeAllProgress(
  * repo-scoped (WHERE repo = ?) — so one repo's recompute can never read or write
  * another connected repo's milestones, even though this loop mints a different token
  * per iteration.
+ *
+ * Each iteration is contained: one repo's failed mint or recompute logs an
+ * error-level `progress_recompute` line and the loop moves on — one bad tenant
+ * must never starve the rest of a cron run (the same lesson as PR #29's failOpen).
+ * Suspended installations are skipped: GitHub refuses their token mints anyway,
+ * so each would otherwise burn a contained failure every 6 hours. The skip logs
+ * ONE info-level line per repo per run — suspended_at is cleared only by an
+ * unsuspend/created webhook, so a lost unsuspend delivery would otherwise freeze
+ * the tenant's progress forever with no trace to find it by. Info, not error:
+ * being suspended is GitHub's stated state, not a fault, and a permanently red
+ * alert gets muted. The LEFT JOIN keeps repos with no `installations` row
+ * eligible — only a row positively marked suspended is skipped.
  */
 export async function recomputeConnectedRepos(
   db: DB,
@@ -227,15 +240,31 @@ export async function recomputeConnectedRepos(
   opts?: { fetchImpl?: typeof fetch; installationTokenImpl?: (env: Env, id: number) => Promise<string> }
 ): Promise<void> {
   const mint = opts?.installationTokenImpl ?? ((e: Env, id: number) => installationToken(e, id, { fetchImpl: opts?.fetchImpl }));
-  const rows = await all<{ repo: string; installation_id: number | null }>(
+  const rows = await all<{ repo: string; installation_id: number | null; suspended_at: string | null }>(
     db,
-    `SELECT repo, installation_id FROM repos WHERE status = 'connected' AND installation_id IS NOT NULL`
+    `SELECT r.repo, r.installation_id, i.suspended_at
+       FROM repos r
+       LEFT JOIN installations i ON i.installation_id = r.installation_id
+      WHERE r.status = 'connected' AND r.installation_id IS NOT NULL`
   );
   for (const r of rows) {
     if (r.installation_id == null) continue;
-    const token = await mint(env, r.installation_id);
-    // reuse the existing per-repo recompute; fetchImpl threads through so a test that
-    // seeds milestones for a connected repo also gets its GitHub calls stubbed.
-    await recomputeAllProgress(db, { token, repo: r.repo, fetchImpl: opts?.fetchImpl });
+    if (r.suspended_at != null) {
+      logEvent({ event: "progress_recompute", outcome: "skipped", repo: r.repo, reason: "installation_suspended" });
+      continue;
+    }
+    try {
+      const token = await mint(env, r.installation_id);
+      // reuse the existing per-repo recompute; fetchImpl threads through so a test that
+      // seeds milestones for a connected repo also gets its GitHub calls stubbed.
+      await recomputeAllProgress(db, { token, repo: r.repo, fetchImpl: opts?.fetchImpl });
+    } catch (err) {
+      logEvent({
+        event: "progress_recompute",
+        outcome: "failure",
+        repo: r.repo,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }

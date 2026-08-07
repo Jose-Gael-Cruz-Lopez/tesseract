@@ -132,30 +132,56 @@ describe("unauthenticated /mcp requests emit one mcp_auth line at error level", 
     expect(allCalls.some((line) => line.includes("canopy_mcp_nope"))).toBe(false);
   });
 
-  it("a valid bearer emits NO mcp_auth line", async () => {
-    const raw = await seedUserWithBearer(LOGIN);
+  it("a valid ADMIN bearer emits NO mcp_auth line", async () => {
+    const raw = await seedUserWithBearer("admin-user"); // vitest.config.ts ADMIN_LOGINS
     const spies = spyConsole();
     const res = await worker.fetch(req("/mcp", raw), env as unknown as Env, ctx);
     expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
     expect(linesFor(spies.error, "mcp_auth")).toEqual([]);
     expect(linesFor(spies.log, "mcp_auth")).toEqual([]);
   });
+
+  it("a valid NON-admin bearer at flat /mcp → 403 + one attributable {mcp_auth, deny} line at error level", async () => {
+    // With signup open, any GitHub user can mint a bearer — so a denied flat-/mcp
+    // probe is a signal worth attributing, unlike the unverified 401 above. The
+    // principal is verified here, so logging the login is safe (repo_gate's deny
+    // convention).
+    const raw = await seedUserWithBearer(LOGIN);
+    const spies = spyConsole();
+    const res = await worker.fetch(req("/mcp", raw), env as unknown as Env, ctx);
+    expect(res.status).toBe(403);
+    expect(linesFor(spies.error, "mcp_auth")).toEqual([{ event: "mcp_auth", outcome: "deny", login: LOGIN }]);
+  });
 });
 
-describe("/mcp (no repo) — backward compat, unchanged", () => {
+// The flat /mcp surface is the single-tenant admin surface, mirroring the flat
+// HTTP reads (issue #9 review): its read tools are deliberately unscoped (every
+// repo's rows), and login is open to any GitHub user, so a bare bearer must not
+// read the tenants' content. isAdmin gates it exactly like requireFlatAdmin does
+// for the flat HTTP reads.
+describe("/mcp (no repo) — admin-only single-tenant surface", () => {
   it("still 401s with no bearer, byte-for-byte with the pre-#10 shape", async () => {
     const res = await worker.fetch(req("/mcp"), env as unknown as Env, ctx);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "unauthorized" });
   });
 
-  it("does NOT run the repo-authorization gate — a valid bearer with no user token/repo access still reaches handleMcp", async () => {
+  it("403s a valid non-admin bearer — the same shape as the flat HTTP reads' admin gate", async () => {
     const raw = await seedUserWithBearer(LOGIN);
+    const res = await worker.fetch(req("/mcp", raw), env as unknown as Env, ctx);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "admin only" });
+  });
+
+  it("does NOT run the repo-authorization gate — an ADMIN bearer with no user token/repo access still reaches handleMcp", async () => {
+    const raw = await seedUserWithBearer("admin-user"); // vitest.config.ts ADMIN_LOGINS
     // No repos connected, no user token stored, no listRepos hook. If /mcp ran the
-    // new /mcp/:owner/:repo gate this would 401/404; unchanged behavior means the
-    // request reaches handleMcp (some non-401/404 MCP-protocol response).
+    // /mcp/:owner/:repo gate this would 401/404; reaching handleMcp means some
+    // non-401/403/404 MCP-protocol response.
     const res = await worker.fetch(req("/mcp", raw), env as unknown as Env, ctx);
     expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
     expect(res.status).not.toBe(404);
   });
 });

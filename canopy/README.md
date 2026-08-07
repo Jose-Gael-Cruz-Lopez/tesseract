@@ -98,12 +98,14 @@ shell that launches Claude Code (e.g. add it to your shell profile), then restar
 
 ```bash
 export CANOPY_MCP_TOKEN=canopy_mcp_...   # your token, minted above — per person, never stored in the plugin
+export CANOPY_REPO=owner/repo            # the connected repo (hub) your agent works in
 ```
 
 That auto-wires the `canopy` MCP server (`query` / `get_doc` / `record_session` …) and loads the
 `canopy`, `load-context`, and `record-session` skills — no manual `claude mcp add`, no copying skill
-folders. (The single-server manual path still works:
-`claude mcp add --transport http canopy https://canopy.saplinglearn.com/mcp --header "Authorization: Bearer canopy_mcp_..."`.)
+folders. (The single-server manual path still works, against the repo-scoped surface:
+`claude mcp add --transport http canopy https://memo-sphere.com/mcp/owner/repo --header "Authorization: Bearer canopy_mcp_..."`.
+Bare `/mcp` is the single-tenant admin surface — `ADMIN_LOGINS` only.)
 
 > **Maintainers:** the plugin is at `plugins/canopy/`; the marketplace manifest at
 > `.claude-plugin/marketplace.json`. Validate either with `claude plugin validate <path>`. The real

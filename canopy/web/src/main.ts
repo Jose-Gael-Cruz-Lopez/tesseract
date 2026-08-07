@@ -10,11 +10,12 @@ import {
   completeMilestone,
   listStagedProposals, listAdrs, promoteDoc, rejectDoc, ratifyAdr, rejectAdr,
   listNeedsTriage, listIdentityTasks, assignTriage, discardTriage, mapIdentity, type AssignTarget,
-  getMe, logout, mintMcpToken, adminBackfill,
+  getMe, logout, mintMcpToken, listMyTokens, revokeMcpToken, adminBackfill,
   getMyRepos, setActiveRepo,
   Unauthorized, NotFound, ApiError,
 } from "./api";
 import { decodeReviewId } from "./triage-map";
+import * as tokenActions from "./token-actions";
 
 const root = document.getElementById("app");
 if (!root) throw new Error("Canopy: #app mount point missing");
@@ -166,8 +167,21 @@ function loadForScreen(screen: Screen): void {
     case "search": loadSearchIfNeeded(); break;
     case "mywork": loadMyWorkIfNeeded(); break;
     case "hubs": loadMyReposIfNeeded(); break;
-    default: rerender(); break; // settings, guide — no data load
+    case "settings": loadMyTokens(); break;
+    default: rerender(); break; // guide — no data load
   }
+}
+
+// Settings token actions live in token-actions.ts (DOM-free, unit-tested) —
+// this is just the dependency wiring.
+const tokenDeps: tokenActions.TokenActionDeps = {
+  listMyTokens, mintMcpToken, revokeMcpToken,
+  isUnauthorized: (e) => e instanceof Unauthorized,
+  errorMessage: (e) => (e instanceof ApiError ? e.message : null),
+  flash, rerender,
+};
+function loadMyTokens(): void {
+  void tokenActions.loadMyTokens(state, tokenDeps);
 }
 
 // ── per-screen data loaders ──────────────────────────────────────────────────
@@ -880,12 +894,7 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
     }
     // ── Settings ─────────────────────────────────────────────────────────────
     case "mintToken":
-      mintMcpToken()
-        .then(({ token }) => { state.revealedToken = token; state.tokenCopied = false; rerender(); })
-        .catch((e) => {
-          if (e instanceof Unauthorized) { state.view = "auth"; state.authStep = "login"; rerender(); return; }
-          flash(e instanceof ApiError ? e.message : "Could not mint token");
-        });
+      void tokenActions.mintToken(state, tokenDeps);
       return;
     case "copyToken": {
       const tk = state.revealedToken;
@@ -900,9 +909,11 @@ function dispatch(act: string, arg: string | null, value: string | null): void {
       return;
     }
     case "dismissReveal": state.revealedToken = null; state.tokenCopied = false; break;
-    // INERT — no backend route for saving display name or revoking tokens
+    // INERT — no backend route for saving display name
     case "saveProfile": return;
-    case "revokeToken": return;
+    case "revokeToken":
+      void tokenActions.revokeToken(state, tokenDeps, arg);
+      return;
 
     default:
       return;

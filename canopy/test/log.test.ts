@@ -67,7 +67,7 @@ describe("logEvent (src/log.ts)", () => {
     }
   );
 
-  it.each(["success", "allow", "processed", "ignored"] as const)(
+  it.each(["success", "allow", "processed", "ignored", "indeterminate", "degraded", "skipped"] as const)(
     "routes the non-failure outcome %s to console.log",
     (outcome) => {
       const spies = spyConsole();

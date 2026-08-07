@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { recomputeConnectedRepos, recomputeAllProgress } from "../src/tools/progress";
 import { run, first, nowIso } from "../src/db";
 import type { MilestoneProgressRow } from "@shared/rows";
@@ -96,6 +96,104 @@ describe("POST /r/:owner/:repo/admin/backfill (push-gated hub route)", () => {
       env
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// One bad tenant must never starve the rest: the 6-hourly cron loops every connected
+// repo, and a single failing installation-token mint (e.g. a suspended install, a
+// revoked App) used to abort the whole loop — every repo after it silently got no
+// recompute that run. Containment is per-iteration; a suspended installation is
+// skipped outright (its mint is KNOWN to fail — GitHub 403s suspended installs).
+describe("recomputeConnectedRepos — per-repo containment + suspension", () => {
+  async function seedMilestone(repo: string, githubRef: string): Promise<number> {
+    const res = await run(
+      env.DB,
+      `INSERT INTO milestones (repo, title, target_date, status, github_ref, created_at, created_by) VALUES (?, 'M', '2026-08-01', 'in_progress', ?, ?, 'tester')`,
+      repo, githubRef, nowIso()
+    );
+    return res.meta.last_row_id as number;
+  }
+  async function connect(repo: string, installationId: number): Promise<void> {
+    await run(
+      env.DB,
+      `INSERT OR REPLACE INTO repos (repo, added_at, added_by, installation_id, status) VALUES (?, ?, 'x', ?, 'connected')`,
+      repo, nowIso(), installationId
+    );
+  }
+
+  it("contains one repo's failed mint: the other repo still recomputes, the loop never throws, and the failure is an error-level log line", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const idA = await seedMilestone("o/a", "5");
+      const idB = await seedMilestone("o/b", "9");
+      await connect("o/a", 11);
+      await connect("o/b", 22);
+
+      const fetchImpl = (async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/repos/o/b/milestones/9")) return new Response(JSON.stringify({ open_issues: 1, closed_issues: 3 }), { status: 200 });
+        return new Response("not found", { status: 404 });
+      }) as unknown as typeof fetch;
+
+      await expect(
+        recomputeConnectedRepos(env.DB, env, {
+          installationTokenImpl: async (_env, id) => {
+            if (id === 11) throw new Error("installation token mint failed (403)");
+            return `tok-${id}`;
+          },
+          fetchImpl,
+        })
+      ).resolves.toBeUndefined();
+
+      // o/b was NOT starved by o/a's failure.
+      const rowB = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idB);
+      expect(rowB).toMatchObject({ closed: 3, total: 4, source: "recompute" });
+      const rowA = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idA);
+      expect(rowA).toBeNull();
+
+      // The contained failure is attributable: one structured error-level line, repo-tagged.
+      const lines = errorSpy.mock.calls
+        .map((c) => { try { return JSON.parse(String(c[0])) as { event?: string; outcome?: string; repo?: string }; } catch { return null; } })
+        .filter((r) => r?.event === "progress_recompute");
+      expect(lines).toContainEqual(expect.objectContaining({ outcome: "failure", repo: "o/a" }));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("skips a repo whose installation is suspended — no mint, others unaffected — and says so in ONE info-level line (a silently-frozen tenant must be filterable)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const idB = await seedMilestone("o/b", "9");
+      await connect("o/a", 11);
+      await connect("o/b", 22);
+      await run(env.DB, `INSERT INTO installations (installation_id, account_login, account_type, created_at, suspended_at) VALUES (22, 'octo', 'User', ?, '2026-08-01T00:00:00Z')`, nowIso());
+      // o/a has an ACTIVE installations row; o/b's is suspended.
+      await run(env.DB, `INSERT INTO installations (installation_id, account_login, account_type, created_at, suspended_at) VALUES (11, 'octo', 'User', ?, NULL)`, nowIso());
+
+      const minted: number[] = [];
+      await recomputeConnectedRepos(env.DB, env, {
+        installationTokenImpl: async (_env, id) => { minted.push(id); return `tok-${id}`; },
+        fetchImpl: (async () => new Response("not found", { status: 404 })) as unknown as typeof fetch,
+      });
+
+      expect(minted).toEqual([11]); // 22 never minted — suspended
+      const rowB = await first<MilestoneProgressRow>(env.DB, `SELECT * FROM milestone_progress WHERE milestone_id = ?`, idB);
+      expect(rowB).toBeNull();
+
+      // The skip is deliberate and expected while GitHub has the install suspended,
+      // so it logs at INFO (a lost unsuspend webhook freezes the tenant forever —
+      // the line is what makes that findable), never at error (it would page daily).
+      const parse = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls
+        .map((c) => { try { return JSON.parse(String(c[0])) as Record<string, unknown>; } catch { return null; } })
+        .filter((r) => r?.event === "progress_recompute");
+      expect(parse(logSpy)).toEqual([{ event: "progress_recompute", outcome: "skipped", repo: "o/b", reason: "installation_suspended" }]);
+      expect(parse(errorSpy)).toEqual([]);
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 });
 

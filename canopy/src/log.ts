@@ -11,7 +11,7 @@
 // exactly once per request/decision (and the installation-token cache hit path
 // doesn't log at all).
 
-/** The seven instrumented flows. */
+/** The instrumented flows. */
 export type LogEventName =
   | "signin"
   | "repo_gate"
@@ -20,7 +20,8 @@ export type LogEventName =
   | "mcp_tool"
   | "mcp_auth"
   | "rate_limit" // abuse controls degrading open — see failOpen in auth/rate-limit.ts
-  | "selfcheck"; // per-secret functional check — see auth/selfcheck.ts
+  | "selfcheck" // per-secret functional check — see auth/selfcheck.ts
+  | "progress_recompute"; // one contained per-repo cron failure — see tools/progress.ts
 
 /**
  * Per-flow results. The failure class (`failure` / `deny` / `unauthorized` /
@@ -42,7 +43,12 @@ export type LogOutcome =
   // and `degraded` means an OPTIONAL secret is unset by design. Putting either at error
   // level would make the alert permanently red, and a muted alert is worth nothing.
   | "indeterminate"
-  | "degraded";
+  | "degraded"
+  // progress_recompute only: a suspended installation's repo was deliberately left
+  // out of the cron run. Info-class for the same muted-alert reason as `degraded` —
+  // but logged, because a lost unsuspend webhook freezes the tenant indefinitely
+  // and this line is the only way to find it.
+  | "skipped";
 
 const FAILURE_OUTCOMES: ReadonlySet<LogOutcome> = new Set(["failure", "deny", "unauthorized", "error"]);
 

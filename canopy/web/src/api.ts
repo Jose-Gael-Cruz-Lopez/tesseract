@@ -265,6 +265,17 @@ export function mintMcpToken(): Promise<{ token: string }> {
   return postJson<{ token: string }>("/auth/mcp-token");
 }
 
+// Token metadata only — raws are shown once at mint and stored hashed, so id/
+// created_at/last_used_at is everything the server can ever list.
+export interface McpTokenMeta { id: number; created_at: string; last_used_at: string | null; }
+export async function listMyTokens(): Promise<McpTokenMeta[]> {
+  const { tokens } = await getJson<{ tokens: McpTokenMeta[] }>("/me/tokens");
+  return tokens;
+}
+export function revokeMcpToken(id: number): Promise<{ ok: true }> {
+  return postJson<{ ok: true }>(`/me/tokens/${id}/revoke`);
+}
+
 // Re-export the row types the UI renders, so screens import shapes from one place.
 export type { FeedRow, DocRow, DocVersionRow, MilestoneRow, AdrRow, NeedsTriageRow, MilestoneProposalRow };
 export type { DashboardData };

@@ -145,6 +145,7 @@ secret, and payload *values* are never logged; identifiers only.
 | `mcp_tool`           | Every MCP tool call (`src/mcp.ts`)                         | `success`, `error`                     | `tool`, `message` (on error)                    |
 | `rate_limit`         | An abuse control degrading OPEN because its D1 tables are unreachable (`failOpen` in `src/auth/rate-limit.ts`) | `error` | `reason` (`backend_error`), `policy`, `op`, `error` |
 | `selfcheck`          | Per-secret functional check, on the 6-hour cron and `GET /admin/selfcheck` (`src/auth/selfcheck.ts`) | `failure` (alertable), `indeterminate`, `degraded` | `secret`, `reason` |
+| `progress_recompute` | One connected repo's cron recompute failed and was contained — the loop moved on (`src/tools/progress.ts`) | `failure` (alertable) | `repo`, `message` |
 
 **Reading a `signin` / `exchange_failed` line.** `reason` is the failure *class*; the
 `detail` field carries the underlying cause, which is the field that actually tells
@@ -174,6 +175,17 @@ alert that fires during every GitHub blip, or stays permanently red because
 because GitHub never exposes its copy and the Worker has nothing to compare against.
 Its real coverage is the `webhook` / `unauthorized` line above, which fires on every
 delivery when the secret is wrong. Never read its `pass` as "correct".
+
+The report also carries one non-secret row, `D1_MIGRATIONS` (added 2026-08-06, audit
+hardening): the count of `d1_migrations` rows in the live database versus the count
+this build was compiled with (`EXPECTED_MIGRATION_COUNT` in `src/auth/selfcheck.ts` —
+a test pins it to the `migrations/` directory, so bumping it is part of adding a
+migration). `reason: "migrations_pending"` or `"migrations_table_missing"` means the
+code is ahead of the schema — exactly the 2026-07-17 wrong-account outage class — and
+is alertable `failure`; a transient D1 read error is `indeterminate` and never pages.
+On this alert: STOP any further deploys, then follow the wrong-account checklist next
+to `account_id` in `wrangler.toml` (`wrangler whoami` → the account owning D1
+`53c1314d-…` → `npx wrangler d1 migrations apply canopy --remote`).
 
 One deliberate exclusion: the **session-cookie 401** (`sessionGate` — an anonymous
 or expired browser hitting a gated HTTP route) is NOT logged at error level. Fresh
