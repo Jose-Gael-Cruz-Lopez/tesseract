@@ -282,6 +282,95 @@ function renderAccountPanel(ctx) {
   return panel;
 }
 
+// Workspace panel: rename + export / import. The store half (snapshot shape,
+// validation, replace semantics) lives in src/data/store.js — this panel is
+// only the file plumbing around it. Import is two-step: pick a file, then
+// confirm the replace inline (it is destructive and cannot be undone).
+function renderWorkspaceSettingsPanel(ctx) {
+  const panel = el('div', 'set-panel-inner');
+  panel.appendChild(el('h2', 'set-h', 'Settings'));
+
+  const ws = ctx.store.getWorkspace() || {};
+  const nameRow = el('div', 'set-field-row');
+  nameRow.appendChild(el('label', 'set-field-label', 'Workspace name'));
+  const nameInput = el('input', 'set-field-input set-ws-name');
+  nameInput.type = 'text';
+  nameInput.value = ws.name || '';
+  nameInput.addEventListener('change', () => ctx.store.updateWorkspace({ name: nameInput.value }));
+  nameRow.appendChild(nameInput);
+  panel.appendChild(nameRow);
+
+  panel.appendChild(el('h2', 'set-h', 'Data'));
+
+  const exportRow = el('div', 'set-row');
+  exportRow.appendChild(rowText('Export workspace',
+    'Download every page (including trash) as a JSON file. Device settings and tokens are never included.'));
+  const exportBtn = el('button', 'set-btn', 'Export');
+  exportBtn.type = 'button';
+  exportBtn.addEventListener('click', () => {
+    const data = ctx.store.exportWorkspace();
+    try {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mnemosphere-${data.exportedAt.slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      ctx.toast('Export failed — your browser blocked the download.');
+    }
+  });
+  exportRow.appendChild(exportBtn);
+  panel.appendChild(exportRow);
+
+  const importRow = el('div', 'set-row');
+  importRow.appendChild(rowText('Import workspace',
+    'Restore from an exported file. Replaces the current workspace and all of its pages.'));
+  const importBtn = el('button', 'set-btn', 'Import…');
+  importBtn.type = 'button';
+  const fileInput = el('input', 'set-import-input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/json,.json';
+  fileInput.style.display = 'none';
+  const confirmHost = el('div', 'set-import-confirm');
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      ctx.toast('That file is not a Mnemosphere export.');
+      return;
+    }
+    confirmHost.innerHTML = '';
+    const pageCount = Array.isArray(parsed?.pages) ? parsed.pages.length : 0;
+    const name = parsed?.workspace?.name || 'Untitled';
+    confirmHost.appendChild(el('div', 'set-row-sub',
+      `Replace the current workspace with “${name}” (${pageCount} pages)? This cannot be undone.`));
+    const yes = el('button', 'set-btn set-btn-danger', 'Replace workspace');
+    yes.type = 'button';
+    yes.addEventListener('click', () => {
+      try {
+        ctx.store.importWorkspace(parsed);
+        confirmHost.innerHTML = '';
+        ctx.toast('Workspace imported.');
+      } catch (e) {
+        ctx.toast(e?.message || 'That file is not a Mnemosphere export.');
+      }
+    });
+    const no = el('button', 'set-btn', 'Cancel');
+    no.type = 'button';
+    no.addEventListener('click', () => { confirmHost.innerHTML = ''; });
+    confirmHost.append(yes, no);
+  });
+  importBtn.addEventListener('click', () => fileInput.click());
+  importRow.appendChild(importBtn);
+  panel.append(importRow, fileInput, confirmHost);
+  return panel;
+}
+
 function renderStubPanel(label) {
   const panel = el('div', 'set-panel-inner');
   panel.appendChild(el('h2', 'set-h', label));
@@ -339,6 +428,7 @@ function renderPanel(id, ctx) {
   if (id === 'account') return renderAccountPanel(ctx);
   if (id === 'notifications') return renderNotificationsPanel(ctx);
   if (id === 'developer') return renderDeveloperPanel(ctx);
+  if (id === 'settings') return renderWorkspaceSettingsPanel(ctx);
   return renderStubPanel(labelForId(id));
 }
 

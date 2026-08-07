@@ -58,6 +58,38 @@ export function profileFromSession(session) {
   };
 }
 
+// ---------- workspace row (cloud sync — src/data/sync.js) ----------
+//
+// One row per user in public.workspaces (user_id PK → auth.users, data jsonb,
+// updated_at). RLS restricts every operation to auth.uid() = user_id, so the
+// unfiltered select below can only ever see the caller's own row. Schema:
+// supabase/migrations/20260806_workspaces.sql.
+
+/** The caller's workspace row ({ data, updated_at }) or null when none exists.
+ *  Throws on any query error — sync treats that as offline and stays inert. */
+export async function fetchWorkspaceRow() {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c.from('workspaces').select('data, updated_at').maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+/** Upsert the caller's single workspace row. Throws on failure (contained by
+ *  the sync layer — the next edit retries with the whole tree). */
+export async function upsertWorkspaceRow(payload) {
+  const c = client();
+  if (!c) throw new Error('Supabase not configured');
+  const { data: userData, error: userError } = await c.auth.getUser();
+  if (userError || !userData?.user) throw new Error('no authenticated user');
+  const { error } = await c.from('workspaces').upsert({
+    user_id: userData.user.id,
+    data: payload,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function supabaseSignOut() {
   const c = client();
   if (!c) return;
