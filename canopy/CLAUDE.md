@@ -1,8 +1,10 @@
 # CLAUDE.md
 
-Canopy — a shared context store backend. **One** Cloudflare Worker on one origin serves the HTTP API,
-a stateless MCP endpoint at `/mcp`, a GitHub webhook receiver at `/webhook/github`, and the static web
-build (via the assets binding); a `scheduled()` cron recomputes roadmap progress. Agents propose context
+Canopy — a shared context store backend. **One** Cloudflare Worker on one origin serves the HTTP API
+(flat single-tenant routes + multi-tenant `/r/:owner/:repo` hubs), a stateless MCP endpoint
+(`/mcp/:owner/:repo` per connected repo; bare `/mcp` is the admin-only single-tenant surface), a
+GitHub webhook receiver at `/webhook/github`, and the static web build (via the assets binding); a
+`scheduled()` cron recomputes roadmap progress. Agents propose context
 through a reconciling gate and humans confirm the consequential changes; authored (plan) and computed
 (progress, summary) writes go direct.
 
@@ -39,8 +41,11 @@ Triage. That staging-plus-confirmation loop is what keeps the store trustworthy 
 
 - `npm test` — Vitest against a real Miniflare D1 (the source of truth for "is it green").
 - `npm run typecheck` — `tsc` over worker + web (does NOT run in `npm test`; run it too).
-- `npm run build:web` — Vite build of the web SPA into `web/dist`.
-- `npm run dev` — build web, then `wrangler dev`. `npm run deploy` — build web, then `wrangler deploy`.
+- `npm run build:web` — Vite build of canopy's admin SPA only (`web/dist/admin`).
+- `npm run dev` — `build:app` (the FUSED build: root Mnemosphere UI + admin SPA), then `wrangler dev`.
+  `npm run deploy` — `build:app`, then `wrangler deploy`. `build:app` REFUSES to run without
+  `VITE_SUPABASE_URL` (repo-root `.env.local`, or `CANOPY_ALLOW_NO_SUPABASE=1` for a deliberately
+  Supabase-less build — the local-dev default; see `docs/runbooks/deploy-pipeline.md`).
 - `npm run db:create` / `db:migrate:local` / `db:migrate:remote` — D1 provisioning + migrations.
 - Run one test file: `npx vitest run test/<file>.test.ts`.
 
@@ -53,13 +58,20 @@ Triage. That staging-plus-confirmation loop is what keeps the store trustworthy 
   else to the Hono app; plus the `scheduled()` progress backstop), `routes.ts` (Hono HTTP), `mcp.ts` (MCP
   tools), `consumer.ts` (THE GATE), `webhook.ts` (GitHub event capture), `tools/` (`writes.ts`, `reads.ts`,
   `plan.ts`, `mywork.ts`, `progress.ts`, `summarize.ts`), `db.ts` (D1 helpers), `auth/`, `env.ts`.
-- `migrations/` — D1 SQL (`0001_init` … `0010_triage_resolve`, then `0011_fts_recreate`,
+- `migrations/` — D1 SQL, 0001–0028. The arc: `0001_init` … `0010_triage_resolve`, `0011_fts_recreate`,
   `0012_events_plan` [events / pr_summaries / milestone_progress / people / plan / plan_versions +
-  `milestones.phase`], `0013_roadmap_fts`, `0014_drop_focus` [retires `0007_focus`],
-  `0015_drop_user_token` [drops `users.github_token`], `0016_identity_tasks`, then
-  `0017_issue_summaries` [assigned-issue summaries], `0018_structured_summaries` [structured summary
-  columns], `0019_drop_pr_summary` [retires the legacy prose `pr_summaries.summary` — PR cards are
-  structured-only]).
+  `milestones.phase`], `0013_roadmap_fts`, `0014_drop_focus`, `0015_drop_user_token`,
+  `0016_identity_tasks`, `0017_issue_summaries`, `0018_structured_summaries`, `0019_drop_pr_summary`
+  [PR cards are structured-only]; then the multi-tenant era: `0020_repos` [the repos registry +
+  every content table gains `repo`], `0021_repo_uniqueness_events` [per-repo uniqueness: events
+  UNIQUE(repo, semantic_key), pr_summaries PK(repo, semantic_key), issue_summaries
+  PK(repo, issue_number)], `0022_repo_uniqueness_docs` [docs PK(repo, slug), docs_fts rebuilt with
+  repo], `0023_repo_uniqueness_plan` [plan PK(repo)],
+  `0024_github_app` [repos.status soft-disconnect, installations, repo_access TTL cache],
+  `0025_user_tokens`, `0026_grandfather_connected`, `0027_roadmap_fts_repo` [per-repo plan FTS],
+  `0028_rate_limits` [rate_limits + auth_failures, cron-evicted]. The selfcheck's D1_MIGRATIONS
+  probe pins `EXPECTED_MIGRATION_COUNT` (src/auth/selfcheck.ts) to this directory — bump it when
+  adding a migration (a test enforces this).
 - `web/` — full TypeScript/Vite single-page app (My Work, Feed, Docs, Roadmap, Triage, Search,
   Settings, Get Started) served via the ASSETS binding; `web/src/markdown.ts` renders PR summaries and the
   roadmap narrative as styled HTML.
@@ -138,15 +150,23 @@ Agents only ever stage; humans confirm via **authenticated HTTP routes that are 
 
 ## Auth — three classes, no new flow (fully built — don't add one)
 
-GitHub OAuth + PKCE, gated to **active members of the `SaplingLearn` org** (`SAPLING_ORG` in
-`src/auth/github.ts` — a real external org, do not rename it). Three auth classes, kept separate:
+Sign-in is the **GitHub App user-authorization flow** (`src/auth/app-login.ts`, wired at
+`/auth/login`/`/auth/callback` in `src/auth/routes.ts`) — the old OAuth+PKCE dance and the
+SaplingLearn org gate are retired (Phase B flip). **Signup is open** unless `LOGIN_ALLOWLIST`
+is set (the only sign-in gate; re-checked at every principal resolution so flipping it on also
+cuts off existing sessions and tokens). `ADMIN_LOGINS` gates admin actions only, case-insensitively.
+Three auth classes, kept separate:
 
-- **Session cookie** (humans, the Hono app): signed cookie; every route except `/auth/login|callback`
-  passes `sessionGate`. The principal (`{ login }`) is resolved from the session.
-- **Bearer token** (agents, `/mcp`): per-person tokens stored hashed (`canopy_mcp_` prefix); the principal
-  is resolved from the bearer. `/mcp` is **bearer-only** — on bad/missing creds it returns a bare `401`
-  with NO `WWW-Authenticate` and NO OAuth discovery. A fresh `McpServer` is constructed per request
-  (SDK ≥1.26 guards against reuse); `createMcpHandler` is stateless (no Durable Object / McpAgent).
+- **Session cookie** (humans, the Hono app): signed cookie; every route except the auth
+  public paths passes `sessionGate`. The principal (`{ login }`) is resolved from the session,
+  and `principalSource` records how (session / bearer / dev) — the token-lifecycle routes
+  (`/auth/mcp-token`, `/me/tokens`, `/me/tokens/:id/revoke`) refuse bearer principals.
+- **Bearer token** (agents): per-person tokens stored hashed (`canopy_mcp_` prefix), minted in
+  Settings, listed/revoked via `/me/tokens`. The agent surface is **`/mcp/:owner/:repo`**
+  (repo-authorized like the hub gate, per-repo `canPush` gating `update_plan`); bare `/mcp` is
+  the single-tenant **admin-only** surface (its reads are deliberately unscoped). Bearer-only —
+  on bad/missing creds a bare `401`, NO `WWW-Authenticate`, NO OAuth discovery. A fresh
+  `McpServer` per request (SDK ≥1.26 guards against reuse); `createMcpHandler` is stateless.
 - **GitHub webhook** (`/webhook/github`, `src/webhook.ts`): a delivery authenticates by an HMAC-SHA256
   `X-Hub-Signature-256` over the raw body against `GITHUB_WEBHOOK_SECRET` (NOT `COOKIE_SECRET`). HMAC is
   verified in the branch BEFORE the gate; a bad/absent signature (or unset secret) is a bare `401`. The
@@ -173,10 +193,11 @@ those two writers, never at render.
 
 **My Work** (`GET /me/dashboard`, MCP `get_my_work` → `getMyWork`) is a D1-only projection over captured
 events: two separate lists — `previousActivity` (summarized merged/closed PRs where the person is the
-subject, 5 most recent) and `todo` (their open assigned issues, 5 most recently updated, each carrying its own stored summary) —
-built from `events` (+ `pr_summaries`, `issue_summaries`, `people`), no live GitHub. `person` resolves via
-the `people` identity map; an unmapped login yields an empty projection (`degraded:false`); any D1 failure
-yields empty `degraded:true` — never a 500. Completed PRs and assigned issues are each summarized ONCE, at capture time
+subject, 6 most recent) and `todo` (their open assigned issues, 6 most recently updated, each carrying its own stored summary) —
+built from `events` (+ `pr_summaries`, `issue_summaries`, `people` — all joins repo-scoped since the
+0021 composite keys), no live GitHub. Both lists cap at 6 (`PR_LIMIT`/`TODO_LIMIT` in
+`tools/mywork.ts`). `person` resolves via the `people` identity map; an unmapped login yields an
+empty projection (`degraded:false`); any D1 failure yields empty `degraded:true` — never a 500. Completed PRs and assigned issues are each summarized ONCE, at capture time
 (`tools/summarize.ts`: Google Gemini `gemini-2.5-flash-lite` via `GEMINI_API_KEY` — a REST
 `generateContent` call, not a Cloudflare binding — emits one validated JSON object — PR:
 title/what/why/impact; issue: title/summary/next_step). On AI failure the **issue**
@@ -201,15 +222,18 @@ that renders a "No summary recorded" placeholder. Stored as columns on `pr_summa
 
 ## Env / bindings
 
-Secrets (`wrangler secret put …`; local: `.dev.vars`): `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
-`COOKIE_SECRET`, `GITHUB_WEBHOOK_SECRET` (HMAC for the webhook — absent → the surface 401s),
-`GEMINI_API_KEY` (Google Gemini key for capture-time PR/issue summaries — absent → the excerpt
-fallback). GitHub App (Phase 3, connect-your-repos): `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` (+
-`GITHUB_APP_CLIENT_ID` / `_CLIENT_SECRET` / `GITHUB_APP_SLUG`) mint per-installation tokens
-(`src/auth/app.ts`'s `installationToken`) for the scheduled progress recompute (`scheduled()` →
-`recomputeConnectedRepos`) and the admin backfill (`runBackfill`) — `GITHUB_SERVICE_TOKEN` (the old
-app-level token) is retired; absent App config, `scheduled()` no-ops and backfill 503s per repo. Vars
-(`[vars]` in `wrangler.toml`): `GITHUB_REPO` (e.g. `SaplingLearn/sapling`, the flat/single-tenant
-deployment's default repo). Bindings: `DB` (D1), `ASSETS` (static). Capture-time summaries call Gemini
-over REST (`GEMINI_API_KEY`), never at render — not a Cloudflare binding, so there is no `[ai]` block.
-`[triggers] crons` drives the progress recompute backstop.
+Secrets (`printf '%s' 'VALUE' | npx wrangler secret put …` — never interactive through an automation
+shell; local: `.dev.vars`): `COOKIE_SECRET`; the **GitHub App credentials** `GITHUB_APP_CLIENT_ID` /
+`GITHUB_APP_CLIENT_SECRET` (the sign-in flow — empty ⇒ `/auth/login` 503s `app_not_configured`) and
+`GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM) which mint per-installation tokens
+(`src/auth/app.ts`) for the scheduled progress recompute and the backfills; `GITHUB_WEBHOOK_SECRET`
+(HMAC for the webhook — absent → the surface 401s); `GEMINI_API_KEY` (capture-time PR/issue summaries
+— absent → the excerpt fallback). The legacy `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` OAuth-App pair
+is **retired** — not in `Env`, not needed anywhere. Vars (`[vars]` in `wrangler.toml`): `GITHUB_REPO`
+(the flat/single-tenant default repo), `ADMIN_LOGINS` (admin actions + the flat surfaces),
+`LOGIN_ALLOWLIST` (empty ⇒ open signup), `GITHUB_APP_SLUG` (the install link), `AUTH_ORG`
+(display-only in `/auth/me` — NOT a login gate). Bindings: `DB` (D1), `ASSETS` (static). The 6-hourly
+`[triggers]` cron runs abuse-state eviction, the secret self-check (incl. the D1_MIGRATIONS
+schema-drift probe), and the progress recompute. The functional health of all of this is readable at
+`GET /admin/selfcheck`. Deploys ship via **Cloudflare Workers Builds on push to main** — see
+`docs/runbooks/deploy-pipeline.md`; a merge deploys CODE, never SCHEMA (migrations are manual).

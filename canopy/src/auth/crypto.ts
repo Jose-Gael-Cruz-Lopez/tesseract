@@ -24,17 +24,6 @@ export function randomToken(bytes = 32): string {
   return toBase64Url(buf);
 }
 
-/** PKCE S256 challenge for a verifier: base64url(SHA-256(verifier)). */
-export async function pkceChallenge(verifier: string): Promise<string> {
-  return toBase64Url(await crypto.subtle.digest("SHA-256", enc.encode(verifier)));
-}
-
-/** A PKCE verifier (within the allowed charset) and its S256 challenge. */
-export async function pkce(): Promise<{ verifier: string; challenge: string }> {
-  const verifier = randomToken(32);
-  return { verifier, challenge: await pkceChallenge(verifier) };
-}
-
 async function hmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 }

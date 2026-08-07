@@ -268,3 +268,30 @@ Complementary, not redundant: `GET /admin/selfcheck` and its 6-hour cron
 (`specs/secret-selfcheck.md`) cover *credential drift*, which an uptime check
 cannot see; the uptime check covers *total surface failure*, which the
 self-check cannot see.
+
+### Second monitor — the hub-route class (partial failures)
+
+The `/auth/login` monitor cannot see a broken HUB surface: during the issue #9
+e2e run, hub opens 500'd on 3 of 4 requests while sign-in was fine (e2e bug 4).
+Nothing watched that class until the 2026-08 audit. Add a second external
+monitor on a hub-shaped route. The route is session-gated, so an anonymous poll
+correctly gets `401 {"error":"unauthorized"}` — which is exactly the assertion:
+that response proves the whole Hono chain (routing → sessionGate → D1 session
+lookup → JSON error path) executed; the failure class turns it into a bare 500.
+On a free tier without expected-status-code control, use a **keyword monitor**:
+
+```
+Type:      Keyword (alert when the keyword DISAPPEARS)
+URL:       https://memo-sphere.com/r/Jose-Gael-Cruz-Lopez/tesseract/docs
+Keyword:   unauthorized
+Interval:  5 minutes
+Reads as:  keyword present → the hub surface answers correctly (401 JSON)
+           keyword absent  → 5xx / timeout / wrong body — the e2e-bug-4 class
+```
+
+Side-effect-light: an anonymous hub poll is refused by `sessionGate` before any
+tenant read happens, and the session-cookie 401 is deliberately NOT an
+error-level log line (see the exclusion above), so the monitor adds no alert
+noise. **Status: to be created by hand** in the same external-monitor account as
+the `/auth/login` monitor — when done, record the monitor id and date here,
+next to the login monitor's record.

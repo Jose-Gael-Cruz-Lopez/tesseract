@@ -1018,8 +1018,9 @@ function guideView(s: AppState): string {
       <li>You're already signed in — that's step one done.</li>
       <li>Open ${gStrong("Settings")} and, under ${gStrong("MCP access tokens")}, click ${gStrong("Mint new token")}. Copy it right away — it's shown only once.</li>
     </ol>
-    <p style="${gP};margin-top:14px">${gStrong("Easiest — install the Canopy plugin.")} It bundles the three skills below ${gStrong("and")} the MCP connection, so there's nothing to wire by hand. In Claude Code:</p>
-    ${gPre(`/plugin marketplace add Jose-Gael-Cruz-Lopez/canopy
+    <p style="${gP};margin-top:14px">${gStrong("Easiest — install the Canopy plugin.")} It bundles the three skills below ${gStrong("and")} the MCP connection, so there's nothing to wire by hand. The plugin lives in the <code style="font-family:var(--mono);font-size:13px">canopy/</code> folder of the tesseract repo — clone it once, then add the marketplace from that path:</p>
+    ${gPre(`git clone https://github.com/Jose-Gael-Cruz-Lopez/tesseract.git
+/plugin marketplace add /path/to/tesseract/canopy
 /plugin install canopy@canopy`)}
     <p style="${gP};margin-top:12px">The plugin reads your token ${gStrong("and your repo")} from environment variables — export both in the shell that launches your agent (add them to your shell profile to make them stick), then restart:</p>
     ${gPre(`export CANOPY_MCP_TOKEN=canopy_mcp_…

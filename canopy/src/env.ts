@@ -1,8 +1,9 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
+  // No GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET: the legacy OAuth-App pair was
+  // retired with the Phase B login flip — sign-in uses the GitHub App
+  // credentials below. (Deleted from prod secrets too; see SETUP.md.)
   COOKIE_SECRET: string;
   GITHUB_WEBHOOK_SECRET?: string; // HMAC key for the /webhook/github third auth class; absent → the surface 401s
   GITHUB_REPO?: string;   // "owner/repo" for live roadmap progress; absent → milestones without progress

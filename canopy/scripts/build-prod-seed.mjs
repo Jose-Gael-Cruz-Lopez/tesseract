@@ -162,7 +162,7 @@ needs-triage — the catch-all for agent output that could not be placed automat
     body:
 `Canopy is a single Cloudflare Worker named canopy, deployed from the main branch via Cloudflare Workers Builds (build command npm run build:web, deploy command wrangler deploy). The web app is built by Vite into web/dist and served by the Worker's ASSETS binding, on the same origin as the API.
 
-State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. Three secrets configure the runtime: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the GitHub OAuth app, and COOKIE_SECRET (which also seals the stored org token). The public origin is canopy.saplinglearn.com; the GitHub OAuth app's callback is that origin's /auth/callback over https.`},
+State is one D1 database, also named canopy, bound as DB; its schema and controlled vocabulary come from the migrations in migrations/, applied to the remote database once. The runtime is configured by COOKIE_SECRET plus the GitHub App credentials (GITHUB_APP_ID / GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET / GITHUB_APP_PRIVATE_KEY) — the legacy OAuth-app pair was retired with the App login flip. The public origin is memo-sphere.com; the App's callback is that origin's /auth/callback over https.`},
 
   // ── Decisions (ADRs published as docs) ───────────────────────────────────────
   { slug: "adr-001-single-write-path", section: "decisions", title: "ADR-001 · One gated write path", updated_at: "2026-04-10T09:00:00Z",
