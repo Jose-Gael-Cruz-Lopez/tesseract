@@ -70,8 +70,10 @@ skills and auto-wires the MCP server in one step, so there's nothing to copy by 
 
 - `npm test` — Vitest against a real Miniflare D1
 - `npm run typecheck` — type-check worker + web
-- `npm run dev` — build web, then `wrangler dev`
-- `npm run deploy` — build web, then `wrangler deploy`
+- `npm run dev` — fused `build:app` (Mnemosphere UI + admin SPA), then `wrangler dev`.
+  Without Supabase configured, use `CANOPY_ALLOW_NO_SUPABASE=1 npm run dev` — the build
+  refuses to silently ship Google sign-in compiled out (see the deploy-pipeline runbook)
+- `npm run deploy` — fused `build:app`, then `wrangler deploy` (needs `VITE_SUPABASE_URL`)
 - `npm run db:create` / `db:migrate:local` / `db:migrate:remote` — D1 provisioning + migrations
 
 ## Auth & secrets
@@ -98,11 +100,13 @@ Mint an MCP token from a logged-in session: `POST /auth/mcp-token` → `{ "token
 
 ## Install the Canopy plugin (skills + MCP in one step)
 
-The three skills and the MCP wiring ship as a Claude Code **plugin**, distributed from this repo as a
-marketplace. Anyone on the team gets both in two commands inside Claude Code:
+The three skills and the MCP wiring ship as a Claude Code **plugin**. The marketplace manifest
+lives at `canopy/.claude-plugin/marketplace.json` — a SUBDIRECTORY of the tesseract repo, so the
+`owner/repo` marketplace shorthand cannot resolve it; install from a local checkout:
 
 ```text
-/plugin marketplace add SaplingLearn/canopy
+git clone https://github.com/Jose-Gael-Cruz-Lopez/tesseract.git   # once, anywhere
+/plugin marketplace add /path/to/tesseract/canopy
 /plugin install canopy@canopy
 ```
 

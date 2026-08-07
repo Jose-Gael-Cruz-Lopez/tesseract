@@ -41,8 +41,11 @@ Triage. That staging-plus-confirmation loop is what keeps the store trustworthy 
 
 - `npm test` — Vitest against a real Miniflare D1 (the source of truth for "is it green").
 - `npm run typecheck` — `tsc` over worker + web (does NOT run in `npm test`; run it too).
-- `npm run build:web` — Vite build of the web SPA into `web/dist`.
-- `npm run dev` — build web, then `wrangler dev`. `npm run deploy` — build web, then `wrangler deploy`.
+- `npm run build:web` — Vite build of canopy's admin SPA only (`web/dist/admin`).
+- `npm run dev` — `build:app` (the FUSED build: root Mnemosphere UI + admin SPA), then `wrangler dev`.
+  `npm run deploy` — `build:app`, then `wrangler deploy`. `build:app` REFUSES to run without
+  `VITE_SUPABASE_URL` (repo-root `.env.local`, or `CANOPY_ALLOW_NO_SUPABASE=1` for a deliberately
+  Supabase-less build — the local-dev default; see `docs/runbooks/deploy-pipeline.md`).
 - `npm run db:create` / `db:migrate:local` / `db:migrate:remote` — D1 provisioning + migrations.
 - Run one test file: `npx vitest run test/<file>.test.ts`.
 
@@ -59,12 +62,13 @@ Triage. That staging-plus-confirmation loop is what keeps the store trustworthy 
   `0012_events_plan` [events / pr_summaries / milestone_progress / people / plan / plan_versions +
   `milestones.phase`], `0013_roadmap_fts`, `0014_drop_focus`, `0015_drop_user_token`,
   `0016_identity_tasks`, `0017_issue_summaries`, `0018_structured_summaries`, `0019_drop_pr_summary`
-  [PR cards are structured-only]; then the multi-tenant era: `0020_repo_column` [every content table
-  gains `repo`], `0021_repo_uniqueness_events` [per-repo uniqueness: events UNIQUE(repo, semantic_key),
-  pr_summaries PK(repo, semantic_key), issue_summaries PK(repo, issue_number)], `0022_docs_repo_pk`
-  [docs PK(repo, slug), docs_fts rebuilt with repo], `0023_plan_repo_pk` [plan PK(repo)],
+  [PR cards are structured-only]; then the multi-tenant era: `0020_repos` [the repos registry +
+  every content table gains `repo`], `0021_repo_uniqueness_events` [per-repo uniqueness: events
+  UNIQUE(repo, semantic_key), pr_summaries PK(repo, semantic_key), issue_summaries
+  PK(repo, issue_number)], `0022_repo_uniqueness_docs` [docs PK(repo, slug), docs_fts rebuilt with
+  repo], `0023_repo_uniqueness_plan` [plan PK(repo)],
   `0024_github_app` [repos.status soft-disconnect, installations, repo_access TTL cache],
-  `0025_user_tokens`, `0026_grandfather`, `0027_roadmap_fts_repo` [per-repo plan FTS],
+  `0025_user_tokens`, `0026_grandfather_connected`, `0027_roadmap_fts_repo` [per-repo plan FTS],
   `0028_rate_limits` [rate_limits + auth_failures, cron-evicted]. The selfcheck's D1_MIGRATIONS
   probe pins `EXPECTED_MIGRATION_COUNT` (src/auth/selfcheck.ts) to this directory — bump it when
   adding a migration (a test enforces this).

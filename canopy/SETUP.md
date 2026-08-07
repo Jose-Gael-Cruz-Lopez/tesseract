@@ -154,10 +154,15 @@ cd canopy
 cp .dev.vars.example .dev.vars   # COOKIE_SECRET (any value works locally) + DEV_LOGIN
                                  # (skips the OAuth dance and acts as that seeded user)
 
-npm run db:migrate:local     # migrate the local D1
-npm run seed                 # optional: seed sample data
-npm run dev                  # build:app + wrangler dev on http://localhost:8787
+npm run db:migrate:local              # migrate the local D1
+npm run seed                          # optional: seed sample data
+CANOPY_ALLOW_NO_SUPABASE=1 npm run dev  # build:app + wrangler dev on http://localhost:8787
 ```
+
+The `CANOPY_ALLOW_NO_SUPABASE=1` override is required unless the repo root has a
+`.env.local` with `VITE_SUPABASE_URL`: the fused build otherwise REFUSES to run,
+because a build without the var silently ships Google sign-in compiled out — fine
+locally (the demo email flow still works), fatal in production.
 
 Then open `http://localhost:8787/` (UI) and `/admin` (canopy). In Developer settings
 leave the URL blank and paste any token (`DEV_LOGIN` authorizes local reads).

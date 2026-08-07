@@ -72,10 +72,13 @@ propose milestones, and milestone `done` is admin-set.
 
 Mint a personal token first: Canopy web app → Settings → MCP access tokens (shown once).
 
-**Recommended — install the plugin** (bundles all three skills AND auto-wires the MCP server):
+**Recommended — install the plugin** (bundles all three skills AND auto-wires the MCP server).
+The marketplace manifest lives in the `canopy/` subdirectory of the tesseract repo, so add it
+from a local checkout (the `owner/repo` shorthand can't reach a subdirectory manifest):
 
 ```bash
-claude plugin marketplace add SaplingLearn/canopy
+git clone https://github.com/Jose-Gael-Cruz-Lopez/tesseract.git   # once, anywhere
+claude plugin marketplace add /path/to/tesseract/canopy
 claude plugin install canopy@canopy
 export CANOPY_MCP_TOKEN=canopy_mcp_…        # the plugin's MCP config reads this
 export CANOPY_REPO=owner/repo               # the connected repo (hub) your agent works in
