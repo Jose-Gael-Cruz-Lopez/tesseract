@@ -1,5 +1,16 @@
 # Local dev secrets for `wrangler dev` (copy to .dev.vars, which is git-ignored).
-# In production set these with: wrangler secret put <NAME>
-GITHUB_CLIENT_ID=your-oauth-app-client-id
-GITHUB_CLIENT_SECRET=your-oauth-app-client-secret
+# In production set these with: printf '%s' 'VALUE' | npx wrangler secret put <NAME>
+# (never interactively through an automation shell — see docs/runbooks/secrets-and-observability.md)
 COOKIE_SECRET=a-long-random-string
+# Skip the OAuth dance locally: act as this seeded user. NEVER set in production.
+DEV_LOGIN=Jose-Gael-Cruz-Lopez
+# GitHub App sign-in (only needed if you exercise the real login flow locally;
+# DEV_LOGIN above bypasses it):
+# GITHUB_APP_ID=...
+# GITHUB_APP_CLIENT_ID=...
+# GITHUB_APP_CLIENT_SECRET=...
+# GITHUB_APP_PRIVATE_KEY=...   # PKCS#8 PEM (openssl pkcs8 -topk8 -nocrypt -in app.pem)
+# GITHUB_APP_SLUG=...
+# Optional:
+# GEMINI_API_KEY=...           # capture-time PR/issue summaries; absent → excerpt fallback
+# GITHUB_WEBHOOK_SECRET=...    # HMAC for /webhook/github; absent → the surface 401s
